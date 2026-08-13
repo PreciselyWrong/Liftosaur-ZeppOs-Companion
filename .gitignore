@@ -1,0 +1,45 @@
+# Secrets et configuration locale
+.env
+.env.*
+!.env.example
+*.key
+*.pem
+secrets.json
+config.local.json
+
+# Node / Zeus CLI
+node_modules/
+.npm/
+.pnpm-store/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# Build Zepp OS
+dist/
+build/
+out/
+.zeus/
+*.zab
+*.zpk
+
+# Logs et fichiers temporaires
+logs/
+*.log
+tmp/
+temp/
+.cache/
+
+# Outils IDE et OS
+.vscode/
+.idea/
+*.swp
+Thumbs.db
+Desktop.ini
+ehthumbs.db
+.DS_Store
+
+# Sorties locales d'agents
+.claude/settings.local.json
+AGENTS.md
+TODO.md
