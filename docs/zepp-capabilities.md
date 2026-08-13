@@ -32,9 +32,20 @@ evidence can be produced until the simulator is installed and `zeus login` succe
 | `zeus --version` | node/npm/zeus/zpm versions | TESTED |
 | `zeus status` | login and simulator connection state | TESTED |
 | `zeus create <name>` | `WORKOUT_EXTENSION` + `Empty` template scaffolds a project | TESTED |
-| `zeus dev` / `zeus preview` / `zeus build` | not run — need simulator/login | UNKNOWN |
+| `zeus login` | logged in (userID 7083308791) | TESTED |
+| `zeus dev` | prompts host/port/device, then **fails to connect** to the simulator | BLOCKED |
+| `zeus preview` / `zeus build` | not run | UNKNOWN |
 
-`zeus create` is an **interactive wizard and requires a TTY**. The documented
+`zeus dev` offers these simulator devices: Amazfit Falcon, T-Rex Ultra, Cheetah Pro,
+Cheetah Pro Kelvin Kiptum, Cheetah (Round), Active Edge, Balance (list truncated). Active
+Edge and Balance are **not** in the documented Workout Extension device list — availability
+in the simulator is not evidence of Workout Extension support.
+
+`zeus dev` also **overwrites the project `.gitignore`** with its own template on every run,
+dropping the secret patterns. Restore it with `git checkout -- .gitignore` after each run,
+and re-check before any push.
+
+`zeus create` and `zeus dev` are **interactive wizards and require a TTY**. The documented
 `--appType` / `--APILevel` flags were ignored in v1.9.3; the prompts always appear.
 Non-interactive scaffolding is therefore not reproducible from an agent shell.
 

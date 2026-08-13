@@ -1,3 +1,7 @@
+# WARNING: `zeus dev` overwrites this file with its own template on every run,
+# which drops the secret patterns and the agent-file exclusions below.
+# After running zeus dev, restore it: git checkout -- .gitignore
+
 # Secrets et configuration locale
 .env
 .env.*
@@ -9,6 +13,11 @@ config.local.json
 
 # Node / Zeus CLI
 node_modules/
+node_modules/**
+yarn.lock
+yarn-debug.log*
+package-lock.json
+selenium-debug.log
 .npm/
 .pnpm-store/
 npm-debug.log*
@@ -34,6 +43,10 @@ temp/
 .vscode/
 .idea/
 *.swp
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
 Thumbs.db
 Desktop.ini
 ehthumbs.db
