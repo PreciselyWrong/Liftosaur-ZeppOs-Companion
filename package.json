@@ -10,5 +10,6 @@
   "license": "ISC",
   "devDependencies": {
     "@zeppos/device-types": "^3.0.0"
-  }
+  },
+  "type": "module"
 }
