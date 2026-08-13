@@ -35,6 +35,7 @@ evidence can be produced until the simulator is installed and `zeus login` succe
 | `zeus login` | logged in (userID 7083308791) | TESTED |
 | `zeus dev` | prompts host/port/device, then **fails to connect** to the simulator | BLOCKED |
 | `zeus preview` / `zeus build` | not run | UNKNOWN |
+| `npm test` | 8 app.json invariant checks, all passing (`node --test`) | TESTED |
 
 `zeus dev` offers these simulator devices: Amazfit Falcon, T-Rex Ultra, Cheetah Pro,
 Cheetah Pro Kelvin Kiptum, Cheetah (Round), Active Edge, Balance (list truncated). Active

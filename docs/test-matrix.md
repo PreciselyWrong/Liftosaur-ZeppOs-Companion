@@ -15,6 +15,7 @@ Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at 
 | --- | --- | --- | --- |
 | `WORKOUT_EXTENSION` template exists in Zeus CLI | ✅ | ✅ | ⛔ |
 | Minimal project scaffolded from `Empty` template | ✅ | ✅ | ⛔ |
+| `app.json` invariants guarded by `npm test` | ✅ | ✅ | ⛔ |
 | Minimal project builds and previews | ⬜ | ⬜ | ⬜ |
 | Extension visible in Strength Training only | ⬜ | ⬜ | ⬜ |
 | Extension absent from other sports | ⬜ | ⬜ | ⬜ |
