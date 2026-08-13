@@ -40,7 +40,7 @@ Ce plan décompose `Init project.md` sans présumer d'une capability Zepp, d'un 
 - [ ] Vérifier que le template officiel `WORKOUT_EXTENSION` existe dans les outils installés → verify: preuve documentaire ou sortie reproductible.
 - [ ] Générer le plus petit projet compatible sans logique métier → verify: lancement dans l'environnement officiel avec la commande consignée.
 - [ ] Vérifier le subtype Strength Training avant de modifier `app.json` → verify: extension visible uniquement dans le contexte attendu.
-- [ ] Ajouter un contrôle de qualité minimal adapté au runtime disponible → verify: commande reproductible et résultat passant.
+- [x] Ajouter un contrôle de qualité minimal adapté au runtime disponible → verify: `npm test` (node:test), 8 invariants `app.json`, tous passants.
 
 ### 4. Prouver la Workout Extension minimale
 
