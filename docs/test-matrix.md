@@ -26,8 +26,8 @@ Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at 
 
 | Scenario | DOC | EMU | REAL |
 | --- | --- | --- | --- |
-| `DataWidget` renders `Liftosaur` / `HR` / `READY` / `TEST` | ⬜ | ⬜ | ⬜ |
-| Mocked `SPORT_DATA` value displayed (`mock_data`) | ✅ | ⬜ | ⛔ |
+| `DataWidget` renders `Liftosaur` / `HR` / `READY` | ⬜ | ✅ | ⬜ |
+| Mocked `SPORT_DATA` value displayed (`mock_data`) | ✅ | ✅ | ⛔ |
 | Real HR from System Workout | ⛔ | ⛔ | ⬜ |
 | One `CLICK` produces exactly one transition | ⬜ | ⬜ | ⬜ |
 | Lifecycle sequence logged (`onInit`→`onDestroy`) | ✅ | ⬜ | ⬜ |

@@ -135,6 +135,19 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 | `getSportData` types | `speed`, `avg_speed`, `pace`, `avg_pace`, `distance`, `duration`, `calories`, `cadence`, `avg_cadence`, `altitude`, `total_up_altitude`, `total_count`, `vertical_speed`, `downhill_count`, `total_downhill_distance` | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
 | Heart rate via `getSportData` | **Not in the type list.** HR appears only as a `SPORT_DATA` widget field | UNKNOWN | — |
 
+## Confirmed by the phase 0 spike (EMULATOR TESTED)
+
+Observed on the Active 2 (Round) simulator image, inside a started workout: the widget
+renders its title, a heart-rate value and its status line.
+
+| Finding | Status |
+| --- | --- |
+| A Workout Extension is reachable only inside a started workout, as a data page — never from the launcher | TESTED |
+| `sport_data` and `edit_widget_group_type` are exported by `@zos/ui` | TESTED |
+| `SPORT_DATA` renders `mock_data` in the simulator | TESTED |
+| `DataWidget` keeps custom properties (`state`, `statusText`, `render`) with a correct `this` — same shape as `Page()`, undocumented for `DataWidget` | TESTED |
+| Amazfit Active 2 runs Workout Extensions despite being absent from the documented six-device list | TESTED |
+
 ## Open questions (blocking)
 
 1. Numeric `subType` for Strength Training, and whether the extension can be scoped to it.
