@@ -15,14 +15,49 @@ Research date: 2026-08-13.
 | Node.js | v24.19.0 (`C:\Program Files\nodejs\node.exe`) | TESTED |
 | npm | 11.17.0 | TESTED |
 | pnpm / yarn | not installed | TESTED |
-| Zeus CLI | **not installed** | BLOCKED |
-| Zepp OS Simulator | **not installed** | BLOCKED |
+| Zeus CLI | v1.9.3 (zpm v3.4.2), installed globally | TESTED |
+| Zepp OS Simulator | **not installed**, `zeus status` → disconnected | BLOCKED |
+| Zeus login | **not logged in** (`zeus status` → no login) | BLOCKED |
 | Zepp App Developer Mode | not verified | UNKNOWN |
 | `TARGET_WATCH_MODEL` | UNKNOWN | UNKNOWN |
 
-Consequence: no build, preview, or emulator evidence can be produced yet. Installing
-Zeus CLI (`npm i @zeppos/zeus-cli -g`) and downloading the simulator from the Zepp
-developer portal are the gates for every `TESTED` row below.
+Consequence: the project can be generated and inspected, but no build, preview, or runtime
+evidence can be produced until the simulator is installed and `zeus login` succeeds.
+
+### Verified Zeus CLI commands
+
+| Command | Result | Status |
+| --- | --- | --- |
+| `npm i @zeppos/zeus-cli -g` | zeus v1.9.3 installed | TESTED |
+| `zeus --version` | node/npm/zeus/zpm versions | TESTED |
+| `zeus status` | login and simulator connection state | TESTED |
+| `zeus create <name>` | `WORKOUT_EXTENSION` + `Empty` template scaffolds a project | TESTED |
+| `zeus dev` / `zeus preview` / `zeus build` | not run — need simulator/login | UNKNOWN |
+
+`zeus create` is an **interactive wizard and requires a TTY**. The documented
+`--appType` / `--APILevel` flags were ignored in v1.9.3; the prompts always appear.
+Non-interactive scaffolding is therefore not reproducible from an agent shell.
+
+## Evidence from the generated skeleton
+
+The `WORKOUT_EXTENSION` / `Empty` template produces `app.js`, `app.json`,
+`assets/common.r/icon.png`, `data-widget/common/index.js`, `global.d.ts`, `jsconfig.json`,
+`package.json`. Findings not present in the public documentation:
+
+| Finding | Value | Status |
+| --- | --- | --- |
+| App declaration | `app.appType: "app"` **plus** `app.extType: "workout"` | TESTED |
+| Config version | `configVersion: "v3"` | TESTED |
+| API version | `compatible`, `target`, `minVersion` all `"3.6"` | TESTED |
+| Widget window | `window.isPinned: 1` — `isPinned` exists and defaults to pinned | TESTED |
+| Default subType | `subType: []` (all sports) | TESTED |
+| Platform entry | `platforms: [{ "st": "r" }]`, `designWidth: 480` — `st` appears to be screen shape (`r` = round) | ASSUMED |
+| i18n | Per-language widget `name` required for ~33 locales | TESTED |
+| Widget entry | `DataWidget({ onInit, build, onDestroy })` — the template exposes only these three | TESTED |
+| appId | Template ships `26440`, a placeholder; a real appId must be issued by the developer console | ASSUMED |
+
+`@zeppos/device-types` types `hmUI.sport_type` as a bare `number` with no enumeration, so
+the typings do **not** resolve the Strength Training code either. Risk P0-1 stands.
 
 ## Workout Extension
 

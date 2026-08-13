@@ -13,7 +13,8 @@ Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at 
 
 | Scenario | DOC | EMU | REAL |
 | --- | --- | --- | --- |
-| `WORKOUT_EXTENSION` template exists in Zeus CLI | ✅ | ⬜ | ⛔ |
+| `WORKOUT_EXTENSION` template exists in Zeus CLI | ✅ | ✅ | ⛔ |
+| Minimal project scaffolded from `Empty` template | ✅ | ✅ | ⛔ |
 | Minimal project builds and previews | ⬜ | ⬜ | ⬜ |
 | Extension visible in Strength Training only | ⬜ | ⬜ | ⬜ |
 | Extension absent from other sports | ⬜ | ⬜ | ⬜ |
