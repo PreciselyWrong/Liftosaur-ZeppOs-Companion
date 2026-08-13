@@ -1,0 +1,365 @@
+{
+  "configVersion": "v3",
+  "app": {
+    "appId": 26440,
+    "appName": "Liftosaur",
+    "appType": "app",
+    "extType": "workout",
+    "version": {
+      "code": 1,
+      "name": "1.0.0"
+    },
+    "icon": "icon.png",
+    "vender": "",
+    "description": "Liftosaur client for the Strength Training workout"
+  },
+  "permissions": [],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.6",
+      "target": "3.6",
+      "minVersion": "3.6"
+    }
+  },
+  "targets": {
+    "common": {
+      "module": {
+        "data-widget": {
+          "widgets": [
+            {
+              "path": "data-widget/common/index",
+              "name": "Liftosaur",
+              "icon": "icon.png",
+              "window": {
+                "isPinned": 1
+              },
+              "runtime": {
+                "ability": [
+                  {
+                    "type": 1,
+                    "subType": []
+                  }
+                ]
+              }
+            }
+          ]
+        }
+      },
+      "platforms": [
+        {
+          "st": "r"
+        }
+      ],
+      "designWidth": 480
+    }
+  },
+  "i18n": {
+    "ar-EG": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ca-ES": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "cs-CZ": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "da-DK": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "de-DE": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "el-GR": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "en-US": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "es-ES": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "fi-FI": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "fr-FR": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "iw-IL": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "hi-IN": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "hu-HU": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "id-ID": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "it-IT": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ja-JP": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ko-KR": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ms-MY": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "nb-NO": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "nl-NL": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "pl-PL": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "pt-PT": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "pt-BR": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ro-RO": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "ru-RU": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "sk-SK": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "sr-RS": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "sv-SE": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "th-TH": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "tr-TR": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "uk-UA": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "vi-VN": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "zh-CN": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    },
+    "zh-TW": {
+      "data-widget": {
+        "widgets": [
+          {
+            "name": "Liftosaur"
+          }
+        ]
+      }
+    }
+  },
+  "defaultLanguage": "en-US"
+}
