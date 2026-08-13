@@ -42,6 +42,22 @@ Cheetah Pro Kelvin Kiptum, Cheetah (Round), Active Edge, Balance (list truncated
 Edge and Balance are **not** in the documented Workout Extension device list — availability
 in the simulator is not evidence of Workout Extension support.
 
+**The `-t` target must match the emulator image that is actually downloaded.** `zeus dev`
+offers every known device, including ones whose image was never fetched; selecting one of
+those builds a package the running emulator cannot install, and nothing appears — with no
+error. The downloaded images live in `~/.zepp/emulator_cache/<id>`, and `<id>` maps to an
+entry in `%APPDATA%/simulator/config.json` → `finalDownloadList`.
+
+Observed here: the only cached image was **Active 2 v1.1.0 (os 5.0, api 4.2)**, while the
+default prompt selection built for Falcon (device sources 414/415). `zeus dev -t "Amazfit
+Active 2 (Round)"` rebuilds for 8913155/8913159/10092803/10092807/10617091 and installs.
+Unlike `zeus create`, the `-t` flag on `zeus dev` **is** honoured.
+
+The deployed package can be inspected at
+`%APPDATA%/simulator/apps/<project><appId>/device/app.json`. Note the build rewrites
+`configVersion` from `v3` to `v2` and expands `targets.common` into a flat `platforms`
+array.
+
 `zeus dev` also **overwrites the project `.gitignore`** with its own template on every run,
 dropping the secret patterns. Restore it with `git checkout -- .gitignore` after each run,
 and re-check before any push.
