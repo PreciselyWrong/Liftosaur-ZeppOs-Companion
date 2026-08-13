@@ -26,10 +26,11 @@ Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at 
 
 | Scenario | DOC | EMU | REAL |
 | --- | --- | --- | --- |
-| `DataWidget` renders `Liftosaur` / `HR` / `READY` | ⬜ | ✅ | ⬜ |
+| `DataWidget` renders `Liftosaur` / `HR` / `READY` (preview, no workout) | ⬜ | ✅ | ⬜ |
+| Same rendering as a data page inside a started workout | ⬜ | ⬜ | ⬜ |
 | Mocked `SPORT_DATA` value displayed (`mock_data`) | ✅ | ✅ | ⛔ |
 | Real HR from System Workout | ⛔ | ⛔ | ⬜ |
-| One `CLICK` produces exactly one transition | ⬜ | ⬜ | ⬜ |
+| One `CLICK` produces exactly one transition | ⬜ | ❌ | ⬜ |
 | Lifecycle sequence logged (`onInit`→`onDestroy`) | ✅ | ⬜ | ⬜ |
 | Behaviour with screen off | ⛔ | ⛔ | ⬜ |
 | Behaviour on wrist down | ⛔ | ⛔ | ⬜ |

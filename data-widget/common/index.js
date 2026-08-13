@@ -38,12 +38,20 @@ DataWidget({
   build() {
     console.log('[liftosaur] build');
 
-    createWidget(widget.FILL_RECT, {
+    // The background doubles as the tap target: a single full-screen area,
+    // created first so the text sits on top of it.
+    const touchArea = createWidget(widget.FILL_RECT, {
       x: 0,
       y: 0,
       w: px(480),
       h: px(480),
       color: BACKGROUND,
+    });
+
+    touchArea.addEventListener(event.CLICK_UP, () => {
+      const status = this.state.click();
+      console.log(`[liftosaur] click -> ${status} (${this.state.transitionCount()})`);
+      this.render();
     });
 
     createWidget(widget.TEXT, {
@@ -89,19 +97,11 @@ DataWidget({
       text: this.state.view().status,
     });
 
-    // Single full-screen tap target: no scroll, no gesture, no physical button.
-    const touchArea = createWidget(widget.FILL_RECT, {
-      x: 0,
-      y: 0,
-      w: px(480),
-      h: px(480),
-      alpha: 0,
-      color: BACKGROUND,
-    });
-
-    touchArea.addEventListener(event.CLICK_UP, () => {
+    // A second listener on the status line itself: if the background rect turns
+    // out not to receive taps, this one narrows down where events do arrive.
+    this.statusText.addEventListener(event.CLICK_UP, () => {
       const status = this.state.click();
-      console.log(`[liftosaur] click -> ${status} (${this.state.transitionCount()})`);
+      console.log(`[liftosaur] click on text -> ${status}`);
       this.render();
     });
   },
