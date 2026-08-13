@@ -2,13 +2,13 @@
  * Guards the app.json invariants that the Workout Extension depends on.
  * These are cheap to break by hand and expensive to notice on a watch.
  */
-const test = require('node:test');
-const assert = require('node:assert/strict');
-const path = require('node:path');
-const fs = require('node:fs');
+import test from 'node:test';
+import assert from 'node:assert/strict';
+import path from 'node:path';
+import fs from 'node:fs';
 
 const appJson = JSON.parse(
-  fs.readFileSync(path.join(__dirname, '..', 'app.json'), 'utf8'),
+  fs.readFileSync(path.join(import.meta.dirname, '..', 'app.json'), 'utf8'),
 );
 
 const widgets = appJson.targets.common.module['data-widget'].widgets;
@@ -44,7 +44,7 @@ test('the widget is a workout extension ability', () => {
 });
 
 test('the widget entry point exists on disk', () => {
-  const entry = path.join(__dirname, '..', `${widgets[0].path}.js`);
+  const entry = path.join(import.meta.dirname, '..', `${widgets[0].path}.js`);
   assert.ok(fs.existsSync(entry), `missing widget entry ${entry}`);
 });
 
