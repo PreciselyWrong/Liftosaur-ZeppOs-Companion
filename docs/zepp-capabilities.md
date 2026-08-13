@@ -137,16 +137,29 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 
 ## Confirmed by the phase 0 spike (EMULATOR TESTED)
 
-Observed on the Active 2 (Round) simulator image, inside a started workout: the widget
-renders its title, a heart-rate value and its status line.
+Observed on the Active 2 (Round) simulator image: after `zeus dev` deployed, the widget
+appeared on its own and rendered its title, a heart-rate value and its status line.
+
+**No workout was started.** The simulator shows the widget directly, so this is a preview
+context, not the system Workout app. Nothing here proves how the extension behaves as a
+real data page.
 
 | Finding | Status |
 | --- | --- |
-| A Workout Extension is reachable only inside a started workout, as a data page — never from the launcher | TESTED |
 | `sport_data` and `edit_widget_group_type` are exported by `@zos/ui` | TESTED |
 | `SPORT_DATA` renders `mock_data` in the simulator | TESTED |
 | `DataWidget` keeps custom properties (`state`, `statusText`, `render`) with a correct `this` — same shape as `Page()`, undocumented for `DataWidget` | TESTED |
-| Amazfit Active 2 runs Workout Extensions despite being absent from the documented six-device list | TESTED |
+| The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
+| The simulator renders a `data-widget` **outside** any workout | TESTED |
+| `event.CLICK_UP` on a full-screen `FILL_RECT` — **no reaction observed** | UNKNOWN |
+
+The tap did nothing in this preview context. Whether that is a preview limitation or a
+genuine event-wiring bug is unresolved: both a background rect and the status text now
+carry a listener, to narrow it down.
+
+Consequences: the simulator cannot yet answer whether the extension is scoped to a sport,
+how it behaves as a data page, or whether taps work in a real workout. Those move to
+"needs the system Workout app", and P0-1 stays open.
 
 ## Open questions (blocking)
 
