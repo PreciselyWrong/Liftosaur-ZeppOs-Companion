@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { parseProgramOutline, findOutlineDay } from '../shared/liftoscript-outline.js';
+import { parseProgramOutline, findOutlineDay, parseProgramDayExercises } from '../shared/liftoscript-outline.js';
 
 const PROGRAM = `# Semaine 1
 // **Notation des séries** — \`2x10+ @7+\`
@@ -132,4 +132,43 @@ test('findOutlineDay looks up by week and day number', () => {
   assert.equal(found.day.name, 'Jeudi: PULL A');
   assert.equal(findOutlineDay(outline, 9, 1), null);
   assert.equal(findOutlineDay(outline, 1, 9), null);
+});
+
+test('parseProgramDayExercises extracts day exercises with warmup and superset tags', () => {
+  const sample = `# Week 1
+## Day 1: Upper
+Decline Bench Press[1,2], Barbell / 3x8 @8 / 80kg 120s / warmup: 1x8 40%, 1x5 70%, 1x3 85% / superset: A
+Triceps Pushdown, Cable / 2x11 @8 / 35kg 75s / warmup: 1x8 50% / superset: A
+Lateral Raise / 3x15 @8 / 10kg 60s / warmup: none
+
+## Day 2: Lower
+Belt Squat / 3x12 @8 / 50kg 120s
+`;
+
+  const day1 = parseProgramDayExercises(sample, 1, 1);
+  assert.equal(day1.length, 3);
+
+  assert.equal(day1[0].name, 'Decline Bench Press');
+  assert.equal(day1[0].equipment, 'Barbell');
+  assert.equal(day1[0].warmupText, '1x8 40%, 1x5 70%, 1x3 85%');
+  assert.equal(day1[0].supersetTag, 'A');
+
+  assert.equal(day1[1].name, 'Triceps Pushdown');
+  assert.equal(day1[1].equipment, 'Cable');
+  assert.equal(day1[1].warmupText, '1x8 50%');
+  assert.equal(day1[1].supersetTag, 'A');
+
+  assert.equal(day1[2].name, 'Lateral Raise');
+  assert.equal(day1[2].equipment, null);
+  assert.equal(day1[2].warmupText, 'none');
+  assert.equal(day1[2].supersetTag, null);
+
+  const day2 = parseProgramDayExercises(sample, 1, 2);
+  assert.equal(day2.length, 1);
+  assert.equal(day2[0].name, 'Belt Squat');
+  assert.equal(day2[0].equipment, null);
+  assert.equal(day2[0].warmupText, null);
+  assert.equal(day2[0].supersetTag, null);
+
+  assert.deepEqual(parseProgramDayExercises(sample, 2, 1), []);
 });

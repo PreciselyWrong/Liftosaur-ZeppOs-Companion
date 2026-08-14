@@ -337,3 +337,64 @@ test('programVersion changes with the text and is stable for the same text', () 
   assert.equal(programVersion(PROGRAM_TEXT), programVersion(PROGRAM_TEXT));
   assert.notEqual(programVersion(PROGRAM_TEXT), programVersion(`${PROGRAM_TEXT} `));
 });
+
+test('getDayPlan resolves warmups against referenceData and attaches superset tags', async () => {
+  const customProgram = `# Semaine 1
+## Mardi: PUSH A
+Decline Bench Press / 3x8 @8 / 87.5kg 120s / warmup: 1x8 40%, 1x5 70%, 1x3 85% / superset: A
+Triceps Pushdown / 2x11 @8 / 90kg 75s / warmup: 1x8 60% / superset: A
+`;
+
+  const client = createFakeClient({
+    async getProgram() {
+      return { id: 'prog-1', name: 'Test', text: customProgram, isCurrent: true };
+    },
+    async runPlayground() {
+      return {
+        workout: `2026-08-14 12:00:00 +00:00 / program: "Test" / dayName: "Semaine 1 - Mardi: PUSH A" / week: 1 / dayInWeek: 1 / exercises: {
+  Decline Bench Press / 1x8 87.5kg / target: 3x8 87.5kg @8 120s
+  Triceps Pushdown / 1x11 90kg / target: 2x11 90kg @8 75s
+}`,
+      };
+    },
+  });
+
+  const fakeReference = {
+    isLoaded: () => true,
+    load: async () => {},
+    resolveWeight: (name, eq, target, unit) => {
+      // Barbell 87.5kg: 40% -> 35, 70% -> 60, 85% -> 72.5 (from our verified tests)
+      if (name === 'Decline Bench Press') {
+        if (Math.abs(target - 0.4 * 87.5) < 1e-3) return { value: 35, exact: true, resolved: true };
+        if (Math.abs(target - 0.7 * 87.5) < 1e-3) return { value: 60, exact: true, resolved: true };
+        if (Math.abs(target - 0.85 * 87.5) < 1e-3) return { value: 72.5, exact: false, resolved: true };
+      }
+      if (name === 'Triceps Pushdown') {
+        if (Math.abs(target - 0.6 * 90) < 1e-3) return { value: 52.5, exact: false, resolved: true };
+      }
+      return { value: target, exact: false, resolved: false };
+    },
+  };
+
+  const service = createProgramService({ client, referenceData: fakeReference });
+  const plan = await service.getDayPlan('prog-1', 1, 1);
+
+  assert.equal(plan.exercises.length, 2);
+  assert.equal(plan.exercises[0].supersetGroup, 'A');
+  assert.equal(plan.exercises[0].warmupSets.length, 3);
+  assert.deepEqual(
+    plan.exercises[0].warmupSets.map((w) => [w.targetReps, w.targetWeight, w.targetWeightPercent]),
+    [
+      [8, 35, 40],
+      [5, 60, 70],
+      [3, 72.5, 85],
+    ]
+  );
+
+  assert.equal(plan.exercises[1].supersetGroup, 'A');
+  assert.equal(plan.exercises[1].warmupSets.length, 1);
+  assert.deepEqual(
+    plan.exercises[1].warmupSets.map((w) => [w.targetReps, w.targetWeight, w.targetWeightPercent]),
+    [[8, 52.5, 60]]
+  );
+});

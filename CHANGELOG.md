@@ -14,6 +14,8 @@ your program from the API and never interprets it on its own.
   logged. Everything else is one page below. Nothing is chosen until you tap it.
 - Exercises, sets, rep ranges, AMRAP sets, weights, RPE targets and rest timers are exactly
   the ones Liftosaur computes for that day, in your program's unit.
+- Warmup sets and supersets: warmups are resolved to loadable weights against your gym's
+  equipment, and superset exercises alternate working sets automatically during workouts.
 - Finishing a workout writes the session to your Liftosaur history and applies your
   program's progression, so opening the phone app afterwards shows the same state.
 - A workout is still saved when your program was edited elsewhere during the session; only
@@ -31,9 +33,6 @@ your program from the API and never interprets it on its own.
 - The local Liftoscript reader that guessed weeks, days, exercises and weights from program
   text, including the name-based rules that treated words starting with "S" as weeks and
   dropped days containing "calib". Nothing is inferred from a name any more.
-- Superset alternation and warmup sets, for now: the Playground does not return them, so
-  showing an invented version was worse than showing none. They are still recoverable from
-  the program text and are planned.
 
 ### Fixed
 - The rest countdown skipped a second at a time. It now updates the timer text in place

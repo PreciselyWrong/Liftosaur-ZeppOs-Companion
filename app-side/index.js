@@ -2,6 +2,7 @@ import { BaseSideService } from '@zeppos/zml/base-side';
 import { createSideRouter } from './router.js';
 import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 import { createProgramService } from './program-service.js';
+import { createReferenceData } from './reference-data.js';
 
 let sideServiceInstance = null;
 
@@ -58,7 +59,9 @@ function getProgramService() {
   }
   if (apiKey !== cachedKey || !cachedService) {
     cachedKey = apiKey;
-    cachedService = createProgramService({ client: createLiftosaurApiClient({ apiKey }) });
+    const client = createLiftosaurApiClient({ apiKey });
+    const referenceData = createReferenceData({ client });
+    cachedService = createProgramService({ client, referenceData });
   }
   return cachedService;
 }

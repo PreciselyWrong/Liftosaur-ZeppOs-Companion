@@ -38,22 +38,62 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
   const unit = plan?.unit || 'kg';
   const step = weightStepFor(unit);
 
-  const exercises = (plan?.exercises || []).map((exercise, index) => ({
-    index: exercise.index ?? index + 1,
-    id: exercise.id || `ex-${index + 1}`,
-    name: exercise.name || `Exercise ${index + 1}`,
-    equipment: exercise.equipment || null,
-    sets: (exercise.sets || []).map((set, setIndex) => ({
-      index: set.index ?? setIndex + 1,
-      targetReps: set.targetReps ?? null,
-      targetRepsMax: set.targetRepsMax ?? null,
-      targetWeight: set.targetWeight ?? null,
-      targetRpe: set.targetRpe ?? null,
-      restSeconds: Number.isFinite(set.restSeconds) ? set.restSeconds : null,
-      isAmrap: Boolean(set.isAmrap),
-      unit: set.unit || unit,
-    })),
-  }));
+  const exercises = (plan?.exercises || []).map((exercise, index) => {
+    const warmups = exercise.warmupSets || [];
+    const workSets = exercise.sets || [];
+    const sets = [];
+
+    warmups.forEach((w, wIdx) => {
+      sets.push({
+        index: sets.length + 1,
+        isWarmup: true,
+        warmupIndex: wIdx + 1,
+        totalWarmups: warmups.length,
+        workSetIndex: null,
+        totalWorkSets: workSets.length,
+        targetReps: w.targetReps ?? null,
+        targetRepsMax: w.targetRepsMax ?? null,
+        targetWeight: w.targetWeight ?? null,
+        targetWeightPercent: w.targetWeightPercent ?? null,
+        targetRpe: w.targetRpe ?? null,
+        restSeconds: Number.isFinite(w.restSeconds) ? w.restSeconds : null,
+        isAmrap: Boolean(w.isAmrap),
+        askWeight: Boolean(w.askWeight),
+        unit: w.unit || unit,
+      });
+    });
+
+    workSets.forEach((s, sIdx) => {
+      sets.push({
+        index: sets.length + 1,
+        isWarmup: false,
+        warmupIndex: null,
+        totalWarmups: warmups.length,
+        workSetIndex: s.index ?? sIdx + 1,
+        totalWorkSets: workSets.length,
+        targetReps: s.targetReps ?? null,
+        targetRepsMax: s.targetRepsMax ?? null,
+        targetWeight: s.targetWeight ?? null,
+        targetWeightPercent: null,
+        targetRpe: s.targetRpe ?? null,
+        restSeconds: Number.isFinite(s.restSeconds) ? s.restSeconds : null,
+        isAmrap: Boolean(s.isAmrap),
+        askWeight: Boolean(s.askWeight),
+        unit: s.unit || unit,
+      });
+    });
+
+    return {
+      index: exercise.index ?? index + 1,
+      id: exercise.id || `ex-${index + 1}`,
+      name: exercise.name || `Exercise ${index + 1}`,
+      equipment: exercise.equipment || null,
+      supersetGroup: exercise.supersetGroup || exercise.supersetTag || null,
+      warmupSetsCount: warmups.length,
+      workSetsCount: workSets.length,
+      sets,
+    };
+  });
 
   let state = exercises.length === 0 ? SESSION_STATES.NO_PLAN : SESSION_STATES.READY;
   let currentExerciseIndex = 0;
@@ -103,6 +143,56 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       if (progress[i].completedSets.length < exercises[i].sets.length) return i;
     }
     return -1;
+  }
+
+  function findNextExerciseIndex(currentIdx) {
+    const curEx = exercises[currentIdx];
+    const curProg = progress[currentIdx];
+
+    // If current exercise still has warmups to do, finish warmups first
+    if (curEx && curProg && curProg.completedSets.length < curEx.sets.length) {
+      const isWarmup = curProg.completedSets.length < curEx.warmupSetsCount;
+      if (isWarmup) return currentIdx;
+    }
+
+    // If current exercise is in a superset group:
+    if (curEx && curEx.supersetGroup) {
+      const group = curEx.supersetGroup;
+      const groupIndices = [];
+      for (let i = 0; i < exercises.length; i++) {
+        if (exercises[i].supersetGroup === group) groupIndices.push(i);
+      }
+
+      const curWorkSets = Math.max(0, curProg.completedSets.length - curEx.warmupSetsCount);
+
+      // 1. Look for any partner in group with FEWER completed work sets than current
+      for (let offset = 1; offset <= groupIndices.length; offset++) {
+        const idx = groupIndices[(groupIndices.indexOf(currentIdx) + offset) % groupIndices.length];
+        const p = progress[idx];
+        const ex = exercises[idx];
+        const pWorkSets = Math.max(0, p.completedSets.length - ex.warmupSetsCount);
+        if (p.completedSets.length < ex.sets.length && pWorkSets < curWorkSets) {
+          return idx;
+        }
+      }
+
+      // 2. If all partners have reached the same level, find next unfinished in group
+      for (let offset = 1; offset <= groupIndices.length; offset++) {
+        const idx = groupIndices[(groupIndices.indexOf(currentIdx) + offset) % groupIndices.length];
+        const p = progress[idx];
+        const ex = exercises[idx];
+        if (p.completedSets.length < ex.sets.length) {
+          return idx;
+        }
+      }
+    }
+
+    // If not in a superset, or superset is completely done:
+    if (curProg && curProg.completedSets.length < curEx.sets.length) {
+      return currentIdx;
+    }
+
+    return firstUnfinishedExercise(currentIdx + 1);
   }
 
   function applyEvent(event) {
@@ -166,6 +256,9 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           exerciseArrayIndex: currentExerciseIndex,
           exerciseName: exercise.name,
           setIndex: setIndex + 1,
+          isWarmup: Boolean(target?.isWarmup),
+          workSetIndex: target?.workSetIndex ?? null,
+          warmupIndex: target?.warmupIndex ?? null,
           weight: prog.currentWeight,
           reps: prog.currentReps,
           rpe: prog.currentRpe,
@@ -230,44 +323,35 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
   }
 
   function describeNextSet() {
-    const prog = currentProgress();
-    const exercise = currentExercise();
-    if (prog && exercise && prog.completedSets.length < exercise.sets.length) {
-      return {
-        isTransitionToNextExercise: false,
-        nextExerciseName: exercise.name,
-        nextSetIndex: prog.completedSets.length,
-        nextTotalSets: exercise.sets.length,
-      };
-    }
-    const nextIdx = firstUnfinishedExercise(currentExerciseIndex + 1);
+    const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     if (nextIdx === -1) {
       return {
         isTransitionToNextExercise: false,
         nextExerciseName: null,
         nextSetIndex: null,
         nextTotalSets: null,
+        nextIsWarmup: false,
+        nextSupersetGroup: null,
       };
     }
+
+    const nextEx = exercises[nextIdx];
+    const nextProg = progress[nextIdx];
+    const nextSetIdx = nextProg.completedSets.length;
+    const nextTarget = nextEx.sets[nextSetIdx];
+
     return {
-      isTransitionToNextExercise: true,
-      nextExerciseName: exercises[nextIdx].name,
-      nextSetIndex: progress[nextIdx].completedSets.length,
-      nextTotalSets: exercises[nextIdx].sets.length,
+      isTransitionToNextExercise: nextIdx !== currentExerciseIndex,
+      nextExerciseName: nextEx.name,
+      nextSetIndex: nextSetIdx,
+      nextTotalSets: nextEx.sets.length,
+      nextIsWarmup: Boolean(nextTarget?.isWarmup),
+      nextSupersetGroup: nextEx.supersetGroup ?? null,
     };
   }
 
   function advanceToNextSet() {
-    const prog = currentProgress();
-    const exercise = currentExercise();
-
-    if (prog && exercise && prog.completedSets.length < exercise.sets.length) {
-      loadSetTargets(currentExerciseIndex, prog.completedSets.length);
-      state = SESSION_STATES.ACTIVE_SET;
-      return;
-    }
-
-    const nextIdx = firstUnfinishedExercise(currentExerciseIndex + 1);
+    const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     if (nextIdx === -1) {
       state = SESSION_STATES.FINISHED;
       return;
@@ -317,6 +401,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           nextExerciseName: restInfo.nextExerciseName ?? null,
           nextSetIndex: restInfo.nextSetIndex ?? null,
           nextTotalSets: restInfo.nextTotalSets ?? null,
+          nextIsWarmup: Boolean(restInfo.nextIsWarmup),
+          nextSupersetGroup: restInfo.nextSupersetGroup ?? null,
         };
       }
 
@@ -326,6 +412,9 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           index: idx,
           id: ex.id,
           name: ex.name,
+          supersetGroup: ex.supersetGroup,
+          warmupSetsCount: ex.warmupSetsCount,
+          workSetsCount: ex.workSetsCount,
           totalSets: ex.sets.length,
           completedSetsCount: p.completedSets.length,
           setsDots: ex.sets.map((_, setIdx) => {
@@ -335,7 +424,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
             }
             return 'pending';
           }),
-          prescriptionSummary: summarizeSets(ex.sets, unit),
+          prescriptionSummary: summarizeSets(ex, unit),
         };
       });
 
@@ -363,6 +452,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           currentExerciseIndex: 0,
           exerciseId: null,
           exerciseName: null,
+          supersetGroup: null,
           totalSets: 0,
           currentSetIndex: 0,
           exerciseSetsDots: [],
@@ -379,6 +469,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         currentExerciseIndex,
         exerciseId: exercise.id,
         exerciseName: exercise.name,
+        supersetGroup: exercise.supersetGroup,
         totalSets: exercise.sets.length,
         currentSetIndex: prog.currentSetIndex,
         exerciseSetsDots: exercise.sets.map((_, setIdx) => {
@@ -387,6 +478,13 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           return 'pending';
         }),
         currentSet: {
+          isWarmup: Boolean(target?.isWarmup),
+          warmupIndex: target?.warmupIndex ?? null,
+          totalWarmups: target?.totalWarmups ?? 0,
+          workSetIndex: target?.workSetIndex ?? null,
+          totalWorkSets: target?.totalWorkSets ?? exercise.workSetsCount,
+          targetWeightPercent: target?.targetWeightPercent ?? null,
+          supersetGroup: exercise.supersetGroup ?? null,
           weight: prog.currentWeight,
           reps: prog.currentReps,
           rpe: prog.currentRpe,
@@ -446,14 +544,16 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
     /** The payload `POST /playground` replays, in the order the user did it. */
     getCompletedSets() {
-      return allCompletedSets().map((set) => ({
-        exerciseIndex: set.exerciseIndex,
-        setIndex: set.setIndex,
-        weight: set.weight,
-        reps: set.reps,
-        rpe: set.rpe,
-        unit: set.unit,
-      }));
+      return allCompletedSets()
+        .filter((set) => !set.isWarmup)
+        .map((set) => ({
+          exerciseIndex: set.exerciseIndex,
+          setIndex: set.workSetIndex || set.setIndex,
+          weight: set.weight,
+          reps: set.reps,
+          rpe: set.rpe,
+          unit: set.unit,
+        }));
     },
 
     isAllCompleted: allSetsDone,
@@ -461,10 +561,15 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
   };
 }
 
-function summarizeSets(sets, unit) {
-  if (!sets || sets.length === 0) return '';
-  const first = sets[0];
+function summarizeSets(ex, unit) {
+  const workSets = (ex.sets || []).filter((s) => !s.isWarmup);
+  if (workSets.length === 0) return '';
+  const first = workSets[0];
   const reps = first.targetRepsMax ? `${first.targetReps}-${first.targetRepsMax}` : first.targetReps;
   const weight = first.targetWeight === null ? '—' : `${first.targetWeight}${first.unit || unit}`;
-  return `${sets.length} × ${reps} · ${weight}`;
+  const workStr = `${workSets.length} × ${reps} · ${weight}`;
+  if (ex.warmupSetsCount > 0) {
+    return `${ex.warmupSetsCount}W + ${workStr}`;
+  }
+  return workStr;
 }
