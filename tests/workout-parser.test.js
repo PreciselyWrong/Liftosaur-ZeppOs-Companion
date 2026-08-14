@@ -385,6 +385,26 @@ test('parseLiftoscriptWorkout parses French Semaine and Jour without hashes', ()
   assert.equal(day2.exercises[0].name, 'Soulevé de Terre');
 });
 
+test('parseLiftoscriptWorkout does not confuse S-words like Squat or Shoulder Press as weeks', () => {
+  const text = `
+    # Full Body Day 1
+    Squat / 3x5 / 100kg
+    Shoulder Press / 3x8 / 45kg
+    Seated Cable Row / 3x10 / 60kg
+    Skullcrushers / 3x12 / 25kg
+    Standing Calf Raise / 3x15 / 80kg
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.name, 'Full Body Day 1');
+  assert.equal(workout.exercises.length, 5);
+  assert.equal(workout.exercises[0].name, 'Squat');
+  assert.equal(workout.exercises[1].name, 'Shoulder Press');
+  assert.equal(workout.exercises[2].name, 'Seated Cable Row');
+  assert.equal(workout.exercises[3].name, 'Skullcrushers');
+  assert.equal(workout.exercises[4].name, 'Standing Calf Raise');
+});
+
+
 
 
 
