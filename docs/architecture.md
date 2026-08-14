@@ -130,6 +130,23 @@ Session durability rests on the same data: the plan and the journal are stored t
 `@zos/storage` on every critical event, along with the id of the live record. An app killed
 mid-workout comes back to the same set, and keeps writing to the same history record.
 
+The watch is the only durable holder of that state. The Side Service can be torn down
+between two requests, so anything it would need to remember — which day is being trained,
+which history record the session owns — travels in the message. Its caches are an
+optimisation, never a requirement.
+
+## What cross-device resume can and cannot do
+
+A session started on the watch appears in the Liftosaur history while it happens, and a
+session finished anywhere is visible everywhere. What is **not** possible is picking up a
+half-finished workout on another device, the way the Liftosaur app and web page do between
+themselves: that state is synced through Liftosaur's own private storage, and the public
+REST API exposes no in-progress workout resource. On the phone the live record reads as a
+history entry with fewer sets, not as a workout waiting to be continued.
+
+Resuming therefore works on the watch itself — after a crash, a reboot, or the app being
+killed — and not across devices.
+
 ## Known API limits
 
 Warmup sets and superset grouping are absent from the **playground** output — verified, see

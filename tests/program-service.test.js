@@ -454,6 +454,91 @@ test('a sync with nothing completed writes nothing', async () => {
   assert.equal(client.calls.createHistory.length, 0);
 });
 
+// The Side Service is not a long-lived process on Zepp OS: it can be torn down
+// between two requests, taking its caches with it. Everything below runs
+// against a service that has never seen getDayPlan, which is what a real watch
+// hits mid-workout — and is why live sync silently did nothing while the final
+// save still worked.
+
+const SENT_PLAN = {
+  programName: 'Test',
+  dayName: 'Semaine 1 - Mardi: PUSH A',
+  week: 1,
+  dayInWeek: 1,
+  exercises: [
+    { index: 1, name: 'Decline Bench Press', equipment: null },
+    { index: 2, name: 'Triceps Pushdown', equipment: 'Cable' },
+  ],
+};
+
+test('syncs from the plan the watch sends when the service has no cache', async () => {
+  const client = createFakeClient();
+  const service = createProgramService({ client });
+
+  const result = await service.syncProgress({
+    programId: 'prog-1',
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    completedSets: [SET_ONE],
+    plan: SENT_PLAN,
+  });
+
+  assert.equal(result.synced, true);
+  assert.equal(result.created, true);
+  assert.equal(client.calls.createHistory.length, 1);
+  assert.ok(client.calls.createHistory[0].includes('Decline Bench Press / 1x8 80kg @8'));
+});
+
+test('updates the record the watch names, without a cache to remember it', async () => {
+  const client = createFakeClient();
+  const service = createProgramService({ client });
+
+  const result = await service.syncProgress({
+    programId: 'prog-1',
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    completedSets: [SET_ONE, SET_TWO],
+    plan: SENT_PLAN,
+    historyId: 42,
+  });
+
+  assert.equal(result.created, false);
+  assert.equal(result.historyId, 42);
+  assert.equal(client.calls.createHistory.length, 0, 'no duplicate record');
+  assert.equal(client.calls.updateHistory[0].id, 42);
+});
+
+test('finishing replaces the record the watch names, with no cache', async () => {
+  const client = createFakeClient();
+  const service = createProgramService({ client });
+
+  const result = await service.finishWorkout({
+    programId: 'prog-1',
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    durationSeconds: 3600,
+    completedSets: [SET_ONE],
+    historyId: 42,
+  });
+
+  assert.equal(result.historyId, 42);
+  assert.equal(client.calls.createHistory.length, 0, 'no second record for one session');
+  assert.equal(client.calls.updateHistory.length, 1);
+});
+
+test('discarding removes the record the watch names, with no cache', async () => {
+  const client = createFakeClient();
+  const service = createProgramService({ client });
+
+  const result = await service.discardWorkout({ startedAt: 1000, historyId: 42 });
+
+  assert.equal(result.discarded, true);
+  assert.deepEqual(client.calls.deleteHistory, [42]);
+});
+
 test('a sync for a day never planned is reported, not guessed', async () => {
   const client = createFakeClient();
   const service = createProgramService({ client });

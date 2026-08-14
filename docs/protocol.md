@@ -33,11 +33,19 @@ Every response carries `replyToId` set to the request's `messageId`.
 | `FINISH_WORKOUT` | `{programId, programVersion, week, day, completedSets[], startedAt, durationSeconds}` | `FINISH_WORKOUT_RESULT` | `{status, historyId, alreadyExisted, programUpdated}` |
 | `ABANDON_WORKOUT` | `{dayName, startedAt, abandonedAt}` | `ABANDON_WORKOUT_RESPONSE` | `{abandoned: true, discarded}` |
 
-`SYNC_PROGRESS` is sent after every completed set. `startedAt` identifies the session, so
-the Side Service knows whether to create the history record or update the one it already
-made. Writes are coalesced on the watch: a set completed while a write is in flight marks
-the state dirty and one further write follows. `synced: false` with a `reason` of `NO_PLAN`
-or `NOTHING_DONE` is a normal answer, not an error — the finish still writes everything.
+`SYNC_PROGRESS` is sent after every completed set. Writes are coalesced on the watch: a set
+completed while a write is in flight marks the state dirty and one further write follows.
+
+**The watch owns the durable state.** The Side Service is not a long-lived process — Zepp OS
+may tear it down between two requests — so `SYNC_PROGRESS`, `FINISH_WORKOUT` and
+`ABANDON_WORKOUT` all carry `historyId`, and `SYNC_PROGRESS` also carries a compact `plan`
+(`{programName, dayName, week, dayInWeek, exercises: [{index, name, equipment}]}`). Service-
+side caches are an optimisation for when they happen to survive, never a requirement.
+
+Getting this wrong is not loud: the service answered `synced: false, reason: NO_PLAN`, the
+watch counted that as success, and live sync did nothing at all while the final save kept
+working. Only `NOTHING_DONE` — no set completed yet — is a normal negative answer; any other
+`synced: false` raises the sync warning on the watch.
 
 `ABANDON_WORKOUT` deletes the live record, so a discarded session leaves nothing behind.
 
