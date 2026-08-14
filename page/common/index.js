@@ -1,6 +1,7 @@
 import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
 import { HeartRate } from '@zos/sensor';
+import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT } from '@zos/interaction';
 import { BasePage } from '@zeppos/zml/base-page';
 
 import {
@@ -12,7 +13,6 @@ import { createSessionStore } from '../../shared/session-storage.js';
 // ── Official Liftosaur Color Palette ────────────────────────────────────────
 
 const THEME = {
-  // Brand & Accents
   primary: 0x8356f6,          // Violet principal / bouton primaire (#8356F6)
   primaryLight: 0xa48bfa,     // Violet clair / actif (#A48BFA)
   primaryPale: 0xccc1f9,      // Violet très clair (#CCC1F9)
@@ -24,51 +24,52 @@ const THEME = {
   yellow: 0xffd820,           // Jaune (#FFD820)
   orange: 0xffb544,           // Orange (#FFB544)
 
-  // Backgrounds & Surfaces
   bg: 0x000000,               // Background principal (#000000)
   bgSubtle: 0x0c0819,         // Background subtil (#0C0819)
   bgNeutral: 0x252034,        // Background neutre / menus (#252034)
   card: 0x332d42,             // Cards / sets / input bg (#332D42)
   cardActive: 0x453d58,       // Card sélectionnée / set actif (#453D58)
 
-  // Typography
   textPrimary: 0xffffff,      // Texte principal (#FFFFFF)
   textSecondary: 0xa4b0bc,    // Texte secondaire (#A4B0BC)
   textMuted: 0x4f5c6b,        // Texte secondaire discret (#4F5C6B)
   textDisabled: 0x607284,     // Texte disabled (#607284)
 };
 
-// ── Mock Workout (Multi-Exercise Day) ────────────────────────────────────────
+// ── Long Workout Mock with Superset & RPE ────────────────────────────────────
 
 const WORKOUT_MOCK = {
-  id: 'workout-push-day',
-  name: 'Push Workout',
+  id: 'workout-push-hypertrophy',
+  name: 'Upper Body Superset (Heavy Hypertrophy)',
   exercises: [
     {
-      id: 'bench-press',
-      name: 'Bench Press',
+      id: 'incline-db-bench',
+      name: 'Incline Dumbbell Bench Press',
+      supersetTag: 'SUPERSET A1',
       sets: [
-        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
+        { targetReps: 10, targetWeight: 30, targetRpe: 8, restSeconds: 45 },
+        { targetReps: 10, targetWeight: 30, targetRpe: 8.5, restSeconds: 45 },
+        { targetReps: 10, targetWeight: 30, targetRpe: 9, restSeconds: 45 },
       ],
     },
     {
-      id: 'overhead-press',
-      name: 'Overhead Press',
+      id: 'chest-supported-row',
+      name: 'Chest-Supported Dumbbell Row',
+      supersetTag: 'SUPERSET A2',
       sets: [
-        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
-        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
-        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
+        { targetReps: 12, targetWeight: 26, targetRpe: 8, restSeconds: 90 },
+        { targetReps: 12, targetWeight: 26, targetRpe: 8.5, restSeconds: 90 },
+        { targetReps: 12, targetWeight: 26, targetRpe: 9, restSeconds: 90 },
       ],
     },
     {
-      id: 'triceps-pushdown',
-      name: 'Triceps Pushdown',
+      id: 'standing-military-press',
+      name: 'Standing Barbell Military Overhead Press',
+      supersetTag: null,
       sets: [
-        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
-        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
-        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
+        { targetReps: 8, targetWeight: 45, targetRpe: 8, restSeconds: 90 },
+        { targetReps: 8, targetWeight: 45, targetRpe: 8.5, restSeconds: 90 },
+        { targetReps: 8, targetWeight: 45, targetRpe: 9, restSeconds: 90 },
       ],
     },
   ],
@@ -146,66 +147,73 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Top Bar: Heart Rate & Workout Progress (Safe zone: y=25)
+  // Top Bar: Heart Rate & Day Title (Truncated if long to stay centered)
+  const shortTitle = view.workoutName.length > 22 ? view.workoutName.slice(0, 20) + '…' : view.workoutName;
   addWidget(widget.TEXT, {
     x: 0,
-    y: px(25),
+    y: px(20),
     w: W,
-    h: px(30),
+    h: px(28),
     color: THEME.textSecondary,
-    text_size: px(20),
+    text_size: px(19),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `HR ${liveHr} • ${view.workoutName}`,
+    text: `HR ${liveHr} • ${shortTitle}`,
   });
 
-  // Exercise Navigation Bar (Safe zone at y=65 is width 330px)
+  // Exercise Navigation Bar & Superset Indicator
   const exNum = view.currentExerciseIndex + 1;
   const hasPrevEx = view.currentExerciseIndex > 0;
   const hasNextEx = view.currentExerciseIndex + 1 < view.totalExercises;
 
   if (hasPrevEx) {
     addWidget(widget.BUTTON, {
-      x: px(65),
-      y: px(60),
-      w: px(40),
-      h: px(40),
-      radius: px(20),
+      x: px(60),
+      y: px(52),
+      w: px(38),
+      h: px(38),
+      radius: px(19),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
-      text_size: px(22),
+      text_size: px(20),
       click_func: () => {
         persistAndRender(() => session.prevExercise());
       },
     });
   }
 
+  // Exercise name + superset badge
+  const exDisplay = view.supersetTag
+    ? `[${view.supersetTag}] ${view.exerciseName}`
+    : `${view.exerciseName}`;
+  const shortEx = exDisplay.length > 24 ? exDisplay.slice(0, 22) + '…' : exDisplay;
+
   addWidget(widget.TEXT, {
-    x: px(110),
-    y: px(60),
-    w: px(260),
-    h: px(40),
-    color: THEME.primaryLight,
-    text_size: px(24),
+    x: px(100),
+    y: px(52),
+    w: px(280),
+    h: px(38),
+    color: view.supersetTag ? THEME.blue : THEME.primaryLight,
+    text_size: px(21),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${view.exerciseName} (${exNum}/${view.totalExercises})`,
+    text: `${shortEx} (${exNum}/${view.totalExercises})`,
   });
 
   if (hasNextEx) {
     addWidget(widget.BUTTON, {
-      x: px(375),
-      y: px(60),
-      w: px(40),
-      h: px(40),
-      radius: px(20),
+      x: px(382),
+      y: px(52),
+      w: px(38),
+      h: px(38),
+      radius: px(19),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '>',
-      text_size: px(22),
+      text_size: px(20),
       click_func: () => {
         persistAndRender(() => session.nextExercise());
       },
@@ -213,14 +221,14 @@ function renderUI() {
   }
 
   if (view.state === SESSION_STATES.READY) {
-    // ── READY SCREEN (Circular safe-area) ──
+    // ── READY SCREEN ──
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(130),
+      y: px(125),
       w: W,
-      h: px(50),
+      h: px(45),
       color: THEME.textPrimary,
-      text_size: px(34),
+      text_size: px(32),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -229,7 +237,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(190),
+      y: px(175),
       w: W,
       h: px(35),
       color: THEME.textSecondary,
@@ -237,12 +245,12 @@ function renderUI() {
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.totalExercises} exercises planned`,
+      text: `${view.totalExercises} exercises • Swipe ◄ ► to view`,
     });
 
     addWidget(widget.BUTTON, {
       x: px(90),
-      y: px(265),
+      y: px(255),
       w: px(300),
       h: px(75),
       radius: px(38),
@@ -255,28 +263,29 @@ function renderUI() {
       },
     });
   } else if (view.state === SESSION_STATES.ACTIVE_SET) {
-    // ── ACTIVE SET SCREEN (Circular safe-area) ──
+    // ── ACTIVE SET SCREEN ──
     const setNum = view.currentSetIndex + 1;
+    const rpeLabel = view.currentSet.rpe ? ` • @ RPE ${view.currentSet.rpe}` : '';
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(105),
+      y: px(98),
       w: W,
-      h: px(35),
+      h: px(32),
       color: THEME.orange,
-      text_size: px(24),
+      text_size: px(23),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `SET ${setNum} OF ${view.totalSets}`,
+      text: `SET ${setNum} OF ${view.totalSets}${rpeLabel}`,
     });
 
-    // Weight Controls: [-2.5] [ 60 kg ] [+2.5] (y=145, safe width > 440px)
+    // Weight Controls: [-2.5] [ 30 kg ] [+2.5]
     addWidget(widget.BUTTON, {
       x: px(60),
-      y: px(145),
+      y: px(138),
       w: px(70),
-      h: px(52),
+      h: px(50),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -289,11 +298,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(135),
-      y: px(145),
+      y: px(138),
       w: px(210),
-      h: px(52),
+      h: px(50),
       color: THEME.textPrimary,
-      text_size: px(32),
+      text_size: px(30),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -302,9 +311,9 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(350),
-      y: px(145),
+      y: px(138),
       w: px(70),
-      h: px(52),
+      h: px(50),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -315,12 +324,12 @@ function renderUI() {
       },
     });
 
-    // Reps Controls: [-1] [ 10 reps ] [+1] (y=205, safe width > 460px)
+    // Reps Controls: [-1] [ 10 reps ] [+1]
     addWidget(widget.BUTTON, {
       x: px(60),
-      y: px(205),
+      y: px(196),
       w: px(70),
-      h: px(52),
+      h: px(50),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -333,11 +342,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(135),
-      y: px(205),
+      y: px(196),
       w: px(210),
-      h: px(52),
+      h: px(50),
       color: THEME.textPrimary,
-      text_size: px(32),
+      text_size: px(30),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -346,9 +355,9 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(350),
-      y: px(205),
+      y: px(196),
       w: px(70),
-      h: px(52),
+      h: px(50),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -359,13 +368,32 @@ function renderUI() {
       },
     });
 
-    // Complete Set Button (y=280 to y=355, safe width > 410px)
+    // RPE Adjustment (tap to cycle / adjust RPE)
+    if (view.currentSet.rpe !== null) {
+      addWidget(widget.BUTTON, {
+        x: px(155),
+        y: px(252),
+        w: px(170),
+        h: px(32),
+        radius: px(16),
+        normal_color: THEME.card,
+        press_color: THEME.cardActive,
+        text: `RPE: ${view.currentSet.rpe} (+0.5)`,
+        text_size: px(18),
+        click_func: () => {
+          const delta = view.currentSet.rpe >= 10 ? -2.5 : 0.5;
+          persistAndRender(() => session.adjustRpe(delta));
+        },
+      });
+    }
+
+    // Complete Set Button (Liftosaur Primary Purple #8356F6)
     addWidget(widget.BUTTON, {
       x: px(85),
-      y: px(280),
+      y: px(292),
       w: px(310),
-      h: px(75),
-      radius: px(38),
+      h: px(74),
+      radius: px(37),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'COMPLETE SET',
@@ -376,15 +404,18 @@ function renderUI() {
       },
     });
   } else if (view.state === SESSION_STATES.REST) {
-    // ── REST SCREEN (Circular safe-area) ──
+    // ── REST SCREEN ──
     const isTransition = view.rest?.isTransitionToNextExercise;
+    const nextExName = view.currentExerciseIndex + 1 < view.totalExercises
+      ? view.workoutName
+      : 'Workout';
     const subtitle = isTransition
-      ? `Next Exercise (${exNum + 1}/${view.totalExercises})`
+      ? `Next: Exercise ${exNum + 1}/${view.totalExercises}`
       : `Next: Set ${view.currentSetIndex + 2} of ${view.totalSets}`;
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(100),
+      y: px(95),
       w: W,
       h: px(30),
       color: THEME.blue,
@@ -397,7 +428,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(138),
+      y: px(132),
       w: W,
       h: px(70),
       color: THEME.textPrimary,
@@ -410,7 +441,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(218),
+      y: px(212),
       w: W,
       h: px(35),
       color: THEME.textSecondary,
@@ -423,7 +454,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(85),
-      y: px(280),
+      y: px(275),
       w: px(310),
       h: px(72),
       radius: px(36),
@@ -437,12 +468,12 @@ function renderUI() {
       },
     });
   } else if (view.state === SESSION_STATES.FINISHED) {
-    // ── FINISHED SCREEN (Circular safe-area) ──
+    // ── FINISHED SCREEN ──
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(120),
+      y: px(115),
       w: W,
-      h: px(50),
+      h: px(45),
       color: THEME.success,
       text_size: px(34),
       align_h: align.CENTER_H,
@@ -453,9 +484,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(180),
+      y: px(170),
       w: W,
-      h: px(40),
+      h: px(38),
       color: THEME.textSecondary,
       text_size: px(24),
       align_h: align.CENTER_H,
@@ -466,7 +497,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(110),
-      y: px(265),
+      y: px(255),
       w: px(260),
       h: px(75),
       radius: px(38),
@@ -517,6 +548,25 @@ Page(
     build() {
       console.log('[liftosaur] page build');
 
+      // Register horizontal swipe / slide gestures to switch exercises
+      try {
+        onGesture({
+          callback: (event) => {
+            console.log('[liftosaur] gesture event:', event);
+            if (event === GESTURE_LEFT) {
+              persistAndRender(() => session.nextExercise());
+              return true;
+            } else if (event === GESTURE_RIGHT) {
+              persistAndRender(() => session.prevExercise());
+              return true;
+            }
+            return false;
+          },
+        });
+      } catch (err) {
+        console.log('[liftosaur] onGesture error:', err?.message || String(err));
+      }
+
       if (!hrSensor) {
         try {
           hrSensor = new HeartRate();
@@ -545,6 +595,9 @@ Page(
 
     onDestroy() {
       console.log('[liftosaur] page onDestroy');
+      try {
+        offGesture();
+      } catch (e) {}
       stopRestTimer();
       if (hrSensor && hrCallback) {
         try {

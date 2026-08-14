@@ -150,21 +150,55 @@ test('multi-exercise workout allows exercise navigation and automatic progressio
   assert.equal(session.view().totalExercises, 2);
   assert.equal(session.view().currentExerciseIndex, 0);
 
-  // Switch to next exercise manually
   session.selectExercise(1);
   assert.equal(session.view().exerciseName, 'Overhead Press');
   assert.equal(session.view().currentExerciseIndex, 1);
 
-  // Complete set of Overhead Press
   session.completeSet();
-  session.nextSet(); // Moves to next or completes
+  session.nextSet();
 
-  // Switch back to Bench Press
   session.selectExercise(0);
   assert.equal(session.view().exerciseName, 'Bench Press');
   session.completeSet();
 
-  // All completed
   assert.equal(session.isAllCompleted(), true);
 });
+
+test('session supports RPE tracking and superset metadata', () => {
+  const SUPERSET_WORKOUT = {
+    id: 'superset-day',
+    name: 'Upper Body Superset (Heavy Intensity Focus)',
+    exercises: [
+      {
+        id: 'bench-incline',
+        name: 'Incline Dumbbell Bench Press',
+        supersetTag: 'SUPERSET A1',
+        sets: [{ targetReps: 10, targetWeight: 30, targetRpe: 8, restSeconds: 45 }],
+      },
+      {
+        id: 'chest-row',
+        name: 'Chest-Supported Dumbbell Row',
+        supersetTag: 'SUPERSET A2',
+        sets: [{ targetReps: 12, targetWeight: 26, targetRpe: 8.5, restSeconds: 90 }],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ workout: SUPERSET_WORKOUT });
+  session.startWorkout();
+
+  const v1 = session.view();
+  assert.equal(v1.supersetTag, 'SUPERSET A1');
+  assert.equal(v1.currentSet.rpe, 8);
+
+  session.adjustRpe(0.5);
+  assert.equal(session.view().currentSet.rpe, 8.5);
+
+  session.nextExercise();
+  const v2 = session.view();
+  assert.equal(v2.supersetTag, 'SUPERSET A2');
+  assert.equal(v2.currentSet.rpe, 8.5);
+});
+
+
 

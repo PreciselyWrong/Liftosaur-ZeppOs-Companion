@@ -14,6 +14,7 @@ export const EVENT_TYPES = {
   START_WORKOUT: 'START_WORKOUT',
   ADJUST_WEIGHT: 'ADJUST_WEIGHT',
   ADJUST_REPS: 'ADJUST_REPS',
+  ADJUST_RPE: 'ADJUST_RPE',
   COMPLETE_SET: 'COMPLETE_SET',
   NEXT_SET: 'NEXT_SET',
   SELECT_EXERCISE: 'SELECT_EXERCISE',
@@ -27,13 +28,15 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
   let state = SESSION_STATES.READY;
   let currentExerciseIndex = 0;
 
-  // Per-exercise progress tracking: exerciseIndex -> { setIndex, currentWeight, currentReps, completedSets: [] }
+  // Per-exercise progress tracking: exerciseIndex -> { setIndex, currentWeight, currentReps, currentRpe, completedSets: [] }
   const exerciseProgress = exercises.map((ex) => ({
     currentSetIndex: 0,
     currentWeight: ex.sets[0]?.targetWeight ?? 0,
     currentReps: ex.sets[0]?.targetReps ?? 0,
+    currentRpe: ex.sets[0]?.targetRpe ?? null,
     completedSets: [],
   }));
+
 
   let restInfo = null; // { startedAt, duration, endsAt }
   let journal = [];
@@ -64,6 +67,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           if (prog.currentWeight === 0 && currentSetTarget) {
             prog.currentWeight = currentSetTarget.targetWeight;
             prog.currentReps = currentSetTarget.targetReps;
+            prog.currentRpe = currentSetTarget.targetRpe ?? null;
           }
           if (prog.completedSets.length < ex.sets.length) {
             state = SESSION_STATES.ACTIVE_SET;
@@ -72,7 +76,6 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         }
         break;
       }
-
 
       case EVENT_TYPES.ADJUST_WEIGHT: {
         const prog = getCurrentProgress();
@@ -86,6 +89,13 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         break;
       }
 
+      case EVENT_TYPES.ADJUST_RPE: {
+        const prog = getCurrentProgress();
+        const cur = prog.currentRpe ?? 8;
+        prog.currentRpe = Math.min(10, Math.max(5, cur + event.payload.delta));
+        break;
+      }
+
       case EVENT_TYPES.COMPLETE_SET: {
         const prog = getCurrentProgress();
         const ex = getCurrentExercise();
@@ -95,6 +105,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           setIndex: prog.currentSetIndex,
           weight: prog.currentWeight,
           reps: prog.currentReps,
+          rpe: prog.currentRpe,
           completedAt: event.timestamp,
         };
         prog.completedSets.push(completed);
@@ -121,7 +132,6 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         break;
       }
 
-
       case EVENT_TYPES.NEXT_SET: {
         const prog = getCurrentProgress();
         const ex = getCurrentExercise();
@@ -132,6 +142,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           const nextTarget = ex.sets[prog.currentSetIndex];
           prog.currentWeight = nextTarget?.targetWeight ?? prog.currentWeight;
           prog.currentReps = nextTarget?.targetReps ?? prog.currentReps;
+          prog.currentRpe = nextTarget?.targetRpe ?? prog.currentRpe;
           state = SESSION_STATES.ACTIVE_SET;
           restInfo = null;
         } else if (currentExerciseIndex + 1 < exercises.length) {
@@ -142,6 +153,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           const nextTarget = nextEx.sets[nextProg.currentSetIndex];
           nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
           nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
+          nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
           state = SESSION_STATES.ACTIVE_SET;
           restInfo = null;
         } else {
@@ -166,7 +178,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
   return {
     view(now = Date.now()) {
       const ex = getCurrentExercise() || { name: 'Workout', sets: [] };
-      const prog = getCurrentProgress() || { currentSetIndex: 0, currentWeight: 0, currentReps: 0, completedSets: [] };
+      const prog = getCurrentProgress() || { currentSetIndex: 0, currentWeight: 0, currentReps: 0, currentRpe: null, completedSets: [] };
 
       let calculatedRest = null;
       if (restInfo) {
@@ -187,13 +199,16 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         currentExerciseIndex,
         exerciseId: ex.id,
         exerciseName: ex.name,
+        supersetTag: ex.supersetTag ?? null,
         totalSets: ex.sets.length,
         currentSetIndex: prog.currentSetIndex,
         currentSet: {
           weight: prog.currentWeight,
           reps: prog.currentReps,
+          rpe: prog.currentRpe,
           targetWeight: ex.sets[prog.currentSetIndex]?.targetWeight ?? prog.currentWeight,
           targetReps: ex.sets[prog.currentSetIndex]?.targetReps ?? prog.currentReps,
+          targetRpe: ex.sets[prog.currentSetIndex]?.targetRpe ?? null,
         },
         completedSets: [...prog.completedSets],
         allCompletedSets: exerciseProgress.flatMap((p) => p.completedSets),
@@ -246,6 +261,16 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         timestamp,
       });
     },
+
+    adjustRpe(delta, { timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.ACTIVE_SET) return;
+      applyEvent({
+        type: EVENT_TYPES.ADJUST_RPE,
+        payload: { delta },
+        timestamp,
+      });
+    },
+
 
     completeSet({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
