@@ -35,16 +35,10 @@ export function createSideRouter({ programService = null, workoutAbandoner = nul
 
       if (rawMessage.type === MESSAGE_TYPES.ABANDON_WORKOUT) {
         try {
-          const payload = rawMessage.payload || {};
-          if (workoutAbandoner) await workoutAbandoner(payload);
-          // Drop the live record too, so a discarded session leaves nothing behind.
-          const result = programService
-            ? await programService.discardWorkout(payload)
-            : { discarded: false };
-          return createReply(rawMessage, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE, {
-            abandoned: true,
-            ...result,
-          });
+          // Nothing was written to the account: a session only reaches the
+          // history when it is finished. Abandoning is purely local.
+          if (workoutAbandoner) await workoutAbandoner(rawMessage.payload || {});
+          return createReply(rawMessage, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE, { abandoned: true });
         } catch (err) {
           return apiFailure(rawMessage, err);
         }
@@ -83,14 +77,6 @@ export function createSideRouter({ programService = null, workoutAbandoner = nul
             }
             const plan = await programService.getDayPlan(programId, week, day);
             return createReply(rawMessage, MESSAGE_TYPES.DAY_PLAN_DATA, plan);
-          } catch (err) {
-            return apiFailure(rawMessage, err);
-          }
-
-        case MESSAGE_TYPES.SYNC_PROGRESS:
-          try {
-            const result = await programService.syncProgress(rawMessage.payload || {});
-            return createReply(rawMessage, MESSAGE_TYPES.SYNC_PROGRESS_RESULT, result);
           } catch (err) {
             return apiFailure(rawMessage, err);
           }

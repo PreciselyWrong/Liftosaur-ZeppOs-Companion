@@ -29,29 +29,18 @@ Every response carries `replyToId` set to the request's `messageId`.
 | `LIST_PROGRAMS` | — | `PROGRAMS_DATA` | `{programs: [{id, name, isCurrent}]}` |
 | `GET_PROGRAM_OUTLINE` | `{programId}` | `PROGRAM_OUTLINE_DATA` | `{programId, programName, programVersion, totalWeeks, totalDays, weeks[], lastWorkout}` |
 | `GET_DAY_PLAN` | `{programId, week, day}` | `DAY_PLAN_DATA` | `{programId, programName, programVersion, week, dayInWeek, dayName, unit, exercises[], outlineNameMatches}` |
-| `SYNC_PROGRESS` | `{programId, week, day, startedAt, durationSeconds, completedSets[]}` | `SYNC_PROGRESS_RESULT` | `{synced, historyId, created, reason?}` |
 | `FINISH_WORKOUT` | `{programId, programVersion, week, day, completedSets[], startedAt, durationSeconds}` | `FINISH_WORKOUT_RESULT` | `{status, historyId, alreadyExisted, programUpdated}` |
-| `ABANDON_WORKOUT` | `{dayName, startedAt, abandonedAt}` | `ABANDON_WORKOUT_RESPONSE` | `{abandoned: true, discarded}` |
+| `ABANDON_WORKOUT` | `{dayName, startedAt, abandonedAt}` | `ABANDON_WORKOUT_RESPONSE` | `{abandoned: true}` |
 
-`SYNC_PROGRESS` is sent after every completed set. Writes are coalesced on the watch: a set
-completed while a write is in flight marks the state dirty and one further write follows.
+The account is written **once**, at finish. Nothing reaches Liftosaur before that, so a
+session in progress exists only on the watch, where it is stored after every set and
+survives the app being killed. `ABANDON_WORKOUT` is therefore purely local: there is no
+remote record to remove.
 
-**The watch owns the durable state.** The Side Service is not a long-lived process — Zepp OS
-may tear it down between two requests — so `SYNC_PROGRESS`, `FINISH_WORKOUT` and
-`ABANDON_WORKOUT` all carry `historyId`, and `SYNC_PROGRESS` also carries a compact `plan`
-(`{programName, dayName, week, dayInWeek, exercises: [{index, name, equipment}]}`). Service-
-side caches are an optimisation for when they happen to survive, never a requirement.
-
-Getting this wrong is not loud: the service answered `synced: false, reason: NO_PLAN`, the
-watch counted that as success, and live sync did nothing at all while the final save kept
-working. Only `NOTHING_DONE` — no set completed yet — is a normal negative answer; any other
-`synced: false` raises the sync warning on the watch.
-
-`ABANDON_WORKOUT` deletes the live record, so a discarded session leaves nothing behind.
-
-`week` and `day` are 1-based, `day` being the day within its week. `completedSets` entries
-are `{exerciseIndex, setIndex, weight, reps, rpe, unit}` with 1-based indices matching the
-day plan, in the order the user performed them.
+That is a deliberate reversal. Writing each set to `/history` as it happened did work, but
+a record created through the public API is a *finished* workout by construction — see
+[architecture.md](architecture.md) — so a live session showed up as an already-finished one.
+A clean history was worth more than server-side durability mid-session.
 
 ## Errors
 

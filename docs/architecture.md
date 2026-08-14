@@ -116,28 +116,13 @@ response ends in `UNKNOWN_COMMIT_STATE`, which triggers a verification read befo
 retry. A finished-but-unsynced session is kept and offered as `RETRY`; it is never deleted
 automatically.
 
-## Live history sync
+## The account is written once, at finish
 
-The workout is written to the history as it happens. The first completed set creates the
-record, each set after it updates the same one, and the finish replaces its text with the
-authoritative playground output — one session, one record. Discarding deletes it.
+Nothing reaches Liftosaur while a workout runs. The finish replays the journal through the
+playground, writes the record it returns to the history, then saves the progression.
 
-The live text states only what the user did: no `target:`, no warmups, no progression.
-Those are the playground's to compute and they arrive with the final replacement, so an
-intermediate write can never become authoritative.
-
-Session durability rests on the same data: the plan and the journal are stored together via
-`@zos/storage` on every critical event, along with the id of the live record. An app killed
-mid-workout comes back to the same set, and keeps writing to the same history record.
-
-The watch is the only durable holder of that state. The Side Service can be torn down
-between two requests, so anything it would need to remember — which day is being trained,
-which history record the session owns — travels in the message. Its caches are an
-optimisation, never a requirement.
-
-### A live record is a past workout, and cannot be otherwise
-
-This was established the hard way, so it is written down plainly. In Liftosaur:
+An earlier version wrote the session to `/history` after every set and updated the same
+record as it grew. It worked, and it is not coming back, because of this:
 
 ```ts
 export function Progress_isCurrent(progress: IHistoryRecord | undefined): boolean {
@@ -146,17 +131,15 @@ export function Progress_isCurrent(progress: IHistoryRecord | undefined): boolea
 ```
 
 An in-progress workout lives in `storage.progress` and is identified by `id === 0`.
-`POST /api/v1/history` writes into `storage.history`, and the Liftohistory deserializer sets
-`id: startTime` — a timestamp, never `0`. **A record created through the public API is
-therefore a finished workout by construction.**
+`POST /api/v1/history` writes into `storage.history`, and the Liftohistory deserializer
+assigns `id: startTime` — a timestamp, never `0`. **A record created through the public API
+is a finished workout by construction.** Omitting `duration:` only leaves `endTime`
+undefined; `isCurrent` never looks at `endTime`. So a live session appeared in the history
+as one already finished, and no field could change that.
 
-Omitting `duration:` only leaves `endTime` undefined, which changes how a duration is
-displayed. It does not make the record current: `isCurrent` never looks at `endTime`.
-
-The live record still earns its place — it puts the session on the server after every set,
-so a destroyed watch loses nothing — but it must be understood as a past-dated record that
-grows, not as an ongoing session. It carries its `target:` prescription from the day plan so
-it reads like any other record rather than one with no target at all.
+Durability is therefore local: the plan and the journal are stored together via
+`@zos/storage` on every critical event, so an app killed mid-workout resumes on the same
+set. What is lost is only the case where the watch itself is destroyed mid-session.
 
 ## Cross-device resume
 

@@ -10,8 +10,6 @@ function fakeService(overrides = {}) {
     getProgramOutline: async (programId) => ({ programId, weeks: [], totalWeeks: 0 }),
     getDayPlan: async (programId, week, day) => ({ programId, week, dayInWeek: day, exercises: [] }),
     finishWorkout: async () => ({ status: 'SAVED', historyId: 1, programUpdated: true }),
-    syncProgress: async () => ({ synced: true, historyId: 7, created: true }),
-    discardWorkout: async () => ({ discarded: true, historyId: 7 }),
     ...overrides,
   };
 }
@@ -111,63 +109,20 @@ test('a retried finish returns the first result instead of committing twice', as
   assert.deepEqual(second.payload, first.payload);
 });
 
-test('forwards a progress sync', async () => {
-  let received = null;
-  const router = createSideRouter({
-    programService: fakeService({
-      syncProgress: async (payload) => {
-        received = payload;
-        return { synced: true, historyId: 7, created: true };
-      },
-    }),
-  });
-
-  const res = await router.handle(
-    createMessage({
-      type: MESSAGE_TYPES.SYNC_PROGRESS,
-      payload: { programId: 'p1', week: 1, day: 1, startedAt: 1000, completedSets: [] },
-    })
-  );
-
-  assert.equal(res.type, MESSAGE_TYPES.SYNC_PROGRESS_RESULT);
-  assert.equal(res.payload.historyId, 7);
-  assert.equal(received.startedAt, 1000);
-});
-
-test('abandoning also deletes the live record', async () => {
+test('abandoning is local and needs no API key', async () => {
   let abandoned = null;
-  let discarded = null;
   const router = createSideRouter({
-    programService: fakeService({
-      discardWorkout: async (payload) => {
-        discarded = payload;
-        return { discarded: true, historyId: 7 };
-      },
-    }),
+    programService: null,
     workoutAbandoner: async (payload) => {
       abandoned = payload;
     },
   });
 
   const res = await router.handle(
-    createMessage({
-      type: MESSAGE_TYPES.ABANDON_WORKOUT,
-      payload: { dayName: 'Day 1', startedAt: 1000 },
-    })
+    createMessage({ type: MESSAGE_TYPES.ABANDON_WORKOUT, payload: { dayName: 'Day 1' } })
   );
 
   assert.equal(res.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
-  assert.equal(res.payload.discarded, true);
+  assert.equal(res.payload.abandoned, true);
   assert.equal(abandoned.dayName, 'Day 1');
-  assert.equal(discarded.startedAt, 1000);
-});
-
-test('abandoning still answers when no API key is configured', async () => {
-  const router = createSideRouter({ programService: null });
-  const res = await router.handle(
-    createMessage({ type: MESSAGE_TYPES.ABANDON_WORKOUT, payload: { startedAt: 1000 } })
-  );
-
-  assert.equal(res.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
-  assert.equal(res.payload.discarded, false);
 });

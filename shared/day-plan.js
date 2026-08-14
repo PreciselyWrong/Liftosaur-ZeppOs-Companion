@@ -11,11 +11,7 @@
  * only. Both are 1-based, matching the playground command grammar.
  */
 
-import {
-  parseLiftohistoryRecord,
-  expandSetGroups,
-  serializeLiftohistoryRecord,
-} from './liftohistory.js';
+import { parseLiftohistoryRecord, expandSetGroups } from './liftohistory.js';
 
 /**
  * Builds a day plan from a probe response: a playground run whose only purpose
@@ -130,68 +126,4 @@ export function buildWorkoutCommands(completedSets, { finish = false } = {}) {
   }
 
   return commands;
-}
-
-/**
- * A Liftohistory record for a workout still in progress.
- *
- * This is written to the history after every set so the session is visible in
- * the Liftosaur app while it happens, and survives a dead watch. It states only
- * what the user did — no `target:`, no progression — because those are the
- * playground's to compute. At finish the whole text is replaced by the record
- * the playground returns, so nothing here can end up authoritative.
- *
- * It deliberately writes **no `duration:`**. Liftosaur derives the end of a
- * workout from it — `endTime = durationSec != null ? startTime + durationSec :
- * undefined` — so a record carrying a duration is a finished workout. Omitting
- * it leaves `endTime` undefined, which is what an ongoing session looks like.
- * The duration is stated once, at finish, when it is actually known.
- */
-export function buildProgressRecord({ plan, completedSets = [], startedAt = null } = {}) {
-  if (!plan || !Array.isArray(plan.exercises)) return null;
-
-  const byExercise = new Map();
-  for (const set of completedSets) {
-    const list = byExercise.get(set.exerciseIndex) || [];
-    list.push(set);
-    byExercise.set(set.exerciseIndex, list);
-  }
-
-  const exercises = [];
-  for (const exercise of plan.exercises) {
-    const sets = byExercise.get(exercise.index);
-    if (!sets || sets.length === 0) continue;
-
-    exercises.push({
-      name: exercise.name,
-      equipment: exercise.equipment,
-      sets: sets
-        .slice()
-        .sort((a, b) => a.setIndex - b.setIndex)
-        .map((set) => ({
-          reps: set.reps,
-          weight: set.weight,
-          unit: set.unit,
-          rpe: set.rpe,
-          isAmrap: false,
-          repsLeft: null,
-        })),
-      // The prescription is known from the day plan, so the record carries it
-      // like any Liftosaur record. Without it the exercise reads as having no
-      // target at all.
-      targetSets: Array.isArray(exercise.sets) ? exercise.sets : [],
-    });
-  }
-
-  if (exercises.length === 0) return null;
-
-  return serializeLiftohistoryRecord({
-    date: startedAt ? new Date(startedAt) : new Date(),
-    programName: plan.programName,
-    dayName: plan.dayName,
-    week: plan.week,
-    dayInWeek: plan.dayInWeek,
-    durationSeconds: null,
-    exercises,
-  });
 }
