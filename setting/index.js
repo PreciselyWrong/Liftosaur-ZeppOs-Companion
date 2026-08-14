@@ -4,7 +4,7 @@ AppSettingsPage({
   },
 
   build(props) {
-    this.state.apiKey = props.settingsStorage.getItem('apiKey') || '';
+    this.getStorage(props);
 
     return Section(
       {
@@ -26,22 +26,53 @@ AppSettingsPage({
             color: '#666666',
             fontSize: '12px',
           },
-          description: 'Paste your personal API key (starts with lftsk_)',
+          description: 'Personal API key starting with lftsk_',
           onChange: (val) => {
-            props.settingsStorage.setItem('apiKey', val);
-            this.state.apiKey = val;
+            const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
+            this.state.apiKey = clean;
+            props.settingsStorage.setItem('apiKey', clean);
+          },
+        }),
+        Button({
+          label: 'Save API Key',
+          style: {
+            marginTop: '16px',
+            backgroundColor: '#8356F6',
+            color: '#FFFFFF',
+            borderRadius: '8px',
+          },
+          onClick: () => {
+            if (this.state.apiKey) {
+              props.settingsStorage.setItem('apiKey', this.state.apiKey.trim());
+            }
           },
         }),
         Text({
           style: {
             color: '#555555',
             fontSize: '13px',
-            marginTop: '12px',
+            marginTop: '14px',
             lineHeight: '18px',
           },
-          value: 'How to get your API Key: Open liftosaur.com or the Liftosaur app -> Settings -> API Key.',
+          value: 'To get your API Key: Open liftosaur.com -> Settings -> API Keys (or in the mobile Liftosaur app).',
         }),
       ]
     );
+  },
+
+  getStorage(props) {
+    const raw = props.settingsStorage.getItem('apiKey');
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        this.state.apiKey = typeof parsed === 'string' ? parsed : (parsed?.value || raw);
+      } catch (e) {
+        this.state.apiKey = raw;
+      }
+    } else if (typeof raw === 'object' && raw !== null) {
+      this.state.apiKey = raw.value || '';
+    } else {
+      this.state.apiKey = '';
+    }
   },
 });

@@ -4,6 +4,27 @@ import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 
 let sideServiceInstance = null;
 
+function extractApiKeyString(val) {
+
+  if (!val) return null;
+  if (typeof val === 'string') {
+    let str = val.trim();
+    if ((str.startsWith('"') && str.endsWith('"')) || (str.startsWith('{') && str.endsWith('}'))) {
+      try {
+        const parsed = JSON.parse(str);
+        return extractApiKeyString(parsed);
+      } catch (e) {}
+    }
+    if (str.length > 5) {
+      return str;
+    }
+  } else if (typeof val === 'object' && val !== null) {
+    if (typeof val.value === 'string') return extractApiKeyString(val.value);
+    if (typeof val.apiKey === 'string') return extractApiKeyString(val.apiKey);
+  }
+  return null;
+}
+
 function getEffectiveApiKey() {
   try {
     let raw = null;
@@ -13,12 +34,17 @@ function getEffectiveApiKey() {
     if (!raw && typeof settings !== 'undefined' && settings?.settingsStorage?.getItem) {
       raw = settings.settingsStorage.getItem('apiKey');
     }
-    if (raw && typeof raw === 'string' && raw.trim().length > 0) {
-      return raw.trim();
+    const extracted = extractApiKeyString(raw);
+    if (extracted) {
+      console.log('[liftosaur-side] effective API key loaded (length:', extracted.length, ')');
+      return extracted;
     }
-  } catch (e) {}
+  } catch (e) {
+    console.log('[liftosaur-side] error loading api key:', e?.message || String(e));
+  }
   return null;
 }
+
 
 function getApiClient() {
   const apiKey = getEffectiveApiKey();
