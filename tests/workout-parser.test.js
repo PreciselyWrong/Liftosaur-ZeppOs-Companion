@@ -339,6 +339,53 @@ test('parseLiftoscriptWorkout parses DSL with day "Name" syntax without parens',
   assert.equal(workout.exercises[1].name, 'Romanian Deadlift');
 });
 
+test('parseLiftoscriptWorkout parses multi-set continuation lines like logic.txt', () => {
+  const text = `
+    Day 1
+    Squat 1x5 100kg
+    1x5 110kg
+    1x5 120kg
+    Amrap 1x5 100kg
+    Bench Press 3x5 80kg
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.name, 'Day 1');
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Squat');
+  assert.equal(workout.exercises[0].sets.length, 4);
+  assert.equal(workout.exercises[0].sets[0].targetWeight, 100);
+  assert.equal(workout.exercises[0].sets[1].targetWeight, 110);
+  assert.equal(workout.exercises[0].sets[2].targetWeight, 120);
+  assert.equal(workout.exercises[0].sets[3].isAmrap, true);
+  assert.equal(workout.exercises[1].name, 'Bench Press');
+  assert.equal(workout.exercises[1].sets.length, 3);
+});
+
+test('parseLiftoscriptWorkout parses French Semaine and Jour without hashes', () => {
+  const text = `
+    Semaine 1
+    Jour 1 - Poussée
+    Développé Couché / 3x5 / 80kg
+    Développé Militaire / 3x8 / 45kg
+    Jour 2 - Tirage
+    Soulevé de Terre / 1x5 / 140kg
+    Tractions / 3x8 / 0kg
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.name, 'Semaine 1 - Jour 1 - Poussée');
+  assert.equal(workout.dayName, 'Jour 1 - Poussée');
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Développé Couché');
+  assert.equal(workout.exercises[1].name, 'Développé Militaire');
+
+  const day2 = parseLiftoscriptWorkout({ text }, 1);
+  assert.equal(day2.name, 'Semaine 1 - Jour 2 - Tirage');
+  assert.equal(day2.dayName, 'Jour 2 - Tirage');
+  assert.equal(day2.exercises.length, 2);
+  assert.equal(day2.exercises[0].name, 'Soulevé de Terre');
+});
+
+
 
 
 

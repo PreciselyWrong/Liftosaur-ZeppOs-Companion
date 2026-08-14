@@ -1,8 +1,13 @@
 /**
- * Robust Liftoscript and Workout Parser.
- * Handles single-day, multi-day, multi-week programs, Markdown headings,
- * Playground responses, week ranges, and history-based week/day resolution.
- * Spec: https://www.liftosaur.com/doc/api
+ * Authoritative Liftoscript and Workout Parser.
+ * Handles:
+ * - Liftoscript DSL (`day("...") { ... }`, `week("...") { ... }`, `jour(...) { ... }`)
+ * - Markdown Headings (`# Week 1`, `## Day 1`, `# Semaine 1`, `## Jour 1`, `# Push`, `### Legs`)
+ * - Plain-text Headings without hashes (`Week 1`, `Day 1`, `Jour 1`, `Semaine 1`, `Workout A`, `Push`, `Pull`, `Legs`)
+ * - Multi-set continuation lines (`1x5 (state.tm * 0.75)`, `Amrap 1x5 100kg`)
+ * - Bare unslashed exercise names (`Bench Press`, `Squat, Barbell 3x5 100kg`)
+ * - Official Liftosaur Playground & History JSON responses
+ * - Week ranges (`Exercise[1-4]`)
  */
 
 export function parseLiftoscriptWorkout(input = {}, requestedDayIndex = null, historyRecords = []) {
@@ -69,6 +74,8 @@ export function parseLiftoscriptWorkout(input = {}, requestedDayIndex = null, hi
   return {
     id,
     name: session.fullName || session.dayName || programName,
+    fullName: session.fullName,
+    dayName: session.dayName,
     routineName,
     exercises: session.exercises,
     availableDays: session.availableDays,
@@ -90,7 +97,7 @@ export function resolveNextProgramSession({
   const structure = extractProgramStructure(programText, programName);
   const allDays = structure.flatDays;
 
-  // Filter out calibration/setup days if regular days exist
+  // Filter out calibration/setup/readme days if regular days exist
   const regularDays = allDays.filter((d) => !isCalibrationDay(d.name) && !isCalibrationDay(d.fullName));
   const days = regularDays.length > 0 ? regularDays : allDays;
   const totalDays = Math.max(1, days.length);
@@ -124,6 +131,7 @@ export function resolveNextProgramSession({
 
   return {
     dayIndex: safeIndex,
+    name: activeDay.fullName || activeDay.name || programName,
     dayName: activeDay.name || programName,
     fullName: activeDay.fullName || activeDay.name || programName,
     week: activeDay.weekNumber || 1,
@@ -135,8 +143,23 @@ export function resolveNextProgramSession({
 }
 
 export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
-  const isDslFormat = /\bday\b/i.test(rawText) || /\bweek\b/i.test(rawText);
+  if (!rawText || !rawText.trim()) {
+    const singleDay = {
+      name: defaultName,
+      fullName: defaultName,
+      weekNumber: 1,
+      dayNumber: 1,
+      globalIndex: 0,
+      exercises: [getDefaultFallbackExercise(defaultName)],
+    };
+    return {
+      weeks: [{ weekNumber: 1, name: 'Week 1', days: [singleDay], hasExplicitWeekHeader: false }],
+      flatDays: [singleDay],
+    };
+  }
 
+  // 1. Try DSL format (day(...) { ... } or week(...) { ... })
+  const isDslFormat = /\b(?:day|jour|workout|seance|séance)\b[^{]*\{/i.test(rawText) || /\b(?:week|semaine)\b[^{]*\{/i.test(rawText);
   if (isDslFormat) {
     const dslWeeks = parseDslStructure(rawText, defaultName);
     if (dslWeeks.flatDays.length > 0) {
@@ -144,32 +167,13 @@ export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
     }
   }
 
-  const hasMarkdownHeadings = /^\s*#{1,4}\s+/m.test(rawText);
-  if (hasMarkdownHeadings) {
-    const markdownWeeks = parseMarkdownStructure(rawText, defaultName);
-    if (markdownWeeks.length > 0) {
-      const weeks = [];
-      const flatDays = [];
-
-      markdownWeeks.forEach((w, wIdx) => {
-        weeks.push(w);
-        w.days.forEach((d, dIdx) => {
-          flatDays.push({
-            ...d,
-            globalIndex: flatDays.length,
-            weekNumber: w.weekNumber || wIdx + 1,
-            dayNumber: d.dayNumber || dIdx + 1,
-          });
-        });
-      });
-
-      if (flatDays.length > 0) {
-        return { weeks, flatDays };
-      }
-    }
+  // 2. Parse Markdown or Line-based headings (with or without #)
+  const lineStructure = parseLineStructure(rawText, defaultName);
+  if (lineStructure.flatDays.length > 0) {
+    return lineStructure;
   }
 
-  // Fallback: entire text is a single day
+  // 3. Fallback: single day
   const fallbackExercises = parseExercisesFromBody(rawText);
   const singleDay = {
     name: defaultName,
@@ -186,7 +190,7 @@ export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
   };
 }
 
-function parseMarkdownStructure(rawText, defaultName = 'Workout') {
+function parseLineStructure(rawText, defaultName = 'Workout') {
   const lines = rawText.split('\n');
   const rawWeeks = [];
   let currentWeek = null;
@@ -198,9 +202,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
   function flushDay() {
     if (currentDay && currentBodyLines.length > 0) {
       const rawLines = [...currentBodyLines];
-      const weekNum = currentWeek ? currentWeek.weekNumber : 1;
 
-      // Extract recurring exercises
       for (const line of rawLines) {
         const match = line.match(/^([^/]+?)\s*\[\s*(?:[0-9]+\s*,\s*)?([0-9]+)(?:\s*-\s*([0-9]+))?\s*\]/);
         if (match) {
@@ -241,11 +243,14 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line || line.startsWith('```')) continue;
+    if (!line || line.startsWith('```') || line.startsWith('---')) continue;
 
-    // Check for # Week X or ## Week X
-    const weekHeading = line.match(/^#{1,3}\s+(Week\s+([0-9A-Za-z]+).*)$/i);
-    if (weekHeading) {
+    // Check for Week / Semaine heading:
+    // "# Week 1", "## Week 1", "Week 1", "# Semaine 1", "Semaine 1", "W1", "S1"
+    const weekHeading = line.match(/^(?:#{1,3}\s+)?((?:Week|Semaine|W|S)\s*([0-9A-Za-z]+).*)$/i);
+    const isBareWeek = weekHeading && (line.startsWith('#') || !line.includes('/') && !line.includes('x') && !line.includes(':'));
+
+    if (isBareWeek) {
       flushWeek();
       const rawNum = parseInt(weekHeading[2], 10);
       const weekNum = !isNaN(rawNum) && rawNum > 0 ? rawNum : rawWeeks.length + 1;
@@ -259,24 +264,41 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
       continue;
     }
 
-    // Check for any Day / Workout / Subheading (##, ###, #### or # Day / # Push)
-    const isExplicitDayHeading = line.match(/^#{1,4}\s+(.*)$/);
-    if (isExplicitDayHeading) {
-      const headingText = isExplicitDayHeading[1].trim();
-      const lowerHeading = headingText.toLowerCase();
+    // Check for Day / Jour / Workout / Subheading:
+    // "## Day 1", "# Day 1", "Day 1", "Jour 1", "## Jour 1", "### Push", "Push", "Pull", "Legs", "Workout A"
+    const markdownHeading = line.match(/^#{1,4}\s+(.*)$/);
+    const plainDayHeading = line.match(/^(?:Day|Jour|Workout|Session|Seance|Séance)\s*([0-9A-Za-z]+.*)$/i);
+    const plainSplitHeading = line.match(/^(?:Push|Pull|Legs|Upper|Lower|Chest|Back|Arms|Shoulders|Full\s*Body|Poussée|Tirage|Jambes|Haut|Bas)\b/i);
 
-      if (!lowerHeading.startsWith('routine') && !lowerHeading.startsWith('program')) {
-        flushDay();
-        currentDay = { title: headingText };
-        continue;
+    let isDay = false;
+    let dayTitle = '';
+
+    if (markdownHeading) {
+      const headingText = markdownHeading[1].trim();
+      const lowerHeading = headingText.toLowerCase();
+      if (!lowerHeading.startsWith('routine') && !lowerHeading.startsWith('program') && !lowerHeading.startsWith('programme')) {
+        isDay = true;
+        dayTitle = headingText;
       }
+    } else if (plainDayHeading && !line.includes('/') && !line.match(/[0-9]+\s*x\s*[0-9]+/i)) {
+      isDay = true;
+      dayTitle = plainDayHeading[0].trim();
+    } else if (plainSplitHeading && !line.includes('/') && !line.match(/[0-9]+\s*x\s*[0-9]+/i) && line.length < 30) {
+      isDay = true;
+      dayTitle = line.trim();
+    }
+
+    if (isDay) {
+      flushDay();
+      currentDay = { title: dayTitle };
+      continue;
     }
 
     if (currentDay) {
       currentBodyLines.push(line);
-    } else if (line.includes('/') || line.includes('@') || line.match(/[0-9]+\s*x\s*[0-9]+/i) || line.length > 2) {
+    } else if (!isScriptCodeLine(line)) {
       if (!currentDay) {
-        currentDay = { title: defaultName || 'Day 1' };
+        currentDay = { title: currentWeek ? currentWeek.name : (defaultName || 'Day 1') };
       }
       currentBodyLines.push(line);
     }
@@ -284,8 +306,19 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
   flushWeek();
 
-  // Compile exercises for each day
+  // If a week had exercises without sub-days, attach them as a day
+  for (const w of rawWeeks) {
+    if (w.days.length === 0 && currentBodyLines.length > 0) {
+      w.days.push({
+        title: w.name,
+        bodyLines: [...currentBodyLines],
+        dayNumber: 1,
+      });
+    }
+  }
+
   const weeks = [];
+  const flatDays = [];
 
   for (const w of rawWeeks) {
     const weekObj = {
@@ -312,13 +345,17 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
       const finalExercises = exercises.length > 0 ? exercises : [getDefaultFallbackExercise(d.title)];
 
-      weekObj.days.push({
+      const dayObj = {
         name: d.title,
         fullName,
         weekNumber: w.weekNumber,
         dayNumber: d.dayNumber,
+        globalIndex: flatDays.length,
         exercises: finalExercises,
-      });
+      };
+
+      weekObj.days.push(dayObj);
+      flatDays.push(dayObj);
     }
 
     if (weekObj.days.length > 0) {
@@ -326,15 +363,14 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
     }
   }
 
-  return weeks;
+  return { weeks, flatDays };
 }
 
 function parseDslStructure(rawText, defaultName = 'Workout') {
   const weeks = [];
   const flatDays = [];
 
-  // 1. Extract week blocks
-  const weekBlocks = extractDslBlocks(rawText, 'week');
+  const weekBlocks = extractDslBlocks(rawText, ['week', 'semaine']);
 
   if (weekBlocks.length > 0) {
     weekBlocks.forEach((wBlock, wIdx) => {
@@ -349,7 +385,7 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
         days: [],
       };
 
-      const dayBlocks = extractDslBlocks(wBlock.body, 'day');
+      const dayBlocks = extractDslBlocks(wBlock.body, ['day', 'jour', 'workout', 'seance', 'séance']);
       dayBlocks.forEach((dBlock, dIdx) => {
         const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
         const exercises = parseExercisesFromBody(dBlock.body, weekNumber);
@@ -372,9 +408,8 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
     });
   }
 
-  // 2. Extract top-level day blocks
   if (flatDays.length === 0) {
-    const dayBlocks = extractDslBlocks(rawText, 'day');
+    const dayBlocks = extractDslBlocks(rawText, ['day', 'jour', 'workout', 'seance', 'séance']);
     dayBlocks.forEach((dBlock, dIdx) => {
       const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
       const exercises = parseExercisesFromBody(dBlock.body, 1);
@@ -403,10 +438,10 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
   return { weeks, flatDays };
 }
 
-function extractDslBlocks(text, keyword) {
+function extractDslBlocks(text, keywords) {
   const blocks = [];
-  // Matches: day("Name") {, day 'Name' {, day "Name" {, day {
-  const regex = new RegExp(`\\b${keyword}(?:\\s*(?:\\(\\s*["']?([^"'\)]+)["']?\\s*\\)|["']([^"']+)["']))?\\s*\\{`, 'gi');
+  const kwList = Array.isArray(keywords) ? keywords.join('|') : keywords;
+  const regex = new RegExp(`\\b(?:${kwList})(?:\\s*(?:\\(\\s*["']?([^"'\)]+)["']?\\s*\\)|["']([^"']+)["']))?\\s*\\{`, 'gi');
   let match;
 
   while ((match = regex.exec(text)) !== null) {
@@ -447,6 +482,7 @@ function parseExercisesFromBody(bodyText, targetWeek = null) {
     .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//') && !l.startsWith('```'));
 
   const exercises = [];
+  let currentExercise = null;
 
   for (let i = 0; i < lines.length; i++) {
     const line = lines[i];
@@ -455,13 +491,31 @@ function parseExercisesFromBody(bodyText, targetWeek = null) {
       continue;
     }
 
-    const parsedEx = parseExerciseLine(line, i, targetWeek);
+    // Check if line is a continuation set for the preceding exercise:
+    // e.g. "1x5 100kg", "1x5 (state.tm * 0.75)", "Amrap 5x5 80kg", "3x10 50kg"
+    const isContinuation = isSetContinuationLine(line);
+    if (isContinuation && currentExercise) {
+      const extraSets = parseSetsDefinition(line, currentExercise.sets[0]?.targetWeight || 0, 90, null);
+      if (extraSets && extraSets.length > 0) {
+        currentExercise.sets.push(...extraSets);
+        continue;
+      }
+    }
+
+    const parsedEx = parseExerciseLine(line, exercises.length, targetWeek);
     if (parsedEx) {
+      currentExercise = parsedEx;
       exercises.push(parsedEx);
     }
   }
 
   return exercises;
+}
+
+function isSetContinuationLine(line) {
+  const clean = line.trim();
+  // Starts directly with "1x5", "3x8", "Amrap 1x5", "1x5+", "5x5", "12, 5, 5" without words before
+  return Boolean(clean.match(/^(?:amrap\s+)?(?:[0-9]+\s*x\s*[0-9]+|[0-9]+\+|[0-9]+\s*(?:kg|lbs?)\b)/i));
 }
 
 function isScriptCodeLine(line) {
@@ -575,7 +629,7 @@ function parseExerciseLine(line, index, targetWeek = null) {
   if (!rawName || rawName.length === 0) return null;
 
   const lowerName = rawName.toLowerCase();
-  if (lowerName === 'day' || lowerName === 'week' || lowerName.startsWith('calib') || lowerName.startsWith('setup')) {
+  if (lowerName === 'day' || lowerName === 'jour' || lowerName === 'week' || lowerName === 'semaine' || lowerName.startsWith('calib') || lowerName.startsWith('setup')) {
     return null;
   }
 
@@ -833,12 +887,12 @@ function findNextDayIndexFromHistory(days, historyRecords, programName) {
   if (!latest) return null;
 
   const latestText = typeof latest === 'string' ? latest : (latest.text || JSON.stringify(latest));
-  const weekMatch = latestText.match(/week:\s*([0-9]+)/i);
-  const dayInWeekMatch = latestText.match(/dayInWeek:\s*([0-9]+)/i) || latestText.match(/day:\s*([0-9]+)/i);
+  const weekMatch = latestText.match(/(?:week|semaine):\s*([0-9]+)/i);
+  const dayInWeekMatch = latestText.match(/(?:dayInWeek|jour):\s*([0-9]+)/i) || latestText.match(/day:\s*([0-9]+)/i);
   const dayNameMatch = latestText.match(/dayName:\s*["']([^"']+)["']/i);
 
-  const lastWeek = weekMatch ? parseInt(weekMatch[1], 10) : (latest.week || 1);
-  const lastDayInWeek = dayInWeekMatch ? parseInt(dayInWeekMatch[1], 10) : (latest.dayInWeek || latest.day || null);
+  const lastWeek = weekMatch ? parseInt(weekMatch[1], 10) : (latest.week || latest.semaine || 1);
+  const lastDayInWeek = dayInWeekMatch ? parseInt(dayInWeekMatch[1], 10) : (latest.dayInWeek || latest.jour || latest.day || null);
 
   if (lastDayInWeek !== null) {
     const currentDayIdx = days.findIndex(
@@ -866,7 +920,7 @@ function findNextDayIndexFromHistory(days, historyRecords, programName) {
 function resolveNextDayIndexFromState(days, state, rawText) {
   if (days.length <= 1) return 0;
 
-  const stateDay = state?.day ?? state?.currentDay ?? state?.nextDay ?? state?.dayIndex;
+  const stateDay = state?.day ?? state?.currentDay ?? state?.nextDay ?? state?.dayIndex ?? state?.jour;
   if (stateDay !== undefined && stateDay !== null) {
     if (typeof stateDay === 'number') {
       const target0 = stateDay > 0 && stateDay <= days.length ? stateDay - 1 : stateDay;
@@ -877,9 +931,9 @@ function resolveNextDayIndexFromState(days, state, rawText) {
     }
   }
 
-  const stateWeek = state?.week ?? state?.currentWeek;
+  const stateWeek = state?.week ?? state?.currentWeek ?? state?.semaine;
   if (stateWeek !== undefined && stateWeek !== null) {
-    const weekPattern = new RegExp(`(?:week|w)\\s*${stateWeek}`, 'i');
+    const weekPattern = new RegExp(`(?:week|semaine|w|s)\\s*${stateWeek}`, 'i');
     const firstMatchingWeekIdx = days.findIndex((d) => weekPattern.test(d.fullName || d.name));
     if (firstMatchingWeekIdx !== -1) {
       if (typeof stateDay === 'number') {
@@ -892,7 +946,7 @@ function resolveNextDayIndexFromState(days, state, rawText) {
     }
   }
 
-  const inlineDayMatch = rawText.match(/state\.(?:currentDay|nextDay|day|dayIndex)\s*=\s*([0-9]+)/i);
+  const inlineDayMatch = rawText.match(/state\.(?:currentDay|nextDay|day|dayIndex|jour)\s*=\s*([0-9]+)/i);
   if (inlineDayMatch) {
     const val = parseInt(inlineDayMatch[1], 10);
     const target0 = val > 0 && val <= days.length ? val - 1 : val;
