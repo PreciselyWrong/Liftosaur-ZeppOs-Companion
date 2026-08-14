@@ -164,22 +164,30 @@ test('multi-exercise workout allows exercise navigation and automatic progressio
   assert.equal(session.isAllCompleted(), true);
 });
 
-test('session supports RPE tracking and superset metadata', () => {
+test('session automatically jumps alternately between exercises in a superset', () => {
   const SUPERSET_WORKOUT = {
     id: 'superset-day',
     name: 'Upper Body Superset (Heavy Intensity Focus)',
     exercises: [
       {
         id: 'bench-incline',
-        name: 'Incline Dumbbell Bench Press',
+        name: 'Incline DB Bench',
+        supersetGroup: 'A',
         supersetTag: 'SUPERSET A1',
-        sets: [{ targetReps: 10, targetWeight: 30, targetRpe: 8, restSeconds: 45 }],
+        sets: [
+          { targetReps: 10, targetWeight: 30, restSeconds: 30 },
+          { targetReps: 10, targetWeight: 30, restSeconds: 30 },
+        ],
       },
       {
         id: 'chest-row',
-        name: 'Chest-Supported Dumbbell Row',
+        name: 'DB Chest Row',
+        supersetGroup: 'A',
         supersetTag: 'SUPERSET A2',
-        sets: [{ targetReps: 12, targetWeight: 26, targetRpe: 8.5, restSeconds: 90 }],
+        sets: [
+          { targetReps: 12, targetWeight: 26, restSeconds: 60 },
+          { targetReps: 12, targetWeight: 26, restSeconds: 60 },
+        ],
       },
     ],
   };
@@ -187,18 +195,38 @@ test('session supports RPE tracking and superset metadata', () => {
   const session = createWorkoutSession({ workout: SUPERSET_WORKOUT });
   session.startWorkout();
 
-  const v1 = session.view();
-  assert.equal(v1.supersetTag, 'SUPERSET A1');
-  assert.equal(v1.currentSet.rpe, 8);
+  // 1. Starts on A1 Set 1
+  assert.equal(session.view().exerciseName, 'Incline DB Bench');
+  assert.equal(session.view().currentSetIndex, 0);
 
-  session.adjustRpe(0.5);
-  assert.equal(session.view().currentSet.rpe, 8.5);
+  // 2. Complete A1 Set 1 -> Rest -> Next Set jumps to A2 Set 1!
+  session.completeSet();
+  assert.equal(session.view().rest.isTransitionToNextExercise, true);
+  session.nextSet();
 
-  session.nextExercise();
-  const v2 = session.view();
-  assert.equal(v2.supersetTag, 'SUPERSET A2');
-  assert.equal(v2.currentSet.rpe, 8.5);
+  assert.equal(session.view().exerciseName, 'DB Chest Row');
+  assert.equal(session.view().currentSetIndex, 0);
+
+  // 3. Complete A2 Set 1 -> Rest -> Next Set jumps back to A1 Set 2!
+  session.completeSet();
+  session.nextSet();
+
+  assert.equal(session.view().exerciseName, 'Incline DB Bench');
+  assert.equal(session.view().currentSetIndex, 1);
+
+  // 4. Complete A1 Set 2 -> Rest -> Next Set jumps to A2 Set 2!
+  session.completeSet();
+  session.nextSet();
+
+  assert.equal(session.view().exerciseName, 'DB Chest Row');
+  assert.equal(session.view().currentSetIndex, 1);
+
+  // 5. Complete A2 Set 2 -> All done -> FINISHED
+  session.completeSet();
+  assert.equal(session.isAllCompleted(), true);
+  assert.equal(session.view().state, SESSION_STATES.FINISHED);
 });
+
 
 
 
