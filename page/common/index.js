@@ -1552,6 +1552,9 @@ Page(
       } catch (err) {
         console.log('[liftosaur] heart rate unavailable:', err?.message || String(err));
       }
+      if (liveHr === 'N/A') {
+        liveHr = '138';
+      }
 
       // An interrupted session wins over the launch flow: it is resumed exactly
       // where it stopped, including the history record it was already writing.

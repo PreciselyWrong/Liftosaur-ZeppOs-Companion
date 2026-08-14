@@ -47,15 +47,19 @@ function getEffectiveApiKey() {
  * effect without restarting the watch app. The program text cache lives in the
  * service, so it is kept across requests for as long as the key is unchanged.
  */
+import { createDummyProgramService } from './dummy-program-service.js';
+
 let cachedKey = null;
 let cachedService = null;
 
 function getProgramService() {
   const apiKey = getEffectiveApiKey();
-  if (!apiKey) {
-    cachedKey = null;
-    cachedService = null;
-    return null;
+  if (!apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo') {
+    if (!cachedService || cachedKey !== 'dummy') {
+      cachedKey = 'dummy';
+      cachedService = createDummyProgramService();
+    }
+    return cachedService;
   }
   if (apiKey !== cachedKey || !cachedService) {
     cachedKey = apiKey;
