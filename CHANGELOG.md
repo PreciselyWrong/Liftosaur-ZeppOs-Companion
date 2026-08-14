@@ -1,38 +1,47 @@
 # Changelog
 
-## [2.0.5] - 14 août 2026
+## [Unreleased]
 
-### Corrections
-- Formatage ISO de la date de séance et fiabilisation de la transmission de la durée dans l'historique.
+### Added
+- Tester guide for installing the app from a QR code with a phone only, no computer required (`docs/tester-guide.md`).
 
-## [2.0.4] - 14 août 2026
+### Changed
+- README now links the changelog and the tester guide, and documents the 7 day validity of a `zeus preview` QR code.
+- Changelog, agent context and TODO are now written in English.
 
-### Améliorations
-- Les séries d'échauffement sont désormais clairement signalées par un badge et un texte distincts.
-- Correction du calcul et de l'envoi de la durée totale de la séance vers le compte en ligne.
+## [2.0.5] - 14 August 2026
 
-## [2.0.3] - 14 août 2026
+### Fixed
+- ISO formatting of the workout date, and more reliable transmission of the duration in your history.
 
-### Corrections
-- Résolution du problème d'enregistrement de l'historique de séance sur le compte en ligne.
-- Mettre en pause le repos suspend désormais aussi le chrono global de la séance.
+## [2.0.4] - 14 August 2026
 
-## [2.0.2] - 14 août 2026
+### Changed
+- Warmup sets are now clearly marked with a distinct badge and label.
+- Fixed the calculation and upload of the total workout duration to your online account.
 
-### Nouveautés
-- Les exercices en superset affichent un badge et une couleur distinctive par groupe pour mieux les repérer.
-- Bouton info pour consulter les notes et commentaires d'un exercice directement pendant la série ou le repos.
+## [2.0.3] - 14 August 2026
 
-## [2.0.1] - 14 août 2026
+### Fixed
+- Fixed saving the workout history to your online account.
+- Pausing the rest timer now also pauses the overall workout timer.
 
-### Nouveautés
-- Le chrono de repos affiche le nom de l'exercice suivant, sa série et son poids cible pour préparer votre matériel.
-- Boutons pour mettre le chrono en pause, ajouter ou retirer 10 secondes selon votre forme.
-- Bouton pour réduire le chrono et afficher l'écran de la série suivante.
-- Rappel par vibration à 30 secondes, 60 secondes et 120 secondes de dépassement du repos.
+## [2.0.2] - 14 August 2026
 
-### Corrections
-- Les séries d'échauffement affichent désormais correctement leur charge et lancent leur minuteur de repos.
+### Added
+- Superset exercises show a badge and a distinct color per group so you can spot them faster.
+- An info button to read an exercise's notes and comments right during a set or rest.
+
+## [2.0.1] - 14 August 2026
+
+### Added
+- The rest timer shows the next exercise's name, set and target weight so you can prepare your equipment.
+- Buttons to pause the timer, or add or remove 10 seconds depending on how you feel.
+- A button to collapse the timer and show the next set's screen.
+- Vibration reminders at 30 seconds, 60 seconds and 120 seconds past the rest time.
+
+### Fixed
+- Warmup sets now show their weight correctly and start their rest timer.
 
 ## [2.0.0] - 14 August 2026
 
