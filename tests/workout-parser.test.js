@@ -147,4 +147,124 @@ test('parseLiftoscriptWorkout parses playground exercise blocks', () => {
   assert.equal(workout.exercises[1].name, 'Bench Press');
 });
 
+test('parseLiftoscriptWorkout parses official Liftoscript syntax with weight in separate slash part', () => {
+  const text = `
+    # Week 1
+    ## Day 1
+    Squat / 3x5 / 135lb / progress: lp(5lb)
+    Bench Press / 3x5 / 95lb / progress: lp(5lb)
+  `;
+
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Squat');
+  assert.equal(workout.exercises[0].sets.length, 3);
+  assert.equal(workout.exercises[0].sets[0].targetReps, 5);
+  assert.equal(workout.exercises[0].sets[0].targetWeight, 135);
+  assert.equal(workout.exercises[1].name, 'Bench Press');
+  assert.equal(workout.exercises[1].sets[0].targetWeight, 95);
+});
+
+test('parseLiftoscriptWorkout parses custom Markdown day headings like Push, Pull, Legs', () => {
+  const text = `
+    # Week 1
+    ## Push
+    Bench Press / 3x5 / 185lb
+    Overhead Press / 3x8 / 95lb
+
+    ## Pull
+    Deadlift / 1x5+ / 225lb
+    Barbell Row / 3x8 / 135lb
+
+    ## Legs
+    Squat / 3x5 / 225lb
+    Leg Press / 3x10 / 300lb
+  `;
+
+  const day1 = parseLiftoscriptWorkout({ text }, 0);
+  assert.equal(day1.name, 'Week 1 - Push');
+  assert.equal(day1.exercises.length, 2);
+  assert.equal(day1.exercises[0].name, 'Bench Press');
+  assert.equal(day1.exercises[0].sets[0].targetWeight, 185);
+  assert.equal(day1.totalDays, 3);
+
+  const day2 = parseLiftoscriptWorkout({ text }, 1);
+  assert.equal(day2.name, 'Week 1 - Pull');
+  assert.equal(day2.exercises[0].name, 'Deadlift');
+
+  const day3 = parseLiftoscriptWorkout({ text }, 2);
+  assert.equal(day3.name, 'Week 1 - Legs');
+  assert.equal(day3.exercises[0].name, 'Squat');
+});
+
+test('parseLiftoscriptWorkout handles multi-week exercise ranges like Exercise[1-4]', () => {
+  const text = `
+    # Week 1
+    ## Day 1
+    Bench Press[1-2] / 3x8 / 100lb
+    Incline Dumbbell[1] / 3x10 / 40lb
+
+    # Week 2
+    ## Day 1
+    Incline Barbell[2] / 3x8 / 85lb
+  `;
+
+  const w1d1 = parseLiftoscriptWorkout({ text }, 0);
+  assert.equal(w1d1.name, 'Week 1 - Day 1');
+  assert.equal(w1d1.exercises.length, 2);
+  assert.equal(w1d1.exercises[0].name, 'Bench Press');
+  assert.equal(w1d1.exercises[1].name, 'Incline Dumbbell');
+
+  const w2d1 = parseLiftoscriptWorkout({ text }, 1);
+  assert.equal(w2d1.name, 'Week 2 - Day 1');
+  assert.equal(w2d1.exercises.length, 2);
+  assert.equal(w2d1.exercises[0].name, 'Bench Press');
+  assert.equal(w2d1.exercises[1].name, 'Incline Barbell');
+});
+
+test('resolveNextProgramSession wraps multi-week programs upon completion of last day', () => {
+  const text = `
+    # Week 1
+    ## Day A
+    Squat / 3x5 / 100kg
+    ## Day B
+    Bench / 3x5 / 80kg
+
+    # Week 2
+    ## Day A
+    Squat / 3x5 / 105kg
+    ## Day B
+    Bench / 3x5 / 82.5kg
+  `;
+
+  // History showing final day of Week 2 was completed
+  const history = [
+    { text: '2026-08-14T10:00:00Z / program: "Workout" / dayName: "Day B" / week: 2 / dayInWeek: 2 / exercises: { Bench / 3x5 82.5kg }' },
+  ];
+
+  const next = parseLiftoscriptWorkout({ text }, null, history);
+  assert.equal(next.name, 'Week 1 - Day A');
+  assert.equal(next.week, 1);
+  assert.equal(next.dayInWeek, 1);
+  assert.equal(next.currentDayIndex, 0);
+  assert.equal(next.totalDays, 4);
+});
+
+test('parseLiftoscriptWorkout handles arbitrary slash ordering with rest, RPE, and progress', () => {
+  const line = 'Deadlift / 1x5+ / 140kg / rest 3.5m / rpe 9 / progress: custom() { state.weight += 5; }';
+  const workout = parseLiftoscriptWorkout({ text: line });
+
+  assert.equal(workout.exercises.length, 1);
+  const ex = workout.exercises[0];
+  assert.equal(ex.name, 'Deadlift');
+  assert.equal(ex.sets.length, 1);
+  assert.equal(ex.sets[0].targetReps, 5);
+  assert.equal(ex.sets[0].isAmrap, true);
+  assert.equal(ex.sets[0].targetWeight, 140);
+  assert.equal(ex.sets[0].restSeconds, 210);
+  assert.equal(ex.sets[0].targetRpe, 9);
+});
+
+
+
 

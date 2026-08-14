@@ -86,6 +86,13 @@ const router = createSideRouter({
     return await client.getCurrentProgram();
   },
 
+  historyProvider: async () => {
+    const apiKey = getEffectiveApiKey();
+    if (!apiKey) return null;
+    const client = getApiClient();
+    return await client.getRecentHistory({ limit: 10 });
+  },
+
   playgroundSimulator: async (params = {}) => {
     const client = getApiClient();
     try {

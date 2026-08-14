@@ -10,4 +10,6 @@ Toutes les nouveautés et améliorations apportées à Liftosaur pour Zepp OS.
 - Les enchaînements en superset basculent automatiquement d'un exercice à l'autre.
 - Le chronomètre de repos vibre quand c'est l'heure de repartir et affiche le temps additionnel.
 - Règle tes répétitions et tes charges facilement grâce aux gros boutons tactiles.
-- Tes séries sont toujours sauvegardées en sécurité sur la montre, même sans réseau.
+### Corrections
+- Tes vraies séances, tes jours d'entraînement et tes charges personnalisées s'affichent désormais exactement comme dans ton programme.
+- La montre sélectionne automatiquement le bon jour et la bonne semaine en reprenant là où tu t'étais arrêté.
