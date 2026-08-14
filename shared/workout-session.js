@@ -124,6 +124,11 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         } else {
           // Check if there is an alternating superset partner or next exercise
           let isTransitionToNextExercise = false;
+          let nextExerciseName = null;
+          let nextSupersetTag = null;
+          let nextSetIndex = null;
+          let nextTotalSets = null;
+
           if (ex.supersetGroup) {
             const groupIndices = exercises
               .map((e, idx) => (e.supersetGroup === ex.supersetGroup ? idx : -1))
@@ -136,19 +141,42 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
             );
             if (partnerIdx !== undefined) {
               isTransitionToNextExercise = true;
+              const nextEx = exercises[partnerIdx];
+              nextExerciseName = nextEx.name;
+              nextSupersetTag = nextEx.supersetTag ?? null;
+              nextSetIndex = exerciseProgress[partnerIdx].completedSets.length;
+              nextTotalSets = nextEx.sets.length;
             } else {
               // Check if group loops back to first exercise
-              const anyPending = groupIndices.some(
+              const nextInGroupWithSets = groupIndices.find(
                 (idx) => exerciseProgress[idx].completedSets.length < exercises[idx].sets.length
               );
-              if (anyPending && groupIndices[0] !== currentExerciseIndex) {
-                isTransitionToNextExercise = true;
+              if (nextInGroupWithSets !== undefined) {
+                if (nextInGroupWithSets !== currentExerciseIndex) {
+                  isTransitionToNextExercise = true;
+                }
+                const nextEx = exercises[nextInGroupWithSets];
+                nextExerciseName = nextEx.name;
+                nextSupersetTag = nextEx.supersetTag ?? null;
+                nextSetIndex = exerciseProgress[nextInGroupWithSets].completedSets.length;
+                nextTotalSets = nextEx.sets.length;
               }
             }
           } else {
             const isLastSetOfExercise = prog.completedSets.length >= ex.sets.length;
-            const hasNextExercise = currentExerciseIndex + 1 < exercises.length;
-            isTransitionToNextExercise = isLastSetOfExercise && hasNextExercise;
+            if (isLastSetOfExercise && currentExerciseIndex + 1 < exercises.length) {
+              isTransitionToNextExercise = true;
+              const nextEx = exercises[currentExerciseIndex + 1];
+              nextExerciseName = nextEx.name;
+              nextSupersetTag = nextEx.supersetTag ?? null;
+              nextSetIndex = 0;
+              nextTotalSets = nextEx.sets.length;
+            } else if (!isLastSetOfExercise) {
+              nextExerciseName = ex.name;
+              nextSupersetTag = ex.supersetTag ?? null;
+              nextSetIndex = prog.completedSets.length;
+              nextTotalSets = ex.sets.length;
+            }
           }
 
           const restDuration = ex.sets[prog.currentSetIndex]?.restSeconds ?? 90;
@@ -158,10 +186,15 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
             duration: restDuration,
             endsAt: event.timestamp + restDuration * 1000,
             isTransitionToNextExercise,
+            nextExerciseName,
+            nextSupersetTag,
+            nextSetIndex,
+            nextTotalSets,
           };
         }
         break;
       }
+
 
       case EVENT_TYPES.NEXT_SET: {
         const prog = getCurrentProgress();
@@ -269,8 +302,13 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           startedAt: restInfo.startedAt,
           endsAt: restInfo.endsAt,
           isTransitionToNextExercise: Boolean(restInfo.isTransitionToNextExercise),
+          nextExerciseName: restInfo.nextExerciseName ?? null,
+          nextSupersetTag: restInfo.nextSupersetTag ?? null,
+          nextSetIndex: restInfo.nextSetIndex ?? null,
+          nextTotalSets: restInfo.nextTotalSets ?? null,
         };
       }
+
 
       // Elapsed time calculation
       let elapsedSeconds = 0;

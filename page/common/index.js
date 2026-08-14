@@ -659,9 +659,19 @@ function renderUI() {
     const timerColor = isOvertime ? THEME.error : THEME.textPrimary;
     const headerLabel = isOvertime ? 'REST OVERTIME' : 'REST TIMER';
     const headerColor = isOvertime ? THEME.error : THEME.blue;
-    const subtitle = isTransition
-      ? `Next: Superset Switch`
-      : `Next: Set ${view.currentSetIndex + 2} of ${view.totalSets}`;
+
+    let subtitle = '';
+    if (view.rest?.nextExerciseName) {
+      const nextExName = view.rest.nextExerciseName;
+      const shortNext = nextExName.length > 18 ? nextExName.slice(0, 16) + '…' : nextExName;
+      const tag = view.rest.nextSupersetTag ? `[${view.rest.nextSupersetTag}] ` : '';
+      const setInfo = view.rest.nextSetIndex !== null ? ` (Set ${view.rest.nextSetIndex + 1}/${view.rest.nextTotalSets})` : '';
+      subtitle = `Next: ${tag}${shortNext}${setInfo}`;
+    } else {
+      subtitle = isTransition
+        ? `Next: Exercise ${view.currentExerciseIndex + 2}/${view.totalExercises}`
+        : `Next: Set ${view.currentSetIndex + 2} of ${view.totalSets}`;
+    }
 
     addWidget(widget.TEXT, {
       x: 0,
@@ -708,7 +718,7 @@ function renderUI() {
       w: W,
       h: px(35),
       color: THEME.textSecondary,
-      text_size: px(22),
+      text_size: px(21),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -731,6 +741,7 @@ function renderUI() {
     });
     return;
   }
+
 
   // ── 5. FINISHED SUMMARY SCREEN ──
   if (view.state === SESSION_STATES.FINISHED) {

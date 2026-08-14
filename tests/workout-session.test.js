@@ -205,6 +205,9 @@ test('session automatically jumps alternately between exercises in a superset', 
   // 2. Complete A1 Set 1 -> Rest -> Next Set jumps to A2 Set 1!
   session.completeSet();
   assert.equal(session.view().rest.isTransitionToNextExercise, true);
+  assert.equal(session.view().rest.nextExerciseName, 'DB Chest Row');
+  assert.equal(session.view().rest.nextSupersetTag, 'SUPERSET A2');
+  assert.equal(session.view().rest.nextSetIndex, 0);
   session.nextSet();
 
   assert.equal(session.view().exerciseName, 'DB Chest Row');
@@ -212,7 +215,10 @@ test('session automatically jumps alternately between exercises in a superset', 
 
   // 3. Complete A2 Set 1 -> Rest -> Next Set jumps back to A1 Set 2!
   session.completeSet();
+  assert.equal(session.view().rest.nextExerciseName, 'Incline DB Bench');
+  assert.equal(session.view().rest.nextSetIndex, 1);
   session.nextSet();
+
 
   assert.equal(session.view().exerciseName, 'Incline DB Bench');
   assert.equal(session.view().currentSetIndex, 1);
