@@ -165,6 +165,11 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
       const curWorkSets = Math.max(0, curProg.completedSets.length - curEx.warmupSetsCount);
 
+      // If current exercise just finished warmups and has not completed Work Set 1 yet
+      if (curProg && curProg.completedSets.length < curEx.sets.length && curWorkSets === 0) {
+        return currentIdx;
+      }
+
       // 1. Look for any partner in group with FEWER completed work sets than current
       for (let offset = 1; offset <= groupIndices.length; offset++) {
         const idx = groupIndices[(groupIndices.indexOf(currentIdx) + offset) % groupIndices.length];
@@ -176,9 +181,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         }
       }
 
-      // 2. If all partners have reached the same level, find next unfinished in group
-      for (let offset = 1; offset <= groupIndices.length; offset++) {
-        const idx = groupIndices[(groupIndices.indexOf(currentIdx) + offset) % groupIndices.length];
+      // 2. If all partners have reached this level, start next round at the first unfinished in group
+      for (const idx of groupIndices) {
         const p = progress[idx];
         const ex = exercises[idx];
         if (p.completedSets.length < ex.sets.length) {

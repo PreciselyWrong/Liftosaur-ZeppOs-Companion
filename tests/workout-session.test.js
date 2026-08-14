@@ -387,3 +387,154 @@ test('exercises in a superset group alternate working sets', () => {
     [3, 1],
   ]);
 });
+
+test('superset with warmups finishes warmups then proceeds to work set 1 before partner', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Incline Bench',
+        supersetGroup: 'A',
+        warmupSets: [
+          { index: 1, targetReps: 10, targetWeight: 40, restSeconds: 60 },
+          { index: 2, targetReps: 5, targetWeight: 60, restSeconds: 60 },
+        ],
+        sets: [
+          { index: 1, targetReps: 8, targetWeight: 80, restSeconds: 90 },
+          { index: 2, targetReps: 8, targetWeight: 80, restSeconds: 90 },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Cable Row',
+        supersetGroup: 'A',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 10, targetWeight: 50, restSeconds: 90 },
+          { index: 2, targetReps: 10, targetWeight: 50, restSeconds: 90 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  // Incline Bench Warmup 1
+  assert.equal(session.view().exerciseName, 'Incline Bench');
+  assert.equal(session.view().currentSet.isWarmup, true);
+  session.completeSet({ timestamp: 10 });
+  session.nextSet({ timestamp: 70 });
+
+  // Incline Bench Warmup 2
+  assert.equal(session.view().exerciseName, 'Incline Bench');
+  assert.equal(session.view().currentSet.isWarmup, true);
+  session.completeSet({ timestamp: 80 });
+  session.nextSet({ timestamp: 140 });
+
+  // Incline Bench Work Set 1 (must NOT jump to Cable Row before doing own work set 1!)
+  assert.equal(session.view().exerciseName, 'Incline Bench');
+  assert.equal(session.view().currentSet.isWarmup, false);
+  assert.equal(session.view().currentSet.workSetIndex, 1);
+  session.completeSet({ timestamp: 150 });
+
+  // Now transitions to Cable Row Work Set 1
+  assert.equal(session.view().rest.nextExerciseName, 'Cable Row');
+  session.nextSet({ timestamp: 240 });
+
+  // Cable Row Work Set 1
+  assert.equal(session.view().exerciseName, 'Cable Row');
+  assert.equal(session.view().currentSet.workSetIndex, 1);
+  session.completeSet({ timestamp: 250 });
+
+  // Transitions back to Incline Bench Work Set 2
+  assert.equal(session.view().rest.nextExerciseName, 'Incline Bench');
+  session.nextSet({ timestamp: 340 });
+
+  // Incline Bench Work Set 2
+  assert.equal(session.view().exerciseName, 'Incline Bench');
+  assert.equal(session.view().currentSet.workSetIndex, 2);
+  session.completeSet({ timestamp: 350 });
+
+  // Transitions to Cable Row Work Set 2
+  assert.equal(session.view().rest.nextExerciseName, 'Cable Row');
+  session.nextSet({ timestamp: 440 });
+
+  // Cable Row Work Set 2
+  assert.equal(session.view().exerciseName, 'Cable Row');
+  assert.equal(session.view().currentSet.workSetIndex, 2);
+  session.completeSet({ timestamp: 450 });
+
+  assert.equal(session.view().state, SESSION_STATES.FINISHED);
+});
+
+test('tri-set (3-exercise superset) cycles A1 -> B1 -> C1 -> A2 -> B2 -> C2', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Ex A',
+        supersetGroup: 'TRI',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 10, targetWeight: 50, restSeconds: 30 },
+          { index: 2, targetReps: 10, targetWeight: 50, restSeconds: 30 },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Ex B',
+        supersetGroup: 'TRI',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 10, targetWeight: 30, restSeconds: 30 },
+          { index: 2, targetReps: 10, targetWeight: 30, restSeconds: 30 },
+        ],
+      },
+      {
+        index: 3,
+        name: 'Ex C',
+        supersetGroup: 'TRI',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 10, targetWeight: 20, restSeconds: 30 },
+          { index: 2, targetReps: 10, targetWeight: 20, restSeconds: 30 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  // Round 1
+  assert.equal(session.view().exerciseName, 'Ex A');
+  session.completeSet({ timestamp: 1 });
+  session.nextSet({ timestamp: 2 });
+
+  assert.equal(session.view().exerciseName, 'Ex B');
+  session.completeSet({ timestamp: 3 });
+  session.nextSet({ timestamp: 4 });
+
+  assert.equal(session.view().exerciseName, 'Ex C');
+  session.completeSet({ timestamp: 5 });
+  session.nextSet({ timestamp: 6 });
+
+  // Round 2
+  assert.equal(session.view().exerciseName, 'Ex A');
+  session.completeSet({ timestamp: 7 });
+  session.nextSet({ timestamp: 8 });
+
+  assert.equal(session.view().exerciseName, 'Ex B');
+  session.completeSet({ timestamp: 9 });
+  session.nextSet({ timestamp: 10 });
+
+  assert.equal(session.view().exerciseName, 'Ex C');
+  session.completeSet({ timestamp: 11 });
+
+  assert.equal(session.view().state, SESSION_STATES.FINISHED);
+});
