@@ -11,5 +11,8 @@
   "devDependencies": {
     "@zeppos/device-types": "^3.0.0"
   },
-  "type": "module"
+  "type": "module",
+  "dependencies": {
+    "@zeppos/zml": "^0.0.43"
+  }
 }

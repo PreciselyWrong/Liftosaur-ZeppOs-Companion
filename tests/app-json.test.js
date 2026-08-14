@@ -43,6 +43,14 @@ test('every page entry point exists on disk', () => {
   }
 });
 
+test('app-side entry point exists on disk', () => {
+  const appSide = appJson.targets.common.module['app-side'];
+  assert.ok(appSide && typeof appSide.path === 'string', 'missing app-side declaration');
+  const entry = path.join(import.meta.dirname, '..', `${appSide.path}.js`);
+  assert.ok(fs.existsSync(entry), `missing app-side entry ${entry}`);
+});
+
+
 test('no secret-looking value is committed in app.json', () => {
   const raw = JSON.stringify(appJson);
   assert.ok(!/lftsk_/.test(raw), 'app.json contains a Liftosaur API key');
