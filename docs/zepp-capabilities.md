@@ -152,10 +152,19 @@ real data page.
 | The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
 | The simulator renders a `data-widget` **outside** any workout | TESTED |
 | `event.CLICK_UP` on a full-screen `FILL_RECT` — **no reaction observed** | UNKNOWN |
+| A `TEXT` widget has **no** `addEventListener`: calling it throws and aborts `build()` | TESTED |
 
-The tap did nothing in this preview context. Whether that is a preview limitation or a
-genuine event-wiring bug is unresolved: both a background rect and the status text now
-carry a listener, to narrow it down.
+The tap did nothing. The probe listener added on the status text threw at runtime, which
+aborted `build()` after the widgets were already drawn — so the screen looked correct while
+the widget was in fact broken. That listener is removed; only the background `FILL_RECT`
+carries one. Whether taps work at all in the preview context is still unresolved.
+
+### Driving the simulator
+
+The simulator window must be focused; keyboard keys then act as physical buttons:
+`Home` = app list / watchface (Mac `fn`+`←`), `End` = shortcut, `enter` = select,
+`delete` = back, `↑`/`↓` = up/down, mouse wheel = digital crown.
+Source: [simulator guide](https://docs.zepp.com/docs/guides/tools/simulator/).
 
 Consequences: the simulator cannot yet answer whether the extension is scoped to a sport,
 how it behaves as a data page, or whether taps work in a real workout. Those move to
