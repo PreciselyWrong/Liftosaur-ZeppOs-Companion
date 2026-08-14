@@ -35,12 +35,21 @@ export function createSideRouter({
 
         case MESSAGE_TYPES.GET_CURRENT_WORKOUT: {
           try {
-            let programData = null;
-            if (programProvider) {
-              programData = await programProvider();
+            if (!programProvider) {
+              return createMessage({
+                type: MESSAGE_TYPES.WORKOUT_DATA,
+                replyToId: rawMessage.messageId,
+                sessionId: rawMessage.sessionId,
+                payload: {
+                  configured: false,
+                  workout: null,
+                },
+              });
             }
 
-            if (!programData || !programData.text) {
+            const programData = await programProvider();
+
+            if (!programData) {
               return createMessage({
                 type: MESSAGE_TYPES.WORKOUT_DATA,
                 replyToId: rawMessage.messageId,
@@ -66,10 +75,11 @@ export function createSideRouter({
             return createError(
               rawMessage,
               'WORKOUT_FETCH_FAILED',
-              err.message || 'Failed to retrieve workout'
+              err.message || 'Liftosaur API error'
             );
           }
         }
+
 
 
         case MESSAGE_TYPES.SYNC_JOURNAL: {
