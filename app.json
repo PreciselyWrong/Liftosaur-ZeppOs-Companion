@@ -5,9 +5,10 @@
     "appName": "Liftosaur",
     "appType": "app",
     "version": {
-      "code": 1,
-      "name": "1.0.0"
+      "code": 2,
+      "name": "1.0.1"
     },
+
     "icon": "icon.png",
     "vender": "Liftosaur",
     "description": "Liftosaur workout tracker for Amazfit watches"
