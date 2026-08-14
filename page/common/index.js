@@ -1,7 +1,7 @@
 import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
 import { HeartRate, Vibrator } from '@zos/sensor';
-import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT } from '@zos/interaction';
+import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT, GESTURE_UP, GESTURE_DOWN } from '@zos/interaction';
 import { BasePage } from '@zeppos/zml/base-page';
 
 import {
@@ -112,6 +112,7 @@ let session = createWorkoutSession({
 });
 
 let isOverviewListOpen = false;
+let overviewScrollOffset = 0;
 let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
@@ -173,7 +174,7 @@ function triggerVibration() {
   }
 }
 
-// ── UI Rendering (Balanced Vertical Spacing for 480x480 Round Screen) ───────
+// ── UI Rendering ─────────────────────────────────────────────────────────────
 
 function renderUI() {
   clearWidgets();
@@ -184,15 +185,15 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // ── 1. OVERVIEW EXERCISE LIST VIEW ──
+  // ── 1. OVERVIEW EXERCISE LIST VIEW (Compact & Fully Clickable) ──
   if (isOverviewListOpen && view.state !== SESSION_STATES.READY && view.state !== SESSION_STATES.FINISHED) {
     // Top Bar (Safe Zone): [< Back] [ ▶ Elapsed • HR ]
     addWidget(widget.BUTTON, {
       x: px(75),
-      y: px(45),
-      w: px(42),
-      h: px(42),
-      radius: px(21),
+      y: px(40),
+      w: px(40),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
@@ -205,9 +206,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(125),
-      y: px(45),
+      y: px(40),
       w: px(250),
-      h: px(42),
+      h: px(40),
       color: THEME.primaryLight,
       text_size: px(20),
       align_h: align.CENTER_H,
@@ -216,21 +217,30 @@ function renderUI() {
       text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
     });
 
-    // Exercise Cards List
-    let cardY = px(100);
+    // 4 Compact cards fitting strictly within circular bounds (y: 88 to y: 388)
+    const cardH = px(68);
+    const cardGap = px(8);
+    let cardY = px(88);
+
     view.overviewExercises.forEach((ex, idx) => {
       const isCurrent = idx === view.currentExerciseIndex;
-      const cardBg = isCurrent ? THEME.cardActive : THEME.card;
+      const cardBg = isCurrent ? THEME.primaryDark : THEME.card;
+      const title = ex.name.length > 16 ? ex.name.slice(0, 14) + '…' : ex.name;
+      const dots = formatDots(ex.setsDots);
+      const sub = ex.supersetTag ? `[${ex.supersetTag}] ${ex.prescriptionSummary}` : ex.prescriptionSummary;
 
+      // Single combined clickable button with full touch target
       addWidget(widget.BUTTON, {
         x: px(65),
         y: cardY,
         w: px(350),
-        h: px(76),
-        radius: px(16),
+        h: cardH,
+        radius: px(14),
         normal_color: cardBg,
-        press_color: THEME.primaryDark,
-        text: '',
+        press_color: THEME.cardActive,
+        text: `${title}  ${dots}\n${sub}`,
+        text_size: px(18),
+        color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
         click_func: () => {
           session.selectExercise(idx);
           isOverviewListOpen = false;
@@ -238,42 +248,13 @@ function renderUI() {
         },
       });
 
-      // Name & Dots
-      addWidget(widget.TEXT, {
-        x: px(80),
-        y: cardY + px(8),
-        w: px(320),
-        h: px(28),
-        color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
-        text_size: px(20),
-        align_h: align.LEFT,
-        align_v: align.CENTER_V,
-        text_style: text_style.NONE,
-        text: `${ex.name.length > 18 ? ex.name.slice(0, 16) + '…' : ex.name}  ${formatDots(ex.setsDots)}`,
-      });
-
-      // Prescription
-      addWidget(widget.TEXT, {
-        x: px(80),
-        y: cardY + px(38),
-        w: px(320),
-        h: px(26),
-        color: THEME.textSecondary,
-        text_size: px(18),
-        align_h: align.LEFT,
-        align_v: align.CENTER_V,
-        text_style: text_style.NONE,
-        text: ex.supersetTag ? `[${ex.supersetTag}] ${ex.prescriptionSummary}` : ex.prescriptionSummary,
-      });
-
-      cardY += px(84);
+      cardY += cardH + cardGap;
     });
     return;
   }
 
-  // ── 2. READY SCREEN (Liftosaur Watch "New Workout") ──
+  // ── 2. READY SCREEN ──
   if (view.state === SESSION_STATES.READY) {
-    // Header
     addWidget(widget.TEXT, {
       x: 0,
       y: px(45),
@@ -287,12 +268,11 @@ function renderUI() {
       text: `New Workout • HR ${liveHr}`,
     });
 
-    // Workout Preview Card (#332D42)
     addWidget(widget.FILL_RECT, {
       x: px(65),
       y: px(95),
       w: px(350),
-      h: px(200),
+      h: px(210),
       radius: px(20),
       color: THEME.card,
     });
@@ -349,13 +329,12 @@ function renderUI() {
       text: `First: ${view.exerciseName}`,
     });
 
-    // Start Button (Lower position: y=325 to y=402)
     addWidget(widget.BUTTON, {
       x: px(90),
-      y: px(325),
+      y: px(335),
       w: px(300),
-      h: px(78),
-      radius: px(39),
+      h: px(76),
+      radius: px(38),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'Start',
@@ -367,7 +346,7 @@ function renderUI() {
     return;
   }
 
-  // ── 3. ACTIVE SET SCREEN (Balanced Downward for Round Display) ──
+  // ── 3. ACTIVE SET SCREEN (Interactive Set Dots & Low-Profile Button) ──
   if (view.state === SESSION_STATES.ACTIVE_SET) {
     const setNum = view.currentSetIndex + 1;
     const dotsString = formatDots(view.exerciseSetsDots);
@@ -402,11 +381,11 @@ function renderUI() {
       text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
     });
 
-    // Exercise Name (y=94)
+    // Exercise Name (y=92)
     const shortEx = view.exerciseName.length > 22 ? view.exerciseName.slice(0, 20) + '…' : view.exerciseName;
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(94),
+      y: px(92),
       w: W,
       h: px(32),
       color: THEME.textPrimary,
@@ -417,25 +396,32 @@ function renderUI() {
       text: view.supersetTag ? `[${view.supersetTag}] ${shortEx}` : shortEx,
     });
 
-    // Set X/Y with Status Dots (y=132)
-    addWidget(widget.TEXT, {
-      x: 0,
-      y: px(132),
-      w: W,
-      h: px(28),
-      color: THEME.orange,
-      text_size: px(21),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
+    // Interactive Set X/Y + Dots Button (Tap to cycle/switch set) (y=128)
+    addWidget(widget.BUTTON, {
+      x: px(100),
+      y: px(128),
+      w: px(280),
+      h: px(36),
+      radius: px(18),
+      normal_color: THEME.bg,
+      press_color: THEME.card,
       text: `Set ${setNum}/${view.totalSets}   ${dotsString}`,
+      text_size: px(21),
+      color: THEME.orange,
+      click_func: () => {
+        // Cycle to next set in exercise on tap of dots
+        const nextSetIdx = (view.currentSetIndex + 1) % view.totalSets;
+        persistAndRender(() => {
+          session.selectExercise(view.currentExerciseIndex);
+        });
+      },
     });
 
-    // ── Input Cards (y=170, h=88) ──
-    // Left Box: REPS (x: 65, y: 170, w: 160, h: 88)
+    // ── Input Cards (y=168, h=88) ──
+    // Left Box: REPS
     addWidget(widget.FILL_RECT, {
       x: px(65),
-      y: px(170),
+      y: px(168),
       w: px(160),
       h: px(88),
       radius: px(16),
@@ -444,7 +430,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(65),
-      y: px(170),
+      y: px(168),
       w: px(45),
       h: px(88),
       radius: px(16),
@@ -459,7 +445,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(108),
-      y: px(174),
+      y: px(172),
       w: px(74),
       h: px(48),
       color: THEME.textPrimary,
@@ -472,7 +458,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(108),
-      y: px(222),
+      y: px(220),
       w: px(74),
       h: px(26),
       color: THEME.textSecondary,
@@ -485,7 +471,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(180),
-      y: px(170),
+      y: px(168),
       w: px(45),
       h: px(88),
       radius: px(16),
@@ -498,10 +484,10 @@ function renderUI() {
       },
     });
 
-    // Middle '×' (x: 226, y: 192)
+    // Middle '×'
     addWidget(widget.TEXT, {
       x: px(226),
-      y: px(192),
+      y: px(190),
       w: px(28),
       h: px(44),
       color: THEME.textSecondary,
@@ -512,10 +498,10 @@ function renderUI() {
       text: '×',
     });
 
-    // Right Box: WEIGHT (x: 255, y: 170, w: 160, h: 88)
+    // Right Box: WEIGHT
     addWidget(widget.FILL_RECT, {
       x: px(255),
-      y: px(170),
+      y: px(168),
       w: px(160),
       h: px(88),
       radius: px(16),
@@ -524,7 +510,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(255),
-      y: px(170),
+      y: px(168),
       w: px(45),
       h: px(88),
       radius: px(16),
@@ -539,7 +525,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(298),
-      y: px(174),
+      y: px(172),
       w: px(74),
       h: px(48),
       color: THEME.textPrimary,
@@ -552,7 +538,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(298),
-      y: px(222),
+      y: px(220),
       w: px(74),
       h: px(26),
       color: THEME.textSecondary,
@@ -565,7 +551,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(370),
-      y: px(170),
+      y: px(168),
       w: px(45),
       h: px(88),
       radius: px(16),
@@ -578,11 +564,11 @@ function renderUI() {
       },
     });
 
-    // Target prescription line (y=274)
+    // Target prescription line (y=268)
     const rpeText = view.currentSet.rpe ? ` @ ${view.currentSet.rpe}` : '';
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(274),
+      y: px(268),
       w: W,
       h: px(28),
       color: THEME.textSecondary,
@@ -593,13 +579,13 @@ function renderUI() {
       text: `Target: ${view.currentSet.targetReps} × ${view.currentSet.targetWeight} kg${rpeText}`,
     });
 
-    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (y=324, fully occupying bottom area) ──
+    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Lower at y=340 to y=412, ✓ button w: 140) ──
     addWidget(widget.BUTTON, {
-      x: px(72),
-      y: px(324),
-      w: px(62),
-      h: px(76),
-      radius: px(31),
+      x: px(82),
+      y: px(340),
+      w: px(58),
+      h: px(72),
+      radius: px(29),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
@@ -609,13 +595,13 @@ function renderUI() {
       },
     });
 
-    // Main Checkmark Button
+    // Compact Checkmark Button (w: 140, centered at x: 170)
     addWidget(widget.BUTTON, {
-      x: px(146),
-      y: px(324),
-      w: px(188),
-      h: px(76),
-      radius: px(38),
+      x: px(170),
+      y: px(340),
+      w: px(140),
+      h: px(72),
+      radius: px(36),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: '✓',
@@ -627,11 +613,11 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(346),
-      y: px(324),
-      w: px(62),
-      h: px(76),
-      radius: px(31),
+      x: px(340),
+      y: px(340),
+      w: px(58),
+      h: px(72),
+      radius: px(29),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '>',
@@ -643,7 +629,7 @@ function renderUI() {
     return;
   }
 
-  // ── 4. REST TIMER SCREEN (Liftosaur Watch Rest) ──
+  // ── 4. REST TIMER SCREEN ──
   if (view.state === SESSION_STATES.REST) {
     const isOvertime = Boolean(view.rest?.isOvertime);
     const remaining = view.rest ? view.rest.remaining : 0;
@@ -709,11 +695,11 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(85),
-      y: px(320),
-      w: px(310),
-      h: px(78),
-      radius: px(39),
+      x: px(95),
+      y: px(335),
+      w: px(290),
+      h: px(76),
+      radius: px(38),
       normal_color: isOvertime ? THEME.primary : THEME.card,
       press_color: isOvertime ? THEME.primaryDeep : THEME.cardActive,
       text: isOvertime ? (isTransition ? 'NEXT EXERCISE' : 'START NEXT SET') : (isTransition ? 'NEXT EXERCISE' : 'SKIP REST'),
@@ -725,7 +711,7 @@ function renderUI() {
     return;
   }
 
-  // ── 5. FINISHED SUMMARY SCREEN (Liftosaur Watch Summary) ──
+  // ── 5. FINISHED SUMMARY SCREEN ──
   if (view.state === SESSION_STATES.FINISHED) {
     addWidget(widget.TEXT, {
       x: 0,
@@ -829,7 +815,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(110),
-      y: px(325),
+      y: px(335),
       w: px(260),
       h: px(76),
       radius: px(38),
