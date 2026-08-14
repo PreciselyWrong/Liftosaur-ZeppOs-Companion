@@ -4,6 +4,7 @@
  */
 
 export const SESSION_STATES = {
+  SETUP_REQUIRED: 'SETUP_REQUIRED',
   READY: 'READY',
   ACTIVE_SET: 'ACTIVE_SET',
   REST: 'REST',
@@ -21,15 +22,16 @@ export const EVENT_TYPES = {
   FINISH_WORKOUT: 'FINISH_WORKOUT',
 };
 
-export function createWorkoutSession({ workout, exercise, initialJournal = [] }) {
+export function createWorkoutSession({ workout, exercise, initialJournal = [] } = {}) {
   const exercises = workout?.exercises ?? (exercise ? [exercise] : []);
-  const workoutName = workout?.name ?? (exercise?.name ?? 'Workout');
-  const routineName = workout?.routineName ?? 'Routine';
+  const workoutName = workout?.name ?? (exercise?.name ?? 'No Workout');
+  const routineName = workout?.routineName ?? 'Setup Required';
 
-  let state = SESSION_STATES.READY;
+  let state = exercises.length === 0 ? SESSION_STATES.SETUP_REQUIRED : SESSION_STATES.READY;
   let currentExerciseIndex = 0;
   let workoutStartTime = null;
   let workoutEndTime = null;
+
 
   // Per-exercise progress tracking: exerciseIndex -> { setIndex, currentWeight, currentReps, currentRpe, completedSets: [] }
   const exerciseProgress = exercises.map((ex) => ({

@@ -29,7 +29,24 @@ test('router handles invalid envelope with structured ERROR', async () => {
   assert.equal(response.payload.code, 'INVALID_ENVELOPE');
 });
 
+test('router handles GET_CURRENT_WORKOUT when unconfigured and returns configured false', async () => {
+  const router = createSideRouter({
+    programProvider: async () => null,
+  });
+
+  const request = createMessage({
+    type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
+    messageId: 'req-workout-unconf',
+  });
+
+  const response = await router.handle(request);
+  assert.equal(response.type, MESSAGE_TYPES.WORKOUT_DATA);
+  assert.equal(response.payload.configured, false);
+  assert.equal(response.payload.workout, null);
+});
+
 test('router handles SYNC_JOURNAL and reconciles workout', async () => {
+
   const router = createSideRouter({
     playgroundSimulator: async () => ({
       success: true,
