@@ -5,15 +5,16 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createWidgetState } from '../data-widget/common/state.js';
+import { createWidgetState, NO_HEART_RATE } from '../data-widget/common/state.js';
 
 test('starts in READY with no heart rate', () => {
   const state = createWidgetState();
   const view = state.view();
   assert.equal(view.title, 'Liftosaur');
   assert.equal(view.status, 'READY');
-  assert.equal(view.hr, '--');
+  assert.equal(view.hr, NO_HEART_RATE);
 });
+
 
 test('one click produces exactly one transition', () => {
   const state = createWidgetState();

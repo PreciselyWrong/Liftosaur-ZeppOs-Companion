@@ -1,36 +1,59 @@
-import {
-  createWidget,
-  widget,
-  align,
-  text_style,
-  prop,
-  event,
-  sport_data,
-  edit_widget_group_type,
-} from '@zos/ui';
+import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
 
 import { createWidgetState } from './state.js';
 
-const BACKGROUND = 0x000000;
-const FOREGROUND = 0xffffff;
-const ACCENT = 0xffb300;
+// ── Layout constants ─────────────────────────────────────────────────────────
 
-/**
- * Phase 0 spike widget: proves rendering, a mocked SPORT_DATA field, one CLICK
- * transition, and the lifecycle order. It carries no workout logic.
- */
+const W = px(480);
+const H = px(480);
+
+function textProps({ y, h, size, text }) {
+  return {
+    x: 0,
+    y,
+    w: W,
+    h,
+    color: 0xffffff,
+    text_size: size,
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text,
+  };
+}
+
+// ── Widget state (closure, not `this` — confirmed EMULATOR TESTED 2026-08-14) ─
+
+const state = createWidgetState();
+
+let titleWidget = null;
+let statusWidget = null;
+let hrWidget = null;
+
+function render() {
+  const view = state.view();
+
+
+  if (titleWidget) deleteWidget(titleWidget);
+  titleWidget = createWidget(widget.TEXT, textProps({
+    y: px(100), h: px(70), size: px(38), text: view.title,
+  }));
+
+  if (statusWidget) deleteWidget(statusWidget);
+  statusWidget = createWidget(widget.TEXT, textProps({
+    y: px(190), h: px(50), size: px(28), text: view.status,
+  }));
+
+  if (hrWidget) deleteWidget(hrWidget);
+  hrWidget = createWidget(widget.TEXT, textProps({
+    y: px(260), h: px(50), size: px(28), text: 'HR ' + view.hr,
+  }));
+}
+
+// ── DataWidget ────────────────────────────────────────────────────────────────
+
 DataWidget({
-  state: createWidgetState(),
-  statusText: null,
-
-  render() {
-    const { status } = this.state.view();
-    if (this.statusText) {
-      this.statusText.setProperty(prop.MORE, { text: status });
-    }
-  },
-
   onInit() {
     console.log('[liftosaur] onInit');
   },
@@ -38,67 +61,26 @@ DataWidget({
   build() {
     console.log('[liftosaur] build');
 
-    // The background doubles as the tap target: a single full-screen area,
-    // created first so the text sits on top of it.
-    const touchArea = createWidget(widget.FILL_RECT, {
-      x: 0,
-      y: 0,
-      w: px(480),
-      h: px(480),
-      color: BACKGROUND,
-    });
+    createWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: 0x000000 });
 
-    touchArea.addEventListener(event.CLICK_UP, () => {
-      const status = this.state.click();
-      console.log(`[liftosaur] click -> ${status} (${this.state.transitionCount()})`);
-      this.render();
-    });
-
-    createWidget(widget.TEXT, {
-      x: 0,
-      y: px(140),
-      w: px(480),
-      h: px(46),
-      color: FOREGROUND,
-      text_size: px(32),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: this.state.view().title,
-    });
-
-    // Heart rate stays owned by the System Workout: read it, never start a sensor.
-    createWidget(widget.SPORT_DATA, {
-      x: 0,
-      y: px(200),
-      w: px(480),
-      h: px(80),
-      edit_id: 1,
-      category: edit_widget_group_type.SPORTS,
-      default_type: sport_data.HR,
-      text_size: px(56),
-      text_color: FOREGROUND,
-      sub_text_visible: true,
-      sub_text_size: px(20),
-      sub_text_color: ACCENT,
-      mock_data: 128,
-    });
-
-    this.statusText = createWidget(widget.TEXT, {
-      x: 0,
-      y: px(300),
-      w: px(480),
-      h: px(46),
-      color: ACCENT,
+    createWidget(widget.BUTTON, {
+      x: px(140),
+      y: px(340),
+      w: px(200),
+      h: px(70),
+      radius: px(12),
+      normal_color: 0x333333,
+      press_color: 0x666666,
+      text: 'TAP',
       text_size: px(28),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: this.state.view().status,
+      click_func: () => {
+        const next = state.click();
+        console.log('[liftosaur] click → ' + next + ' (' + state.transitionCount() + ')');
+        render();
+      },
     });
 
-    // A TEXT widget has no addEventListener: calling it throws and aborts build().
-    // Only the background FILL_RECT above carries the tap listener.
+    render();
   },
 
   onResume() {
