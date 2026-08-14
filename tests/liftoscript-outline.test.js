@@ -195,4 +195,21 @@ Biceps Curl, Dumbbell  /  3x10  /  superset: B  // curl note
   assert.equal(exercises[1].name, 'Biceps Curl');
   assert.equal(exercises[1].equipment, 'Dumbbell');
   assert.equal(exercises[1].supersetTag, 'B');
+  assert.equal(exercises[0].note, 'important exercise');
+  assert.equal(exercises[1].note, 'curl note');
+});
+
+test('parseProgramDayExercises extracts multiline preceding comments and explicit notes tag', () => {
+  const sample = `## Day 1
+// Pause 2s au bas
+// Coudes a 45 degres
+Bench Press, Barbell / 3x5 / 80kg
+// Comment for pullup
+Pull Up / 3x8 / notes: Grip neutre
+`;
+
+  const exercises = parseProgramDayExercises(sample, 1, 1);
+  assert.equal(exercises.length, 2);
+  assert.equal(exercises[0].note, 'Pause 2s au bas\nCoudes a 45 degres');
+  assert.equal(exercises[1].note, 'Grip neutre');
 });

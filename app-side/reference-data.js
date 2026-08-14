@@ -147,5 +147,14 @@ export function createReferenceData({ client } = {}) {
       }
       return roundToLoadable(target, lookup.equipment, unit);
     },
+
+    resolveNotes(exerciseName) {
+      if (!cache) return null;
+      const candidates = cache.exerciseDataByName.get(normalizeName(exerciseName)) || [];
+      for (const entry of candidates) {
+        if (entry && entry.notes) return entry.notes;
+      }
+      return null;
+    },
   };
 }

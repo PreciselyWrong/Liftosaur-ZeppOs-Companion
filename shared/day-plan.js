@@ -91,6 +91,12 @@ export function applyProgramMetadata(plan, programExercises, { referenceData = n
 
     ex.supersetGroup = meta.supersetTag || null;
     ex.supersetTag = meta.supersetTag || null;
+    ex.notes =
+      meta.note ||
+      (referenceData && typeof referenceData.resolveNotes === 'function'
+        ? referenceData.resolveNotes(ex.name)
+        : null) ||
+      null;
     ex.warmupSets = [];
 
     if (meta.warmupText && meta.warmupText.toLowerCase() !== 'none') {

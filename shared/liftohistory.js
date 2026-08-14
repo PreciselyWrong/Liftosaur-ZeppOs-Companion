@@ -221,6 +221,20 @@ export function parseLiftohistoryRecord(text) {
   return record;
 }
 
+export function formatDateForHistory(date) {
+  if (!date) return null;
+  const d = date instanceof Date ? date : new Date(date);
+  if (!Number.isFinite(d.getTime())) return null;
+  const pad = (n) => String(n).padStart(2, '0');
+  const YYYY = d.getUTCFullYear();
+  const MM = pad(d.getUTCMonth() + 1);
+  const DD = pad(d.getUTCDate());
+  const HH = pad(d.getUTCHours());
+  const mm = pad(d.getUTCMinutes());
+  const ss = pad(d.getUTCSeconds());
+  return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss} +00:00`;
+}
+
 /**
  * Overrides header fields of an already serialized record, leaving the
  * `exercises: { ... }` block byte-for-byte intact.
@@ -239,7 +253,9 @@ export function rewriteRecordHeader(text, { date = null, durationSeconds = null 
   const header = parseHeader(lines[headerIndex]);
   const parts = [];
 
-  const resolvedDate = date instanceof Date ? date.toISOString() : date || header.date;
+  const resolvedDate = date instanceof Date || typeof date === 'number'
+    ? formatDateForHistory(date)
+    : (typeof date === 'string' ? date : header.date);
   if (resolvedDate) parts.push(resolvedDate);
   if (header.programName) parts.push(`program: "${header.programName}"`);
   if (header.dayName) parts.push(`dayName: "${header.dayName}"`);
@@ -257,3 +273,4 @@ export function rewriteRecordHeader(text, { date = null, durationSeconds = null 
   lines[headerIndex] = parts.join(' / ');
   return lines.join('\n');
 }
+

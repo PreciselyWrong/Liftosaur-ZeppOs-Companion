@@ -143,6 +143,8 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
   let scriptDepth = 0;
   const allEntries = [];
 
+  let pendingComments = [];
+
   for (const rawLine of lines) {
     const line = rawLine.trim();
 
@@ -157,12 +159,22 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
       continue;
     }
 
-    if (line === '' || line.startsWith('//')) continue;
+    if (line === '') {
+      continue;
+    }
+
+    if (line.startsWith('//')) {
+      if (currentDay > 0) {
+        pendingComments.push(line.replace(/^\/\/\s*/, '').trim());
+      }
+      continue;
+    }
 
     const weekMatch = line.match(WEEK_HEADER_RE);
     if (weekMatch) {
       currentWeek += 1;
       currentDay = 0;
+      pendingComments = [];
       continue;
     }
 
@@ -170,15 +182,20 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     if (dayMatch) {
       if (currentWeek === 0) currentWeek = 1;
       currentDay += 1;
+      pendingComments = [];
       continue;
     }
 
     if (currentDay > 0) {
+      const inlineCommentMatch = line.match(/\/\/\s*(.*)$/);
+      const inlineComment = inlineCommentMatch ? inlineCommentMatch[1].trim() : null;
+
       const cleanLine = line.replace(/\/\/.*$/, '').trim();
       if (!cleanLine) continue;
 
       // Skip template-only declarations (e.g. used: none / used: 0)
       if (/\bused\s*:\s*(none|0|false)\b/i.test(cleanLine)) {
+        pendingComments = [];
         continue;
       }
 
@@ -226,6 +243,7 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
 
       let warmupText = null;
       let supersetTag = null;
+      let notesText = null;
 
       for (let i = 1; i < parts.length; i++) {
         const part = parts[i];
@@ -239,7 +257,19 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
           supersetTag = supersetMatch[1].trim();
           continue;
         }
+        const notesMatch = part.match(/^notes?\s*:\s*(.*)$/i);
+        if (notesMatch) {
+          notesText = notesMatch[1].trim();
+          continue;
+        }
       }
+
+      const combinedNote =
+        notesText ||
+        (pendingComments.length > 0 ? pendingComments.join('\n') : null) ||
+        inlineComment ||
+        null;
+      pendingComments = [];
 
       allEntries.push({
         week: currentWeek,
@@ -250,6 +280,7 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
         equipment,
         warmupText,
         supersetTag,
+        note: combinedNote,
       });
     }
   }
@@ -259,11 +290,12 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     (e) => e.week === weekNumber && e.day === dayNumber
   );
   if (directMatches.length > 0) {
-    return directMatches.map(({ name, equipment, warmupText, supersetTag }) => ({
+    return directMatches.map(({ name, equipment, warmupText, supersetTag, note }) => ({
       name,
       equipment,
       warmupText,
       supersetTag,
+      note,
     }));
   }
 
@@ -274,10 +306,11 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
 
   return templateMatches
     .sort((a, b) => a.itemIndex - b.itemIndex)
-    .map(({ name, equipment, warmupText, supersetTag }) => ({
+    .map(({ name, equipment, warmupText, supersetTag, note }) => ({
       name,
       equipment,
       warmupText,
       supersetTag,
+      note,
     }));
 }

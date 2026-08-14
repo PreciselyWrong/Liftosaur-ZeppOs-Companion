@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.2] - 14 août 2026
+
+### Nouveautés
+- Les exercices en superset affichent un badge et une couleur distinctive par groupe pour mieux les repérer.
+- Bouton info pour consulter les notes et commentaires d'un exercice directement pendant la série ou le repos.
+
 ## [2.0.1] - 14 août 2026
 
 ### Nouveautés
