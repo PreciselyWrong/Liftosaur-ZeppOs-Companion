@@ -23,9 +23,10 @@ export class LiftosaurApiError extends Error {
 
 export function createLiftosaurApiClient({
   apiKey,
-  baseUrl = 'https://www.liftosaur.com/api',
+  baseUrl = 'https://www.liftosaur.com/api/v1',
   fetcher = typeof fetch !== 'undefined' ? fetch : null,
 } = {}) {
+
   async function request(endpoint, { method = 'GET', body = null } = {}) {
     if (!fetcher) {
       throw new LiftosaurApiError('No HTTP fetcher available', { status: 0, endpoint });
@@ -82,8 +83,28 @@ export function createLiftosaurApiClient({
 
   return {
     async getCurrentProgram() {
-      return request('/program');
+      try {
+        return await request('/programs/current');
+      } catch (err) {
+        if (err.status === 404) {
+          try {
+            const list = await request('/programs');
+            if (Array.isArray(list)) {
+              const active = list.find((p) => p.active || p.isCurrent) || list[0];
+              if (active && active.id && !active.text) {
+                return await request(`/programs/${active.id}`);
+              }
+              return active;
+            }
+            return list;
+          } catch (e2) {
+            return await request('/program');
+          }
+        }
+        throw err;
+      }
     },
+
 
     async getWorkoutDay(dayIndex = 0) {
       return request(`/workout/day/${dayIndex}`);
