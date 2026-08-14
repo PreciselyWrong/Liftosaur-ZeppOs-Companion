@@ -120,7 +120,9 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 - `type`: only value `1` (Workout Extension). CONFIRMED.
 - `subType`: array of sport codes; `[]` means all sports. CONFIRMED.
 - **The numeric sport code for Strength Training is UNKNOWN.** No public enumeration was
-  found in the app.json reference, the SPORT_DATA reference, or search. This is risk P0-1.
+  found in the app.json reference, the SPORT_DATA reference, `getSportData` reference, or
+  search. A web search returned `52`, but this is unverifiable against official docs — treat
+  as ASSUMED until confirmed by official source or emulator test. This is risk P0-1.
 - The general [app.json reference](https://docs.zepp.com/docs/reference/app-json/) does
   **not** document the `data-widget` module at all — only Quick Start does. Treat the
   Quick Start snippet as the single source until contradicted.
@@ -133,7 +135,7 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 | `mock_data` | Emulator-only simulated data — the supported path for mock-first development | CONFIRMED | [SPORT_DATA](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/widget/SPORT_DATA/) |
 | `getSportData` | `@zos/app-access`, API_LEVEL 3.6, permission `data:user.hd.workout`, async callback with `{code, data}` where `data` is a JSON string | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
 | `getSportData` types | `speed`, `avg_speed`, `pace`, `avg_pace`, `distance`, `duration`, `calories`, `cadence`, `avg_cadence`, `altitude`, `total_up_altitude`, `total_count`, `vertical_speed`, `downhill_count`, `total_downhill_distance` | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
-| Heart rate via `getSportData` | **Not in the type list.** HR appears only as a `SPORT_DATA` widget field | UNKNOWN | — |
+| Heart rate via `getSportData` | **Not in the type list.** The `getSportData` API only accepts string keys (`speed`, `distance`, `duration`, etc.) — HR is absent. HR appears only as a `SPORT_DATA` widget field. Getting a numeric HR value in a data-widget requires a different approach (undocumented or not public). | CONFIRMED absent from getSportData |
 
 ## Confirmed by the phase 0 spike (EMULATOR TESTED)
 
