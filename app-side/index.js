@@ -86,15 +86,19 @@ const router = createSideRouter({
     return await client.getCurrentProgram();
   },
 
-  playgroundSimulator: async (journal) => {
+  playgroundSimulator: async (params = {}) => {
     const client = getApiClient();
     try {
-      return await client.runPlaygroundSimulation(JSON.stringify(journal));
+      if (params.programText) {
+        return await client.runPlayground(params);
+      }
+      return null;
     } catch (err) {
-      console.log('[liftosaur-side] playground simulation error:', err?.message || String(err));
+      console.log('[liftosaur-side] playground error:', err?.message || String(err));
       return null;
     }
   },
+
 
   historySubmitter: async (history) => {
     const client = getApiClient();

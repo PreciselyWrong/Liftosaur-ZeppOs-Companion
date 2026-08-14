@@ -12,7 +12,6 @@ export function redactSecret(secret) {
 
 export class LiftosaurApiError extends Error {
   constructor(message, { status, endpoint, rawBody = '' }) {
-    // Redact any potential secret in the error message or raw body
     const cleanMsg = message.replace(/lftsk_[a-zA-Z0-9_-]+/g, 'lftsk_***');
     super(`[Liftosaur API ${status || 'Error'}] ${cleanMsg}`);
     this.name = 'LiftosaurApiError';
@@ -89,8 +88,9 @@ export function createLiftosaurApiClient({
         if (err.status === 404) {
           try {
             const list = await request('/programs');
-            if (Array.isArray(list)) {
-              const active = list.find((p) => p.active || p.isCurrent) || list[0];
+            const programs = list?.data?.programs || list?.programs || list;
+            if (Array.isArray(programs)) {
+              const active = programs.find((p) => p.isCurrent || p.active) || programs[0];
               if (active && active.id && !active.text) {
                 return await request(`/programs/${active.id}`);
               }
@@ -98,35 +98,57 @@ export function createLiftosaurApiClient({
             }
             return list;
           } catch (e2) {
-            return await request('/program');
+            return await request('/programs');
           }
         }
         throw err;
       }
     },
 
+    async runPlayground({ programText, day = null, week = null, commands = [] } = {}) {
+      const payload = {
+        programText,
+        ...(day !== null && day !== undefined ? { day } : {}),
+        ...(week !== null && week !== undefined ? { week } : {}),
+        ...(Array.isArray(commands) && commands.length > 0 ? { commands } : {}),
+      };
 
-    async getWorkoutDay(dayIndex = 0) {
-      return request(`/workout/day/${dayIndex}`);
-    },
-
-    async runPlaygroundSimulation(scriptText) {
       return request('/playground', {
         method: 'POST',
-        body: { script: scriptText },
+        body: payload,
       });
     },
 
-    async submitWorkoutHistory(workoutHistory) {
+    async submitWorkoutHistory(historyRecord) {
       return request('/history', {
         method: 'POST',
-        body: workoutHistory,
+        body: historyRecord,
       });
+    },
+
+    async getRecentHistory({ limit = 5 } = {}) {
+      return request(`/history?limit=${limit}`);
     },
 
     async checkWorkoutHistoryExists({ startedAt }) {
-      return request(`/history/check?startedAt=${startedAt}`);
+      try {
+        const res = await request(`/history/check?startedAt=${startedAt}`);
+        return res || { exists: true };
+      } catch (e) {
+        return { exists: false };
+      }
+    },
+
+
+    async updateCurrentProgram(updatedProgramText, name = null) {
+
+      return request('/programs/current', {
+        method: 'PUT',
+        body: {
+          text: updatedProgramText,
+          ...(name ? { name } : {}),
+        },
+      });
     },
   };
 }
-
