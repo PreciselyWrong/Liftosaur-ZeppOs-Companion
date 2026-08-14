@@ -1,5 +1,3 @@
-import { AppSettingsPage, TextInput, View, Text, Section } from '@zeppos/zml/settings';
-
 AppSettingsPage({
   state: {
     apiKey: '',
@@ -12,6 +10,8 @@ AppSettingsPage({
       {
         style: {
           padding: '16px',
+          backgroundColor: '#0C0819',
+          minHeight: '100vh',
         },
       },
       [
@@ -34,10 +34,10 @@ AppSettingsPage({
             Text({
               style: {
                 fontSize: '13px',
-                color: '#888888',
+                color: '#A4B0BC',
                 marginTop: '12px',
               },
-              value: 'To get your API key: Open liftosaur.com or the Liftosaur App -> Settings -> API Key.',
+              value: 'Find your API Key on liftosaur.com -> Settings -> API Keys (or in the mobile Liftosaur app).',
             }),
           ]
         ),
