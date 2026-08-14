@@ -310,6 +310,36 @@ test('parseLiftoscriptWorkout parses DSL with inner custom progress braces witho
   assert.equal(day2.exercises[0].name, 'Bench Press');
 });
 
+test('parseLiftoscriptWorkout parses plain exercise names without slashes or sets', () => {
+  const text = `
+    # Push
+    Bench Press
+    Overhead Press
+    Incline Dumbbell Press
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.name, 'Push');
+  assert.equal(workout.exercises.length, 3);
+  assert.equal(workout.exercises[0].name, 'Bench Press');
+  assert.equal(workout.exercises[1].name, 'Overhead Press');
+  assert.equal(workout.exercises[2].name, 'Incline Dumbbell Press');
+});
+
+test('parseLiftoscriptWorkout parses DSL with day "Name" syntax without parens', () => {
+  const text = `
+    day "Legs" {
+      Barbell Squat / 3x5 100kg
+      Romanian Deadlift / 3x8 80kg
+    }
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.name, 'Legs');
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Barbell Squat');
+  assert.equal(workout.exercises[1].name, 'Romanian Deadlift');
+});
+
+
 
 
 

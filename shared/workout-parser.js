@@ -115,12 +115,12 @@ export function resolveNextProgramSession({
     fullName: programName,
     weekNumber: 1,
     dayNumber: 1,
-    exercises: [getDefaultFallbackExercise()],
+    exercises: [getDefaultFallbackExercise(programName)],
   };
 
   const finalExercises = activeDay.exercises && activeDay.exercises.length > 0
     ? activeDay.exercises
-    : [getDefaultFallbackExercise()];
+    : [getDefaultFallbackExercise(activeDay.name || programName)];
 
   return {
     dayIndex: safeIndex,
@@ -135,7 +135,7 @@ export function resolveNextProgramSession({
 }
 
 export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
-  const isDslFormat = /\bday\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText) || /\bweek\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText);
+  const isDslFormat = /\bday\b/i.test(rawText) || /\bweek\b/i.test(rawText);
 
   if (isDslFormat) {
     const dslWeeks = parseDslStructure(rawText, defaultName);
@@ -144,7 +144,7 @@ export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
     }
   }
 
-  const hasMarkdownHeadings = /^\s*#{1,3}\s+/m.test(rawText);
+  const hasMarkdownHeadings = /^\s*#{1,4}\s+/m.test(rawText);
   if (hasMarkdownHeadings) {
     const markdownWeeks = parseMarkdownStructure(rawText, defaultName);
     if (markdownWeeks.length > 0) {
@@ -177,7 +177,7 @@ export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
     weekNumber: 1,
     dayNumber: 1,
     globalIndex: 0,
-    exercises: fallbackExercises.length > 0 ? fallbackExercises : [getDefaultFallbackExercise()],
+    exercises: fallbackExercises.length > 0 ? fallbackExercises : [getDefaultFallbackExercise(defaultName)],
   };
 
   return {
@@ -193,7 +193,6 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
   let currentDay = null;
   let currentBodyLines = [];
 
-  // Track week-ranged exercises: { line, dayTitle, fromWeek, toWeek }
   const recurringExercises = [];
 
   function flushDay() {
@@ -201,7 +200,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
       const rawLines = [...currentBodyLines];
       const weekNum = currentWeek ? currentWeek.weekNumber : 1;
 
-      // Extract any recurring exercises defined in this day
+      // Extract recurring exercises
       for (const line of rawLines) {
         const match = line.match(/^([^/]+?)\s*\[\s*(?:[0-9]+\s*,\s*)?([0-9]+)(?:\s*-\s*([0-9]+))?\s*\]/);
         if (match) {
@@ -245,7 +244,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
     if (!line || line.startsWith('```')) continue;
 
     // Check for # Week X or ## Week X
-    const weekHeading = line.match(/^#{1,2}\s+(Week\s+([0-9A-Za-z]+).*)$/i);
+    const weekHeading = line.match(/^#{1,3}\s+(Week\s+([0-9A-Za-z]+).*)$/i);
     if (weekHeading) {
       flushWeek();
       const rawNum = parseInt(weekHeading[2], 10);
@@ -260,20 +259,22 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
       continue;
     }
 
-    // Check for Day / Workout / Session heading or general ## Heading
-    const isTopHeading = line.startsWith('# ') && (!currentWeek || !currentWeek.hasExplicitWeekHeader);
-    const isSubHeading = line.startsWith('## ') || line.startsWith('### ');
+    // Check for any Day / Workout / Subheading (##, ###, #### or # Day / # Push)
+    const isExplicitDayHeading = line.match(/^#{1,4}\s+(.*)$/);
+    if (isExplicitDayHeading) {
+      const headingText = isExplicitDayHeading[1].trim();
+      const lowerHeading = headingText.toLowerCase();
 
-    if (isSubHeading || (isTopHeading && !line.toLowerCase().startsWith('# routine'))) {
-      flushDay();
-      const title = line.replace(/^#+\s*/, '').trim();
-      currentDay = { title };
-      continue;
+      if (!lowerHeading.startsWith('routine') && !lowerHeading.startsWith('program')) {
+        flushDay();
+        currentDay = { title: headingText };
+        continue;
+      }
     }
 
     if (currentDay) {
       currentBodyLines.push(line);
-    } else if (line.includes('/') || line.includes('@') || line.match(/[0-9]+\s*x\s*[0-9]+/i)) {
+    } else if (line.includes('/') || line.includes('@') || line.match(/[0-9]+\s*x\s*[0-9]+/i) || line.length > 2) {
       if (!currentDay) {
         currentDay = { title: defaultName || 'Day 1' };
       }
@@ -283,7 +284,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
   flushWeek();
 
-  // Compile exercises for each day, including inherited recurring exercises
+  // Compile exercises for each day
   const weeks = [];
 
   for (const w of rawWeeks) {
@@ -297,7 +298,6 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
     for (const d of w.days) {
       const combinedLines = [...d.bodyLines];
 
-      // Add any recurring exercises that belong to this week and dayTitle
       for (const rec of recurringExercises) {
         if (rec.dayTitle === d.title && w.weekNumber >= rec.fromWeek && w.weekNumber <= rec.toWeek) {
           if (!combinedLines.includes(rec.line)) {
@@ -307,18 +307,18 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
       }
 
       const exercises = parseExercisesFromBody(combinedLines.join('\n'), w.weekNumber);
-      if (exercises.length > 0) {
-        const isSingleDayDefault = rawWeeks.length === 1 && !w.hasExplicitWeekHeader;
-        const fullName = isSingleDayDefault ? d.title : `${w.name} - ${d.title}`;
+      const isSingleDayDefault = rawWeeks.length === 1 && !w.hasExplicitWeekHeader;
+      const fullName = isSingleDayDefault ? d.title : `${w.name} - ${d.title}`;
 
-        weekObj.days.push({
-          name: d.title,
-          fullName,
-          weekNumber: w.weekNumber,
-          dayNumber: d.dayNumber,
-          exercises,
-        });
-      }
+      const finalExercises = exercises.length > 0 ? exercises : [getDefaultFallbackExercise(d.title)];
+
+      weekObj.days.push({
+        name: d.title,
+        fullName,
+        weekNumber: w.weekNumber,
+        dayNumber: d.dayNumber,
+        exercises: finalExercises,
+      });
     }
 
     if (weekObj.days.length > 0) {
@@ -333,7 +333,7 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
   const weeks = [];
   const flatDays = [];
 
-  // 1. Extract week(...) { ... } outer blocks with brace matching
+  // 1. Extract week blocks
   const weekBlocks = extractDslBlocks(rawText, 'week');
 
   if (weekBlocks.length > 0) {
@@ -353,19 +353,17 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
       dayBlocks.forEach((dBlock, dIdx) => {
         const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
         const exercises = parseExercisesFromBody(dBlock.body, weekNumber);
-        if (exercises.length > 0) {
-          const dayNumber = dIdx + 1;
-          const dayObj = {
-            name: dayTitle,
-            fullName: `${weekTitle} - ${dayTitle}`,
-            weekNumber,
-            dayNumber,
-            globalIndex: flatDays.length,
-            exercises,
-          };
-          weekObj.days.push(dayObj);
-          flatDays.push(dayObj);
-        }
+        const dayNumber = dIdx + 1;
+        const dayObj = {
+          name: dayTitle,
+          fullName: `${weekTitle} - ${dayTitle}`,
+          weekNumber,
+          dayNumber,
+          globalIndex: flatDays.length,
+          exercises: exercises.length > 0 ? exercises : [getDefaultFallbackExercise(dayTitle)],
+        };
+        weekObj.days.push(dayObj);
+        flatDays.push(dayObj);
       });
 
       if (weekObj.days.length > 0) {
@@ -374,24 +372,22 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
     });
   }
 
-  // 2. If no weeks, extract top-level day(...) { ... } blocks
+  // 2. Extract top-level day blocks
   if (flatDays.length === 0) {
     const dayBlocks = extractDslBlocks(rawText, 'day');
     dayBlocks.forEach((dBlock, dIdx) => {
       const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
       const exercises = parseExercisesFromBody(dBlock.body, 1);
-      if (exercises.length > 0) {
-        const dayNumber = dIdx + 1;
-        const dayObj = {
-          name: dayTitle,
-          fullName: dayTitle,
-          weekNumber: 1,
-          dayNumber,
-          globalIndex: flatDays.length,
-          exercises,
-        };
-        flatDays.push(dayObj);
-      }
+      const dayNumber = dIdx + 1;
+      const dayObj = {
+        name: dayTitle,
+        fullName: dayTitle,
+        weekNumber: 1,
+        dayNumber,
+        globalIndex: flatDays.length,
+        exercises: exercises.length > 0 ? exercises : [getDefaultFallbackExercise(dayTitle)],
+      };
+      flatDays.push(dayObj);
     });
 
     if (flatDays.length > 0) {
@@ -409,11 +405,12 @@ function parseDslStructure(rawText, defaultName = 'Workout') {
 
 function extractDslBlocks(text, keyword) {
   const blocks = [];
-  const regex = new RegExp(`\\b${keyword}(?:\\s*\\(\\s*["']?([^"')]+)["']?\\s*\\))?\\s*\\{`, 'gi');
+  // Matches: day("Name") {, day 'Name' {, day "Name" {, day {
+  const regex = new RegExp(`\\b${keyword}(?:\\s*(?:\\(\\s*["']?([^"'\)]+)["']?\\s*\\)|["']([^"']+)["']))?\\s*\\{`, 'gi');
   let match;
 
   while ((match = regex.exec(text)) !== null) {
-    const title = match[1] ? match[1].trim() : '';
+    const title = (match[1] || match[2] || '').trim();
     const startIndex = match.index + match[0].length;
     let depth = 1;
     let endIndex = startIndex;
@@ -469,23 +466,32 @@ function parseExercisesFromBody(bodyText, targetWeek = null) {
 
 function isScriptCodeLine(line) {
   const clean = line.trim();
+  if (!clean) return true;
+
   if (clean.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/i)) {
     return true;
   }
-  if (clean.includes('exercises:') || clean.includes('dayName:') || clean.includes('program:')) {
+  if (clean.startsWith('exercises:') || clean.startsWith('dayName:') || clean.startsWith('program:')) {
     return true;
   }
 
-  const codeKeywords = [
+  const codePrefixes = [
     'state.',
     'let ',
     'var ',
     'const ',
-    'function',
-    'return',
+    'function ',
+    'function(',
+    'return ',
+    'return;',
     'if (',
     'if(',
-    'else',
+    'else ',
+    'else{',
+    'while (',
+    'while(',
+    'for (',
+    'for(',
     'finish_workout',
     'set_state',
     'change_weight',
@@ -497,8 +503,8 @@ function isScriptCodeLine(line) {
   ];
 
   const lower = clean.toLowerCase();
-  for (const kw of codeKeywords) {
-    if (lower.startsWith(kw) || lower === kw) {
+  for (const kw of codePrefixes) {
+    if (lower.startsWith(kw)) {
       return true;
     }
   }
@@ -507,12 +513,7 @@ function isScriptCodeLine(line) {
     return true;
   }
 
-  if (clean === '{' || clean === '}' || clean === ';') {
-    return true;
-  }
-
-  // Must have some exercise-like token (slash, @, or sets notation like 3x5, or numbers)
-  if (!clean.includes('/') && !clean.includes('@') && !clean.includes(':') && !clean.match(/[0-9]+\s*x\s*[0-9]+/i)) {
+  if (clean === '{' || clean === '}' || clean === ';' || clean === '();') {
     return true;
   }
 
@@ -521,13 +522,9 @@ function isScriptCodeLine(line) {
 
 function cleanExerciseName(raw) {
   let name = String(raw || '').trim();
-  // Strip Markdown bold/italic: **Name**, *Name*, _Name_, __Name__
   name = name.replace(/^(\*\*|__|\*|_|~)+|(\*\*|__|\*|_|~)+$/g, '').trim();
-  // Strip quotes and outer parentheses: "Name", 'Name'
   name = name.replace(/^["'(]+|["');]+$/g, '').trim();
-  // Strip leading list bullets/numbering: "- ", "* ", "1. ", "1) ", "• "
   name = name.replace(/^[-*•\d+.)\]\s]+/, '').trim();
-  // Strip tier/tag prefixes: "t1: ", "t2: ", "tier 1: ", "tag1: ", "main: "
   name = name.replace(/^(?:t\d+|tier\s*\d+|tag\s*\d+|main|accessory):\s*/i, '').trim();
   return name;
 }
@@ -537,8 +534,8 @@ function parseExerciseLine(line, index, targetWeek = null) {
   let supersetTag = null;
   let cleanLine = line.trim();
 
-  // Strip trailing comments (// comment or ; at end)
   cleanLine = cleanLine.replace(/;\s*$/, '').replace(/\/\/.*$/, '').trim();
+  if (!cleanLine) return null;
 
   // 1. Superset prefix: [SUPERSET A1] or [A] or (A1)
   const supersetMatch = cleanLine.match(/^[\[(](?:SUPERSET\s+)?([A-Za-z0-9]+)[\])]\s*(.*)$/i);
@@ -554,16 +551,20 @@ function parseExerciseLine(line, index, targetWeek = null) {
   if (cleanLine.includes('/')) {
     parts = cleanLine.split('/').map((p) => p.trim());
   } else {
-    // Attempt splitting by colon or space before sets
-    const colonMatch = cleanLine.match(/^(.*?)\s*:\s*([0-9]+\s*x\s*.*)$/i);
-    if (colonMatch) {
+    const colonMatch = cleanLine.match(/^(.*?)\s*:\s*(.*)$/i);
+    if (colonMatch && (colonMatch[2].includes('x') || colonMatch[2].match(/[0-9]+/))) {
       parts = [colonMatch[1], colonMatch[2]];
     } else {
       const spaceSetsMatch = cleanLine.match(/^(.*?)\s+([0-9]+\s*x\s*[0-9]+.*)$/i);
       if (spaceSetsMatch) {
         parts = [spaceSetsMatch[1], spaceSetsMatch[2]];
       } else {
-        parts = [cleanLine];
+        const spaceWeightMatch = cleanLine.match(/^(.*?)\s+(@?\s*[0-9.]+\s*(?:kg|lbs?))\s*$/i);
+        if (spaceWeightMatch) {
+          parts = [spaceWeightMatch[1], spaceWeightMatch[2]];
+        } else {
+          parts = [cleanLine];
+        }
       }
     }
   }
@@ -632,7 +633,6 @@ function parseExerciseLine(line, index, targetWeek = null) {
       continue;
     }
 
-    // Check if this part is an explicit weight: "135lb", "60kg", "135.5 lb", "@ 50kg", "@ 50", "bodyweight"
     const isPureWeight = part.match(/^@?\s*([0-9.]+)\s*(?:kg|lbs?|kilograms?|pounds?|%)?$/i) || lower === 'bodyweight';
     if (isPureWeight && !part.match(/[0-9]+\s*x\s*[0-9]+/i)) {
       if (lower === 'bodyweight') {
@@ -644,7 +644,6 @@ function parseExerciseLine(line, index, targetWeek = null) {
       continue;
     }
 
-    // Check if this part defines sets/reps: "3x5", "3x5 @ 100kg", "3x5 135lb", "1x5, 1x5, 1x5+", "12, 5, 5, 5"
     if (part.match(/[0-9]+\s*x\s*[0-9]+/i) || part.match(/^[0-9]+\s*x/i) || part.match(/[0-9]+\+/) || part.match(/^[0-9]+(?:,\s*[0-9]+)+/)) {
       setsDefPart = part;
       const inlineWeight = part.match(/@\s*([0-9.]+)/i) || part.match(/\s+([0-9.]+)\s*(?:kg|lbs?)\b/i);
@@ -681,6 +680,20 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
         restSeconds,
         isAmrap: false,
       },
+      {
+        targetReps: 10,
+        targetWeight: defaultWeight || 0,
+        targetRpe: defaultRpe,
+        restSeconds,
+        isAmrap: false,
+      },
+      {
+        targetReps: 10,
+        targetWeight: defaultWeight || 0,
+        targetRpe: defaultRpe,
+        restSeconds,
+        isAmrap: false,
+      },
     ];
   }
 
@@ -700,7 +713,6 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
     if (match) {
       const count = match[1] ? parseInt(match[1], 10) : 1;
       const isAmrapStr = match[2]?.toLowerCase() === 'amrap';
-      // For rep ranges like "8-12", take the target (e.g. 8)
       const rawReps = match[2]?.split('-')[0];
       const reps = isAmrapStr ? 10 : parseInt(rawReps, 10) || 5;
       const isAmrap = Boolean(match[3]) || isAmrapStr;
@@ -715,7 +727,6 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
         });
       }
     } else {
-      // Direct number (e.g. "12" in myo-reps)
       const directNum = parseInt(cleanDef, 10);
       if (!isNaN(directNum) && directNum > 0) {
         sets.push({
@@ -891,10 +902,10 @@ function resolveNextDayIndexFromState(days, state, rawText) {
   return 0;
 }
 
-function getDefaultFallbackExercise() {
+function getDefaultFallbackExercise(name = 'Exercise') {
   return {
     id: 'ex-fallback-1',
-    name: 'Workout Exercise',
+    name: name && name !== 'Workout' ? name : 'Workout Exercise',
     supersetGroup: null,
     supersetTag: null,
     sets: [
