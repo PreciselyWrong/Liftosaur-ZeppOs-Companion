@@ -146,36 +146,36 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Top Bar: Heart Rate & Workout Progress
+  // Top Bar: Heart Rate & Workout Progress (Safe zone: y=25)
   addWidget(widget.TEXT, {
     x: 0,
-    y: px(15),
+    y: px(25),
     w: W,
-    h: px(35),
+    h: px(30),
     color: THEME.textSecondary,
-    text_size: px(22),
+    text_size: px(20),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: `HR ${liveHr} • ${view.workoutName}`,
   });
 
-  // Exercise Navigation Bar [<] [ Exercise Name (X/Y) ] [>]
+  // Exercise Navigation Bar (Safe zone at y=65 is width 330px)
   const exNum = view.currentExerciseIndex + 1;
   const hasPrevEx = view.currentExerciseIndex > 0;
   const hasNextEx = view.currentExerciseIndex + 1 < view.totalExercises;
 
   if (hasPrevEx) {
     addWidget(widget.BUTTON, {
-      x: px(15),
-      y: px(50),
-      w: px(45),
-      h: px(45),
-      radius: px(22),
+      x: px(65),
+      y: px(60),
+      w: px(40),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.prevExercise());
       },
@@ -183,12 +183,12 @@ function renderUI() {
   }
 
   addWidget(widget.TEXT, {
-    x: px(65),
-    y: px(50),
-    w: px(350),
-    h: px(45),
+    x: px(110),
+    y: px(60),
+    w: px(260),
+    h: px(40),
     color: THEME.primaryLight,
-    text_size: px(26),
+    text_size: px(24),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -197,15 +197,15 @@ function renderUI() {
 
   if (hasNextEx) {
     addWidget(widget.BUTTON, {
-      x: px(420),
-      y: px(50),
-      w: px(45),
-      h: px(45),
-      radius: px(22),
+      x: px(375),
+      y: px(60),
+      w: px(40),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '>',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.nextExercise());
       },
@@ -213,14 +213,14 @@ function renderUI() {
   }
 
   if (view.state === SESSION_STATES.READY) {
-    // ── READY SCREEN ──
+    // ── READY SCREEN (Circular safe-area) ──
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(140),
+      y: px(130),
       w: W,
-      h: px(60),
+      h: px(50),
       color: THEME.textPrimary,
-      text_size: px(36),
+      text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -229,11 +229,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(205),
+      y: px(190),
       w: W,
-      h: px(40),
+      h: px(35),
       color: THEME.textSecondary,
-      text_size: px(24),
+      text_size: px(22),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -242,58 +242,58 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(90),
-      y: px(290),
+      y: px(265),
       w: px(300),
-      h: px(85),
-      radius: px(42),
+      h: px(75),
+      radius: px(38),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'START WORKOUT',
-      text_size: px(28),
+      text_size: px(26),
       click_func: () => {
         persistAndRender(() => session.startWorkout());
       },
     });
   } else if (view.state === SESSION_STATES.ACTIVE_SET) {
-    // ── ACTIVE SET SCREEN ──
+    // ── ACTIVE SET SCREEN (Circular safe-area) ──
     const setNum = view.currentSetIndex + 1;
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(100),
+      y: px(105),
       w: W,
-      h: px(40),
+      h: px(35),
       color: THEME.orange,
-      text_size: px(26),
+      text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: `SET ${setNum} OF ${view.totalSets}`,
     });
 
-    // Weight Controls: [-2.5] [ 60 kg ] [+2.5]
+    // Weight Controls: [-2.5] [ 60 kg ] [+2.5] (y=145, safe width > 440px)
     addWidget(widget.BUTTON, {
-      x: px(45),
+      x: px(60),
       y: px(145),
-      w: px(75),
-      h: px(60),
+      w: px(70),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '-2.5',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.adjustWeight(-2.5));
       },
     });
 
     addWidget(widget.TEXT, {
-      x: px(130),
+      x: px(135),
       y: px(145),
-      w: px(220),
-      h: px(60),
+      w: px(210),
+      h: px(52),
       color: THEME.textPrimary,
-      text_size: px(34),
+      text_size: px(32),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -301,43 +301,43 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(360),
+      x: px(350),
       y: px(145),
-      w: px(75),
-      h: px(60),
+      w: px(70),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '+2.5',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.adjustWeight(2.5));
       },
     });
 
-    // Reps Controls: [-1] [ 10 reps ] [+1]
+    // Reps Controls: [-1] [ 10 reps ] [+1] (y=205, safe width > 460px)
     addWidget(widget.BUTTON, {
-      x: px(45),
-      y: px(215),
-      w: px(75),
-      h: px(60),
+      x: px(60),
+      y: px(205),
+      w: px(70),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '-1',
-      text_size: px(26),
+      text_size: px(24),
       click_func: () => {
         persistAndRender(() => session.adjustReps(-1));
       },
     });
 
     addWidget(widget.TEXT, {
-      x: px(130),
-      y: px(215),
-      w: px(220),
-      h: px(60),
+      x: px(135),
+      y: px(205),
+      w: px(210),
+      h: px(52),
       color: THEME.textPrimary,
-      text_size: px(34),
+      text_size: px(32),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -345,38 +345,38 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(360),
-      y: px(215),
-      w: px(75),
-      h: px(60),
+      x: px(350),
+      y: px(205),
+      w: px(70),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '+1',
-      text_size: px(26),
+      text_size: px(24),
       click_func: () => {
         persistAndRender(() => session.adjustReps(1));
       },
     });
 
-    // Complete Set Button (Liftosaur Primary Purple #8356F6)
+    // Complete Set Button (y=280 to y=355, safe width > 410px)
     addWidget(widget.BUTTON, {
-      x: px(90),
-      y: px(315),
-      w: px(300),
-      h: px(85),
-      radius: px(42),
+      x: px(85),
+      y: px(280),
+      w: px(310),
+      h: px(75),
+      radius: px(38),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'COMPLETE SET',
-      text_size: px(28),
+      text_size: px(26),
       click_func: () => {
         persistAndRender(() => session.completeSet());
         startRestTimer();
       },
     });
   } else if (view.state === SESSION_STATES.REST) {
-    // ── REST SCREEN ──
+    // ── REST SCREEN (Circular safe-area) ──
     const isTransition = view.rest?.isTransitionToNextExercise;
     const subtitle = isTransition
       ? `Next Exercise (${exNum + 1}/${view.totalExercises})`
@@ -384,11 +384,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(95),
+      y: px(100),
       w: W,
-      h: px(35),
+      h: px(30),
       color: THEME.blue,
-      text_size: px(26),
+      text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -397,11 +397,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(140),
+      y: px(138),
       w: W,
-      h: px(80),
+      h: px(70),
       color: THEME.textPrimary,
-      text_size: px(56),
+      text_size: px(52),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -410,11 +410,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(235),
+      y: px(218),
       w: W,
-      h: px(40),
+      h: px(35),
       color: THEME.textSecondary,
-      text_size: px(24),
+      text_size: px(22),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -422,29 +422,29 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(90),
-      y: px(315),
-      w: px(300),
-      h: px(80),
-      radius: px(40),
+      x: px(85),
+      y: px(280),
+      w: px(310),
+      h: px(72),
+      radius: px(36),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: isTransition ? 'NEXT EXERCISE' : 'SKIP REST',
-      text_size: px(28),
+      text_size: px(26),
       click_func: () => {
         stopRestTimer();
         persistAndRender(() => session.nextSet());
       },
     });
   } else if (view.state === SESSION_STATES.FINISHED) {
-    // ── FINISHED SCREEN ──
+    // ── FINISHED SCREEN (Circular safe-area) ──
     addWidget(widget.TEXT, {
       x: 0,
       y: px(120),
       w: W,
-      h: px(60),
+      h: px(50),
       color: THEME.success,
-      text_size: px(38),
+      text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -453,11 +453,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(195),
+      y: px(180),
       w: W,
-      h: px(45),
+      h: px(40),
       color: THEME.textSecondary,
-      text_size: px(26),
+      text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -466,14 +466,14 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(110),
-      y: px(295),
+      y: px(265),
       w: px(260),
-      h: px(80),
-      radius: px(40),
+      h: px(75),
+      radius: px(38),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'RESET',
-      text_size: px(28),
+      text_size: px(26),
       click_func: () => {
         sessionStore.clearSession();
         session = createWorkoutSession({ workout: WORKOUT_MOCK });
