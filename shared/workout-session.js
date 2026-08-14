@@ -20,7 +20,9 @@ export const EVENT_TYPES = {
   NEXT_SET: 'NEXT_SET',
   SELECT_EXERCISE: 'SELECT_EXERCISE',
   FINISH_WORKOUT: 'FINISH_WORKOUT',
+  CANCEL_WORKOUT: 'CANCEL_WORKOUT',
 };
+
 
 export function createWorkoutSession({ workout, exercise, initialJournal = [] } = {}) {
   let exercises = workout?.exercises ?? (exercise ? [exercise] : []);
@@ -296,8 +298,26 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
         workoutEndTime = event.timestamp;
         restInfo = null;
         break;
+
+      case EVENT_TYPES.CANCEL_WORKOUT:
+        state = exercises.length === 0 ? SESSION_STATES.SETUP_REQUIRED : SESSION_STATES.READY;
+        workoutStartTime = null;
+        workoutEndTime = null;
+        restInfo = null;
+        currentExerciseIndex = 0;
+        exerciseProgress.forEach((p, idx) => {
+          p.currentSetIndex = 0;
+          p.completedSets = [];
+          const ex = exercises[idx];
+          p.currentWeight = ex?.sets[0]?.targetWeight ?? 20;
+          p.currentReps = ex?.sets[0]?.targetReps ?? 5;
+          p.currentRpe = ex?.sets[0]?.targetRpe ?? null;
+        });
+        journal = [];
+        break;
     }
   }
+
 
   // Replay initial journal
   for (const event of initialJournal) {
@@ -506,6 +526,14 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
         timestamp,
       });
     },
+
+    cancelWorkout({ timestamp = Date.now() } = {}) {
+      applyEvent({
+        type: EVENT_TYPES.CANCEL_WORKOUT,
+        timestamp,
+      });
+    },
+
 
     isAllCompleted() {
       return exercises.every((ex, i) => exerciseProgress[i].completedSets.length >= ex.sets.length);

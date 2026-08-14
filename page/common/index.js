@@ -380,9 +380,10 @@ function renderUI() {
       text: `♥ ${liveHr}`,
     });
 
-    const cardH = px(68);
-    const cardGap = px(8);
-    let cardY = px(95);
+    const totalEx = view.overviewExercises.length;
+    const cardH = totalEx > 3 ? px(48) : totalEx > 2 ? px(56) : px(66);
+    const cardGap = px(6);
+    let cardY = px(92);
 
     view.overviewExercises.forEach((ex, idx) => {
       const isCurrent = idx === view.currentExerciseIndex;
@@ -399,8 +400,8 @@ function renderUI() {
         radius: px(14),
         normal_color: cardBg,
         press_color: THEME.cardActive,
-        text: `${title}  ${dots}\n${sub}`,
-        text_size: px(18),
+        text: totalEx > 3 ? `${title}  ${dots}` : `${title}  ${dots}\n${sub}`,
+        text_size: totalEx > 3 ? px(17) : px(18),
         color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
         click_func: () => {
           session.selectExercise(idx);
@@ -411,8 +412,48 @@ function renderUI() {
 
       cardY += cardH + cardGap;
     });
+
+    // Action Buttons at bottom of Overview: Finish Workout & Cancel Workout
+    const actionBtnY = Math.max(cardY + px(8), px(300));
+
+    addWidget(widget.BUTTON, {
+      x: px(65),
+      y: actionBtnY,
+      w: px(170),
+      h: px(52),
+      radius: px(26),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      text: 'Finish',
+      text_size: px(20),
+      click_func: () => {
+        isOverviewListOpen = false;
+        persistAndRender(() => session.finishWorkout());
+        asyncSideSubmitHistory();
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(245),
+      y: actionBtnY,
+      w: px(170),
+      h: px(52),
+      radius: px(26),
+      normal_color: 0x3a1a1a,
+      press_color: 0x551111,
+      color: THEME.error,
+      text: 'Cancel',
+      text_size: px(20),
+      click_func: () => {
+        isOverviewListOpen = false;
+        sessionStore.clear();
+        persistAndRender(() => session.cancelWorkout());
+      },
+    });
+
     return;
   }
+
 
   // ── 2. READY SCREEN ──
   if (view.state === SESSION_STATES.READY) {
