@@ -2,7 +2,16 @@ import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
 import { HeartRate, Vibrator } from '@zos/sensor';
 import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT } from '@zos/interaction';
+import {
+  setPageBrightTime,
+  resetPageBrightTime,
+  pauseDropWristScreenOff,
+  resetDropWristScreenOff,
+  pausePalmScreenOff,
+  resetPalmScreenOff,
+} from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
+
 
 import {
   SESSION_STATES,
@@ -1032,12 +1041,26 @@ Page(
 
       renderUI();
       startUnifiedClock();
+
+      // Keep screen on and prevent palm/wrist drop sleep during workouts
+      try {
+        setPageBrightTime({ brightTime: 0 });
+        pauseDropWristScreenOff({ duration: 0 });
+        pausePalmScreenOff({ duration: 0 });
+      } catch (err) {
+        console.log('[liftosaur] display keep-awake error:', err?.message || String(err));
+      }
     },
 
     onDestroy() {
       console.log('[liftosaur] page onDestroy');
       try {
         offGesture();
+      } catch (e) {}
+      try {
+        resetPageBrightTime();
+        resetDropWristScreenOff();
+        resetPalmScreenOff();
       } catch (e) {}
       stopUnifiedClock();
       pageInstance = null;
@@ -1047,5 +1070,6 @@ Page(
         } catch (e) {}
       }
     },
+
   })
 );
