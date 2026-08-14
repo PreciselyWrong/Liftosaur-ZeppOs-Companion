@@ -118,6 +118,9 @@ let hrCallback = null;
 let vibrator = null;
 let lastVibratedOvertimeStep = -1;
 let isRestMinimized = false;
+let isNotesModalOpen = false;
+let activeNotesTitle = '';
+let activeNotesContent = '';
 let clockTimer = null;
 let lastRenderedSecond = null;
 let lastRenderedState = null;
@@ -431,6 +434,87 @@ function formatNextTargetSummary(rest) {
       ? ` (${rest.nextTargetWeightPercent}%)`
       : '';
   return `${reps} reps · ${weight}${percentText}`;
+}
+
+const SUPERSET_COLORS = {
+  A: 0x2bdc9b, // Teal / Emerald
+  B: 0xffb544, // Orange
+  C: 0xa48bfa, // Violet
+  D: 0xffd820, // Yellow
+  E: 0x60c5ff, // Sky blue
+  F: 0xff80aa, // Pink
+};
+
+function supersetColor(group) {
+  if (!group) return THEME.primaryLight;
+  const key = String(group).trim().toUpperCase();
+  return SUPERSET_COLORS[key] || THEME.primaryLight;
+}
+
+function renderNotesModal() {
+  addWidget(widget.FILL_RECT, {
+    x: px(40),
+    y: px(40),
+    w: px(400),
+    h: px(400),
+    radius: px(24),
+    color: THEME.card,
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(56),
+    y: px(56),
+    w: px(368),
+    h: px(30),
+    color: THEME.textPrimary,
+    text_size: px(20),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: truncate(activeNotesTitle, 24),
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(56),
+    y: px(88),
+    w: px(368),
+    h: px(22),
+    color: THEME.primaryLight,
+    text_size: px(14),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: 'EXERCISE NOTES',
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(56),
+    y: px(120),
+    w: px(368),
+    h: px(210),
+    color: THEME.textSecondary,
+    text_size: px(17),
+    align_h: align.CENTER_H,
+    align_v: align.TOP,
+    text_style: text_style.WRAP,
+    text: activeNotesContent || 'No notes for this exercise.',
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(140),
+    y: px(348),
+    w: px(200),
+    h: px(58),
+    radius: px(29),
+    normal_color: THEME.primary,
+    press_color: THEME.primaryDeep,
+    text: 'Close',
+    text_size: px(20),
+    click_func: () => {
+      isNotesModalOpen = false;
+      renderUI();
+    },
+  });
 }
 
 function heartRateColor(hrVal) {
@@ -986,6 +1070,7 @@ function renderOverviewScreen(view) {
     const idx = start + i;
     const isCurrent = idx === view.currentExerciseIndex;
     const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
+    const ssColor = ex.supersetGroup ? supersetColor(ex.supersetGroup) : null;
     addWidget(widget.BUTTON, {
       x: px(64),
       y,
@@ -994,7 +1079,7 @@ function renderOverviewScreen(view) {
       radius: px(14),
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
-      color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
+      color: ssColor || (isCurrent ? THEME.primaryPale : THEME.textPrimary),
       text: `${ssPrefix}${truncate(ex.name, 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
       text_size: px(16),
       click_func: () => {
@@ -1156,28 +1241,50 @@ function renderActiveSetScreen(view) {
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(92),
-    w: px(356),
+    w: view.exerciseNotes ? px(306) : px(356),
     h: px(30),
     color: THEME.textPrimary,
     text_size: px(22),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: truncate(view.exerciseName, 24),
+    text: truncate(view.exerciseName, 22),
   });
 
+  if (view.exerciseNotes) {
+    addWidget(widget.BUTTON, {
+      x: px(374),
+      y: px(88),
+      w: px(44),
+      h: px(36),
+      radius: px(18),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      color: THEME.primaryLight,
+      text: 'ℹ',
+      text_size: px(18),
+      click_func: () => {
+        isNotesModalOpen = true;
+        activeNotesTitle = view.exerciseName;
+        activeNotesContent = view.exerciseNotes;
+        renderUI();
+      },
+    });
+  }
+
+  const ssColor = supersetColor(view.supersetGroup);
+  const ssBadge = view.supersetGroup ? ` (SS ${view.supersetGroup})` : '';
+
   const setLabel = set.isWarmup
-    ? `Warmup ${set.warmupIndex}/${set.totalWarmups}`
-    : `Set ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${
-        view.supersetGroup ? ` (SS ${view.supersetGroup})` : ''
-      }`;
+    ? `Warmup ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
+    : `Set ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${ssBadge}`;
 
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(122),
     w: px(356),
     h: px(26),
-    color: THEME.textSecondary,
+    color: view.supersetGroup ? ssColor : THEME.textSecondary,
     text_size: px(16),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -1414,11 +1521,12 @@ function renderRestScreen(view) {
 
   // Next Set Preview Card
   if (rest.nextExerciseName) {
+    const ssColor = supersetColor(rest.nextSupersetGroup);
     const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
     const kind = rest.nextIsWarmup ? 'Warmup' : 'Set';
     const setProg = rest.nextIsWarmup
-      ? `${kind} ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}`
-      : `${kind} ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}`;
+      ? `${kind} ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
+      : `${kind} ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
 
     addWidget(widget.FILL_RECT, {
       x: px(52),
@@ -1432,22 +1540,43 @@ function renderRestScreen(view) {
     addWidget(widget.TEXT, {
       x: px(60),
       y: px(244),
-      w: px(360),
+      w: rest.nextExerciseNotes ? px(300) : px(360),
       h: px(26),
       color: THEME.textPrimary,
       text_size: px(17),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `Next: ${truncate(rest.nextExerciseName, 22)}${ssText}`,
+      text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
+
+    if (rest.nextExerciseNotes) {
+      addWidget(widget.BUTTON, {
+        x: px(370),
+        y: px(242),
+        w: px(44),
+        h: px(30),
+        radius: px(15),
+        normal_color: THEME.cardActive,
+        press_color: THEME.card,
+        color: THEME.primaryLight,
+        text: 'ℹ',
+        text_size: px(16),
+        click_func: () => {
+          isNotesModalOpen = true;
+          activeNotesTitle = rest.nextExerciseName;
+          activeNotesContent = rest.nextExerciseNotes;
+          renderUI();
+        },
+      });
+    }
 
     addWidget(widget.TEXT, {
       x: px(60),
       y: px(270),
       w: px(360),
       h: px(22),
-      color: THEME.primaryLight,
+      color: rest.nextSupersetGroup ? ssColor : THEME.primaryLight,
       text_size: px(15),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -1636,6 +1765,7 @@ function renderUI() {
   clearWidgets();
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
+  if (isNotesModalOpen) return renderNotesModal();
   if (screen === SCREEN.SETUP) return renderSetupScreen();
   if (screen === SCREEN.LOADING) return renderLoadingScreen();
   if (screen === SCREEN.HOME) {

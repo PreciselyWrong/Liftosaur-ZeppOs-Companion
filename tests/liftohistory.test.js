@@ -129,7 +129,7 @@ test('rewrites the header without touching the exercises block', () => {
   });
 
   const record = parseLiftohistoryRecord(rewritten);
-  assert.equal(record.date, '2026-08-14T09:30:00.000Z');
+  assert.equal(record.date, '2026-08-14 09:30:00 +00:00');
   assert.equal(record.durationSeconds, 3600);
   assert.equal(record.week, 2);
   assert.equal(record.dayInWeek, 3);
