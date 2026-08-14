@@ -5,7 +5,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createWidgetState, NO_HEART_RATE } from '../data-widget/common/state.js';
+import { createWidgetState, NO_HEART_RATE } from '../page/common/state.js';
 
 test('starts in READY with no heart rate', () => {
   const state = createWidgetState();
