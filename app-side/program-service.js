@@ -249,44 +249,51 @@ export function createProgramService({ client } = {}) {
       startedAt = null,
       durationSeconds = null,
       completedSets = [],
+      plan: sentPlan = null,
+      historyId = null,
     } = {}) {
-      const plan = planCache.get(planKeyOf(programId, week, day));
-      if (!plan) {
-        return { synced: false, reason: 'NO_PLAN', historyId: null };
+      // The watch sends its own plan and record id because this service is not
+      // a long-lived process: Zepp OS may tear it down between requests, so an
+      // in-memory cache cannot be relied on to know either. The cache is only
+      // an optimisation for the common case where it survived.
+      const plan = planCache.get(planKeyOf(programId, week, day)) || sentPlan;
+      if (!plan || !Array.isArray(plan.exercises) || plan.exercises.length === 0) {
+        return { synced: false, reason: 'NO_PLAN', historyId };
       }
 
       const text = buildProgressRecord({ plan, completedSets, startedAt, durationSeconds });
       if (!text) {
-        return { synced: false, reason: 'NOTHING_DONE', historyId: null };
+        return { synced: false, reason: 'NOTHING_DONE', historyId };
       }
 
-      const sessionKey = sessionKeyOf(startedAt);
-      const existing = liveRecords.get(sessionKey);
+      const knownId = historyId ?? liveRecords.get(sessionKeyOf(startedAt))?.historyId ?? null;
 
-      if (existing) {
-        await client.updateHistoryRecord(existing.historyId, text);
-        return { synced: true, historyId: existing.historyId, created: false };
+      if (knownId !== null && knownId !== undefined) {
+        await client.updateHistoryRecord(knownId, text);
+        liveRecords.set(sessionKeyOf(startedAt), { historyId: knownId });
+        return { synced: true, historyId: knownId, created: false };
       }
 
       const created = await client.createHistoryRecord(text);
-      liveRecords.set(sessionKey, { historyId: created?.id ?? null });
-      return { synced: true, historyId: created?.id ?? null, created: true };
+      const newId = created?.id ?? null;
+      liveRecords.set(sessionKeyOf(startedAt), { historyId: newId });
+      return { synced: true, historyId: newId, created: true };
     },
 
     /**
      * Removes the live record when the user discards the session, so an
      * abandoned workout does not linger in the history.
      */
-    async discardWorkout({ startedAt = null } = {}) {
+    async discardWorkout({ startedAt = null, historyId = null } = {}) {
       const sessionKey = sessionKeyOf(startedAt);
-      const existing = liveRecords.get(sessionKey);
-      if (!existing || existing.historyId === null) {
+      const knownId = historyId ?? liveRecords.get(sessionKey)?.historyId ?? null;
+      if (knownId === null || knownId === undefined) {
         return { discarded: false };
       }
 
-      await client.deleteHistoryRecord(existing.historyId);
+      await client.deleteHistoryRecord(knownId);
       liveRecords.delete(sessionKey);
-      return { discarded: true, historyId: existing.historyId };
+      return { discarded: true, historyId: knownId };
     },
 
     /**
@@ -305,6 +312,7 @@ export function createProgramService({ client } = {}) {
       completedSets = [],
       startedAt = null,
       durationSeconds = null,
+      historyId = null,
     } = {}) {
       const program = await loadProgram(programId);
 
@@ -343,12 +351,13 @@ export function createProgramService({ client } = {}) {
       });
 
       // A live record already holds this session, so it is updated rather than
-      // duplicated. Only a session that never reached the network is created.
+      // duplicated. The watch's id wins over the cache, which may be gone.
       const sessionKey = sessionKeyOf(startedAt);
-      const live = liveRecords.get(sessionKey);
-      const created = live?.historyId
-        ? await replaceHistory(live.historyId, recordText, startedAt)
-        : await commitHistory(recordText, startedAt);
+      const liveId = historyId ?? liveRecords.get(sessionKey)?.historyId ?? null;
+      const created =
+        liveId !== null && liveId !== undefined
+          ? await replaceHistory(liveId, recordText, startedAt)
+          : await commitHistory(recordText, startedAt);
       liveRecords.delete(sessionKey);
 
       let programUpdated = false;

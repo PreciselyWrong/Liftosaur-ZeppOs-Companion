@@ -304,6 +304,7 @@ function submitWorkout() {
     completedSets: session.getCompletedSets(),
     startedAt: view.startedAt,
     durationSeconds: view.elapsedSeconds,
+    historyId: liveHistoryId,
   })
     .then((res) => {
       const payload = res.payload || {};
@@ -335,6 +336,7 @@ function abandonWorkout() {
   send(MESSAGE_TYPES.ABANDON_WORKOUT, {
     dayName: view.dayName,
     startedAt: view.startedAt,
+    historyId: liveHistoryId,
     abandonedAt: Date.now(),
   }).catch((err) => console.log('[liftosaur] abandon notify failed:', err?.message));
 }
@@ -377,6 +379,8 @@ function syncProgress() {
   if (view.totalCompletedSetsCount === 0) return;
 
   syncInFlight = true;
+  renderUI();
+
   send(MESSAGE_TYPES.SYNC_PROGRESS, {
     programId: dayPlan.programId,
     week: dayPlan.week,
@@ -384,21 +388,46 @@ function syncProgress() {
     startedAt: view.startedAt,
     durationSeconds: view.elapsedSeconds,
     completedSets: session.getCompletedSets(),
+    // The Side Service is not a long-lived process, so the watch carries the
+    // two things it cannot be trusted to remember: what the day contains, and
+    // which history record this session already owns.
+    historyId: liveHistoryId,
+    plan: {
+      programName: dayPlan.programName,
+      dayName: dayPlan.dayName,
+      week: dayPlan.week,
+      dayInWeek: dayPlan.dayInWeek,
+      exercises: dayPlan.exercises.map((exercise) => ({
+        index: exercise.index,
+        name: exercise.name,
+        equipment: exercise.equipment,
+      })),
+    },
   })
     .then((res) => {
       syncInFlight = false;
-      syncFailed = false;
-      const historyId = res.payload?.historyId;
-      if (historyId && historyId !== liveHistoryId) {
+      const payload = res.payload || {};
+
+      // `synced: false` used to pass for success, which is exactly how this
+      // failed silently. Only "nothing done yet" is a normal negative answer.
+      syncFailed = payload.synced === false && payload.reason !== 'NOTHING_DONE';
+      if (syncFailed) {
+        console.log('[liftosaur] live sync refused:', payload.reason || 'unknown');
+      }
+
+      const historyId = payload.historyId;
+      if (historyId !== null && historyId !== undefined && historyId !== liveHistoryId) {
         liveHistoryId = historyId;
         persistSession();
       }
+      renderUI();
       drainSync();
     })
     .catch((err) => {
       syncInFlight = false;
       syncFailed = true;
       console.log('[liftosaur] live sync failed:', err?.message || String(err));
+      renderUI();
       drainSync();
     });
 }
@@ -1048,17 +1077,25 @@ function renderOverviewScreen(view) {
 
   const actionY = px(336);
 
+  // Finishing is blocked only while a write is actually in flight — a second
+  // at most. It stays available when a sync has failed, because finishing is
+  // itself the authoritative write and therefore the way out of a failed sync,
+  // not something to be trapped behind it.
+  const isSyncing = syncInFlight;
+
   addWidget(widget.BUTTON, {
     x: px(64),
     y: actionY,
     w: px(170),
     h: px(54),
     radius: px(27),
-    normal_color: THEME.primary,
+    normal_color: isSyncing ? THEME.card : syncFailed ? THEME.orange : THEME.primary,
     press_color: THEME.primaryDeep,
-    text: 'Finish',
-    text_size: px(20),
+    color: isSyncing ? THEME.textDisabled : THEME.textPrimary,
+    text: isSyncing ? 'Saving…' : syncFailed ? 'Finish ⚠' : 'Finish ✓',
+    text_size: px(19),
     click_func: () => {
+      if (isSyncing) return;
       isOverviewOpen = false;
       persistAndRender(() => session.finishWorkout());
       submitWorkout();
