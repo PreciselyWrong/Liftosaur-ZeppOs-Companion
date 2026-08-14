@@ -140,13 +140,14 @@ export function buildWorkoutCommands(completedSets, { finish = false } = {}) {
  * what the user did — no `target:`, no progression — because those are the
  * playground's to compute. At finish the whole text is replaced by the record
  * the playground returns, so nothing here can end up authoritative.
+ *
+ * It deliberately writes **no `duration:`**. Liftosaur derives the end of a
+ * workout from it — `endTime = durationSec != null ? startTime + durationSec :
+ * undefined` — so a record carrying a duration is a finished workout. Omitting
+ * it leaves `endTime` undefined, which is what an ongoing session looks like.
+ * The duration is stated once, at finish, when it is actually known.
  */
-export function buildProgressRecord({
-  plan,
-  completedSets = [],
-  startedAt = null,
-  durationSeconds = null,
-} = {}) {
+export function buildProgressRecord({ plan, completedSets = [], startedAt = null } = {}) {
   if (!plan || !Array.isArray(plan.exercises)) return null;
 
   const byExercise = new Map();
@@ -186,7 +187,7 @@ export function buildProgressRecord({
     dayName: plan.dayName,
     week: plan.week,
     dayInWeek: plan.dayInWeek,
-    durationSeconds,
+    durationSeconds: null,
     exercises,
   });
 }

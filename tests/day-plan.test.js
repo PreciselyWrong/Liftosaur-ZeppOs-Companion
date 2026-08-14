@@ -122,7 +122,6 @@ test('groups a live record by exercise even when the user jumped around', () => 
   const text = buildProgressRecord({
     plan,
     startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
-    durationSeconds: 600,
     completedSets: [
       { exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' },
       { exerciseIndex: 2, setIndex: 1, weight: 17.5, reps: 8, rpe: 8, unit: 'kg' },
@@ -132,8 +131,21 @@ test('groups a live record by exercise even when the user jumped around', () => 
 
   assert.ok(text.includes('Lat Pulldown / 2x10 60kg @8'), 'both Lat Pulldown sets on one line');
   assert.ok(text.includes('Incline Curl / 1x8 17.5kg @8'));
-  assert.ok(text.includes('duration: 600s'));
   assert.ok(text.startsWith('2026-08-14T09:00:00.000Z /'));
+});
+
+test('a live record carries no duration, so Liftosaur reads it as ongoing', () => {
+  // Liftosaur derives the end of a workout from the duration:
+  //   endTime = durationSec != null ? startTime + durationSec * 1000 : undefined
+  // A record stating a duration is a finished workout. This one must not.
+  const plan = buildDayPlan(PROBE_RESPONSE);
+  const text = buildProgressRecord({
+    plan,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' }],
+  });
+
+  assert.ok(!text.includes('duration:'), 'an ongoing session has no duration yet');
 });
 
 test('a live record states no target, because progression is the server\'s to compute', () => {

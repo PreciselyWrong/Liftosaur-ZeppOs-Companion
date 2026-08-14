@@ -359,8 +359,21 @@ function persistAndRender(action, { sync = false } = {}) {
     action();
     persistSession();
   }
+  // The sync is scheduled on a fresh tick rather than called here. `renderUI`
+  // deletes every widget, including the button whose click handler is running,
+  // and the runtime may abandon the rest of that handler — which is how the
+  // per-set sync ended up never being reached at all.
+  if (sync) scheduleSync();
   renderUI();
-  if (sync) syncProgress();
+}
+
+function scheduleSync() {
+  try {
+    setTimeout(syncProgress, 0);
+  } catch (err) {
+    console.log('[liftosaur] could not schedule sync:', err?.message || String(err));
+    syncProgress();
+  }
 }
 
 /**
@@ -386,7 +399,8 @@ function syncProgress() {
     week: dayPlan.week,
     day: dayPlan.dayInWeek,
     startedAt: view.startedAt,
-    durationSeconds: view.elapsedSeconds,
+    // No duration is sent: stating one would give the record an endTime and
+    // make Liftosaur read the session as finished. It is stated at finish only.
     completedSets: session.getCompletedSets(),
     // The Side Service is not a long-lived process, so the watch carries the
     // two things it cannot be trusted to remember: what the day contains, and
