@@ -661,3 +661,46 @@ test('exercise notes are exposed in active set and rest views', () => {
   assert.equal(restView.rest.nextExerciseNotes, 'Banc a 30 degres');
 });
 
+test('pausing rest pauses the global workout elapsed time', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Bench Press',
+        sets: [
+          { index: 1, targetReps: 5, targetWeight: 80, restSeconds: 60 },
+          { index: 2, targetReps: 5, targetWeight: 80, restSeconds: 60 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 10_000 });
+
+  // 10s elapsed
+  assert.equal(session.view(20_000).elapsedSeconds, 10);
+
+  // Complete set 1 at 20_000
+  session.completeSet({ timestamp: 20_000 });
+  assert.equal(session.view(20_000).elapsedSeconds, 10);
+
+  // 5s of active rest: total elapsed = 15s
+  assert.equal(session.view(25_000).elapsedSeconds, 15);
+
+  // Pause rest at 25_000
+  session.pauseRest({ timestamp: 25_000 });
+
+  // While paused, 20s pass in wall clock time -> elapsed stays 15s
+  assert.equal(session.view(35_000).elapsedSeconds, 15);
+  assert.equal(session.view(45_000).elapsedSeconds, 15);
+
+  // Resume rest at 45_000
+  session.resumeRest({ timestamp: 45_000 });
+
+  // 5s after resume -> elapsed = 20s
+  assert.equal(session.view(50_000).elapsedSeconds, 20);
+});
+
