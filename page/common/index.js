@@ -9,19 +9,60 @@ import {
 } from '../../shared/workout-session.js';
 import { createSessionStore } from '../../shared/session-storage.js';
 
-// ── Prescription Mock (Phase 1 Slice) ────────────────────────────────────────
+// ── Liftosaur Theme Palette ──────────────────────────────────────────────────
 
-const BENCH_PRESS_MOCK = {
-  id: 'mock-bench-press',
-  name: 'Bench Press',
-  sets: [
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
+const THEME = {
+  bg: 0x0a0a0a,
+  surface: 0x1e1e1e,
+  buttonBg: 0x2a2a2a,
+  buttonPress: 0x3d3d3d,
+  primary: 0x2196f3,       // Liftosaur Accent Blue
+  primaryPress: 0x1976d2,
+  success: 0x4caf50,       // Liftosaur Complete Green
+  successPress: 0x388e3c,
+  amber: 0xffb74d,         // Set count highlight
+  textWhite: 0xffffff,
+  textMuted: 0x9e9e9e,
+  textDim: 0x616161,
+};
+
+// ── Mock Workout (Multi-Exercise Day) ────────────────────────────────────────
+
+const WORKOUT_MOCK = {
+  id: 'workout-push-day',
+  name: 'Push Workout',
+  exercises: [
+    {
+      id: 'bench-press',
+      name: 'Bench Press',
+      sets: [
+        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
+        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
+        { targetReps: 10, targetWeight: 60, restSeconds: 90 },
+      ],
+    },
+    {
+      id: 'overhead-press',
+      name: 'Overhead Press',
+      sets: [
+        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
+        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
+        { targetReps: 8, targetWeight: 40, restSeconds: 90 },
+      ],
+    },
+    {
+      id: 'triceps-pushdown',
+      name: 'Triceps Pushdown',
+      sets: [
+        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
+        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
+        { targetReps: 12, targetWeight: 25, restSeconds: 60 },
+      ],
+    },
   ],
 };
 
-// ── In-Memory / Local Storage Fallback ────────────────────────────────────────
+// ── Persistent Storage Adapter ───────────────────────────────────────────────
 
 let storageData = null;
 const localStoreAdapter = {
@@ -40,7 +81,7 @@ const sessionStore = createSessionStore(localStoreAdapter);
 // ── State variables ──────────────────────────────────────────────────────────
 
 let session = createWorkoutSession({
-  exercise: BENCH_PRESS_MOCK,
+  workout: WORKOUT_MOCK,
   initialJournal: sessionStore.loadJournal(),
 });
 
@@ -91,31 +132,83 @@ function renderUI() {
   const view = session.view(now);
 
   // Background
-  addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: 0x000000 });
+  addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Top Header: Title & HR
+  // Top Bar: Heart Rate & Workout Progress
   addWidget(widget.TEXT, {
     x: 0,
-    y: px(35),
+    y: px(15),
     w: W,
-    h: px(40),
-    color: 0x888888,
-    text_size: px(24),
+    h: px(35),
+    color: THEME.textMuted,
+    text_size: px(22),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${view.exerciseName} • HR ${liveHr}`,
+    text: `HR ${liveHr} • ${view.workoutName}`,
   });
+
+  // Exercise Navigation Bar [<] [ Exercise Name (X/Y) ] [>]
+  const exNum = view.currentExerciseIndex + 1;
+  const hasPrevEx = view.currentExerciseIndex > 0;
+  const hasNextEx = view.currentExerciseIndex + 1 < view.totalExercises;
+
+  if (hasPrevEx) {
+    addWidget(widget.BUTTON, {
+      x: px(15),
+      y: px(50),
+      w: px(45),
+      h: px(45),
+      radius: px(22),
+      normal_color: THEME.surface,
+      press_color: THEME.buttonPress,
+      text: '<',
+      text_size: px(24),
+      click_func: () => {
+        persistAndRender(() => session.prevExercise());
+      },
+    });
+  }
+
+  addWidget(widget.TEXT, {
+    x: px(65),
+    y: px(50),
+    w: px(350),
+    h: px(45),
+    color: THEME.primary,
+    text_size: px(26),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: `${view.exerciseName} (${exNum}/${view.totalExercises})`,
+  });
+
+  if (hasNextEx) {
+    addWidget(widget.BUTTON, {
+      x: px(420),
+      y: px(50),
+      w: px(45),
+      h: px(45),
+      radius: px(22),
+      normal_color: THEME.surface,
+      press_color: THEME.buttonPress,
+      text: '>',
+      text_size: px(24),
+      click_func: () => {
+        persistAndRender(() => session.nextExercise());
+      },
+    });
+  }
 
   if (view.state === SESSION_STATES.READY) {
     // ── READY SCREEN ──
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(130),
+      y: px(140),
       w: W,
       h: px(60),
-      color: 0xffffff,
-      text_size: px(38),
+      color: THEME.textWhite,
+      text_size: px(36),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -124,25 +217,25 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(200),
+      y: px(205),
       w: W,
-      h: px(45),
-      color: 0xaaaaaa,
-      text_size: px(26),
+      h: px(40),
+      color: THEME.textMuted,
+      text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: '3 sets × 10 reps @ 60 kg',
+      text: `${view.totalExercises} exercises planned`,
     });
 
     addWidget(widget.BUTTON, {
-      x: px(100),
+      x: px(90),
       y: px(290),
-      w: px(280),
+      w: px(300),
       h: px(85),
       radius: px(42),
-      normal_color: 0x1e88e5,
-      press_color: 0x1565c0,
+      normal_color: THEME.primary,
+      press_color: THEME.primaryPress,
       text: 'START WORKOUT',
       text_size: px(28),
       click_func: () => {
@@ -155,11 +248,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(85),
+      y: px(100),
       w: W,
-      h: px(45),
-      color: 0xffb300,
-      text_size: px(28),
+      h: px(40),
+      color: THEME.amber,
+      text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -169,12 +262,12 @@ function renderUI() {
     // Weight Controls: [-2.5] [ 60 kg ] [+2.5]
     addWidget(widget.BUTTON, {
       x: px(45),
-      y: px(140),
+      y: px(145),
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: 0x263238,
-      press_color: 0x37474f,
+      normal_color: THEME.buttonBg,
+      press_color: THEME.buttonPress,
       text: '-2.5',
       text_size: px(24),
       click_func: () => {
@@ -184,10 +277,10 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(130),
-      y: px(140),
+      y: px(145),
       w: px(220),
       h: px(60),
-      color: 0xffffff,
+      color: THEME.textWhite,
       text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -197,12 +290,12 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(360),
-      y: px(140),
+      y: px(145),
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: 0x263238,
-      press_color: 0x37474f,
+      normal_color: THEME.buttonBg,
+      press_color: THEME.buttonPress,
       text: '+2.5',
       text_size: px(24),
       click_func: () => {
@@ -217,8 +310,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: 0x263238,
-      press_color: 0x37474f,
+      normal_color: THEME.buttonBg,
+      press_color: THEME.buttonPress,
       text: '-1',
       text_size: px(26),
       click_func: () => {
@@ -231,7 +324,7 @@ function renderUI() {
       y: px(215),
       w: px(220),
       h: px(60),
-      color: 0xffffff,
+      color: THEME.textWhite,
       text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -245,8 +338,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: 0x263238,
-      press_color: 0x37474f,
+      normal_color: THEME.buttonBg,
+      press_color: THEME.buttonPress,
       text: '+1',
       text_size: px(26),
       click_func: () => {
@@ -254,15 +347,15 @@ function renderUI() {
       },
     });
 
-    // Complete Set Button
+    // Complete Set Button (Liftosaur Green)
     addWidget(widget.BUTTON, {
       x: px(90),
       y: px(315),
       w: px(300),
       h: px(85),
       radius: px(42),
-      normal_color: 0x2e7d32,
-      press_color: 0x1b5e20,
+      normal_color: THEME.success,
+      press_color: THEME.successPress,
       text: 'COMPLETE SET',
       text_size: px(28),
       click_func: () => {
@@ -272,14 +365,17 @@ function renderUI() {
     });
   } else if (view.state === SESSION_STATES.REST) {
     // ── REST SCREEN ──
-    const nextSetNum = view.currentSetIndex + 2;
+    const isTransition = view.rest?.isTransitionToNextExercise;
+    const subtitle = isTransition
+      ? `Next Exercise (${exNum + 1}/${view.totalExercises})`
+      : `Next: Set ${view.currentSetIndex + 2} of ${view.totalSets}`;
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(90),
+      y: px(95),
       w: W,
-      h: px(40),
-      color: 0x29b6f6,
+      h: px(35),
+      color: THEME.primary,
       text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -289,10 +385,10 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(145),
+      y: px(140),
       w: W,
       h: px(80),
-      color: 0xffffff,
+      color: THEME.textWhite,
       text_size: px(56),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -302,15 +398,15 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(240),
+      y: px(235),
       w: W,
       h: px(40),
-      color: 0x888888,
+      color: THEME.textMuted,
       text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `Next: Set ${nextSetNum} (60 kg × 10)`,
+      text: subtitle,
     });
 
     addWidget(widget.BUTTON, {
@@ -319,9 +415,9 @@ function renderUI() {
       w: px(300),
       h: px(80),
       radius: px(40),
-      normal_color: 0x37474f,
-      press_color: 0x455a64,
-      text: 'SKIP REST',
+      normal_color: THEME.buttonBg,
+      press_color: THEME.buttonPress,
+      text: isTransition ? 'NEXT EXERCISE' : 'SKIP REST',
       text_size: px(28),
       click_func: () => {
         stopRestTimer();
@@ -335,7 +431,7 @@ function renderUI() {
       y: px(120),
       w: W,
       h: px(60),
-      color: 0x4caf50,
+      color: THEME.success,
       text_size: px(38),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -348,12 +444,12 @@ function renderUI() {
       y: px(195),
       w: W,
       h: px(45),
-      color: 0xaaaaaa,
-      text_size: px(28),
+      color: THEME.textMuted,
+      text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.completedSets.length} sets completed`,
+      text: `${view.allCompletedSets.length} sets completed`,
     });
 
     addWidget(widget.BUTTON, {
@@ -362,13 +458,13 @@ function renderUI() {
       w: px(260),
       h: px(80),
       radius: px(40),
-      normal_color: 0x1e88e5,
-      press_color: 0x1565c0,
+      normal_color: THEME.primary,
+      press_color: THEME.primaryPress,
       text: 'RESET',
       text_size: px(28),
       click_func: () => {
         sessionStore.clearSession();
-        session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
+        session = createWorkoutSession({ workout: WORKOUT_MOCK });
         stopRestTimer();
         renderUI();
       },
