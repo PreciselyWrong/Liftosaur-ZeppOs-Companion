@@ -1,5 +1,5 @@
 /**
- * Guards the app.json invariants that the Workout Extension depends on.
+ * Guards the app.json invariants for the standalone Liftosaur mini program.
  * These are cheap to break by hand and expensive to notice on a watch.
  */
 import test from 'node:test';
@@ -11,11 +11,11 @@ const appJson = JSON.parse(
   fs.readFileSync(path.join(import.meta.dirname, '..', 'app.json'), 'utf8'),
 );
 
-const widgets = appJson.targets.common.module['data-widget'].widgets;
+const pages = appJson.targets.common.module.page.pages;
 
-test('declares a workout extension', () => {
+test('declares a standalone mini program', () => {
   assert.equal(appJson.app.appType, 'app');
-  assert.equal(appJson.app.extType, 'workout');
+  assert.equal(appJson.app.extType, undefined, 'extType must be absent — this is not a Workout Extension');
   assert.equal(appJson.configVersion, 'v3');
 });
 
@@ -28,30 +28,18 @@ test('targets API_LEVEL 3.6 or above', () => {
   const { minVersion } = appJson.runtime.apiVersion;
   assert.ok(
     parseFloat(minVersion) >= 3.6,
-    `minVersion ${minVersion} is below the 3.6 required by Workout Extensions`,
+    `minVersion ${minVersion} is below 3.6`,
   );
 });
 
-test('declares exactly one widget, as the platform requires', () => {
-  assert.equal(widgets.length, 1);
+test('declares at least one page', () => {
+  assert.ok(Array.isArray(pages) && pages.length >= 1);
 });
 
-test('the widget is a workout extension ability', () => {
-  const abilities = widgets[0].runtime.ability;
-  assert.equal(abilities.length, 1);
-  assert.equal(abilities[0].type, 1);
-  assert.ok(Array.isArray(abilities[0].subType));
-});
-
-test('the widget entry point exists on disk', () => {
-  const entry = path.join(import.meta.dirname, '..', `${widgets[0].path}.js`);
-  assert.ok(fs.existsSync(entry), `missing widget entry ${entry}`);
-});
-
-test('every locale names the widget', () => {
-  for (const [locale, block] of Object.entries(appJson.i18n)) {
-    const name = block['data-widget'].widgets[0].name;
-    assert.ok(name && name.length > 0, `locale ${locale} has no widget name`);
+test('every page entry point exists on disk', () => {
+  for (const page of pages) {
+    const entry = path.join(import.meta.dirname, '..', `${page}.js`);
+    assert.ok(fs.existsSync(entry), `missing page entry ${entry}`);
   }
 });
 
