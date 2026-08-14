@@ -231,7 +231,18 @@ function formatDots(dots) {
     .join(' ');
 }
 
+function getHeartRateColor(hrVal) {
+  const bpm = parseInt(hrVal, 10);
+  if (isNaN(bpm) || bpm <= 0) return THEME.textSecondary;
+  if (bpm < 115) return 0xffffff; // Zone 1: Blanc (< 115 bpm)
+  if (bpm < 140) return 0x2bdc9b; // Zone 2: Vert (115 - 139 bpm - Endurance)
+  if (bpm < 160) return 0xffd820; // Zone 3: Jaune (140 - 159 bpm - Cardio aérobie)
+  if (bpm < 175) return 0xff8066; // Zone 4: Orange/Rouge (160 - 174 bpm - Seuil cardio 3-4)
+  return 0xff3333;                // Zone 5: Rouge vif (>= 175 bpm - Effort max)
+}
+
 function triggerVibration() {
+
   try {
     if (!vibrator) {
       vibrator = new Vibrator();
@@ -344,16 +355,29 @@ function renderUI() {
     });
 
     addWidget(widget.TEXT, {
-      x: px(130),
+      x: px(126),
       y: px(45),
-      w: px(240),
+      w: px(120),
       h: px(40),
       color: THEME.primaryLight,
       text_size: px(20),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+      text: `▶ ${formatSeconds(view.elapsedSeconds)}`,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(246),
+      y: px(45),
+      w: px(120),
+      h: px(40),
+      color: getHeartRateColor(liveHr),
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `♥ ${liveHr}`,
     });
 
     const cardH = px(68);
@@ -393,17 +417,31 @@ function renderUI() {
   // ── 2. READY SCREEN ──
   if (view.state === SESSION_STATES.READY) {
     addWidget(widget.TEXT, {
-      x: 0,
+      x: px(65),
       y: px(45),
-      w: W,
+      w: px(210),
       h: px(30),
       color: THEME.textSecondary,
       text_size: px(20),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `New Workout • HR ${liveHr}`,
+      text: 'New Workout',
     });
+
+    addWidget(widget.TEXT, {
+      x: px(275),
+      y: px(45),
+      w: px(140),
+      h: px(30),
+      color: getHeartRateColor(liveHr),
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `♥ ${liveHr}`,
+    });
+
 
     addWidget(widget.FILL_RECT, {
       x: px(65),
@@ -561,15 +599,29 @@ function renderUI() {
     addWidget(widget.TEXT, {
       x: px(126),
       y: px(45),
-      w: px(240),
+      w: px(120),
       h: px(40),
       color: THEME.primaryLight,
       text_size: px(20),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+      text: `▶ ${formatSeconds(view.elapsedSeconds)}`,
     });
+
+    addWidget(widget.TEXT, {
+      x: px(246),
+      y: px(45),
+      w: px(120),
+      h: px(40),
+      color: getHeartRateColor(liveHr),
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `♥ ${liveHr}`,
+    });
+
 
     // Superset pill (if present)
     let titleY = px(90);
@@ -866,17 +918,31 @@ function renderUI() {
     }
 
     addWidget(widget.TEXT, {
-      x: 0,
+      x: px(126),
       y: px(45),
-      w: W,
+      w: px(120),
       h: px(28),
-      color: THEME.textSecondary,
+      color: THEME.primaryLight,
       text_size: px(19),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+      text: `▶ ${formatSeconds(view.elapsedSeconds)}`,
     });
+
+    addWidget(widget.TEXT, {
+      x: px(246),
+      y: px(45),
+      w: px(120),
+      h: px(28),
+      color: getHeartRateColor(liveHr),
+      text_size: px(19),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `♥ ${liveHr}`,
+    });
+
 
     addWidget(widget.TEXT, {
       x: 0,
