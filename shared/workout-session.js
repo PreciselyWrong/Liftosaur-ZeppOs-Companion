@@ -126,6 +126,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
 
         const completed = {
           exerciseIndex: currentExerciseIndex,
+          exerciseName: ex.name,
           setIndex: prog.currentSetIndex,
           weight: prog.currentWeight,
           reps: prog.currentReps,
@@ -356,7 +357,12 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
       }
 
       // Total Volume calculation (sum of reps * weight across all completed sets)
-      const allCompletedSets = exerciseProgress.flatMap((p) => p.completedSets);
+      const allCompletedSets = exerciseProgress.flatMap((p, idx) =>
+        p.completedSets.map((s) => ({
+          ...s,
+          exerciseName: s.exerciseName || exercises[idx]?.name || `Exercise ${idx + 1}`,
+        }))
+      );
       const totalVolume = allCompletedSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
 
       // Set status dots for current exercise (e.g. ['completed', 'active', 'pending'])

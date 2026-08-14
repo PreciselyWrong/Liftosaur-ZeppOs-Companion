@@ -15,6 +15,7 @@ export function createSideRouter({
   historyProvider = null,
   playgroundSimulator = null,
   historySubmitter = null,
+  workoutAbandoner = null,
 } = {}) {
   const submittedHistoryCache = new Map();
 
@@ -233,6 +234,29 @@ export function createSideRouter({
               rawMessage,
               'HISTORY_SUBMIT_FAILED',
               err.message || 'Failed to submit workout history'
+            );
+          }
+        }
+
+        case MESSAGE_TYPES.ABANDON_WORKOUT: {
+          try {
+            const payload = rawMessage.payload || {};
+            if (workoutAbandoner) {
+              await workoutAbandoner(payload);
+            }
+            return createMessage({
+              type: MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE,
+              replyToId: rawMessage.messageId,
+              sessionId: rawMessage.sessionId,
+              payload: {
+                abandoned: true,
+              },
+            });
+          } catch (err) {
+            return createError(
+              rawMessage,
+              'ABANDON_FAILED',
+              err.message || 'Failed to abandon workout'
             );
           }
         }

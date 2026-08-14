@@ -161,5 +161,33 @@ test('router uses history to query playground with correct next week and day', a
   assert.equal(playgroundParamsReceived.day, 2);
 });
 
+test('router handles ABANDON_WORKOUT and invokes workoutAbandoner', async () => {
+  let abandonedPayload = null;
+  const router = createSideRouter({
+    workoutAbandoner: async (payload) => {
+      abandonedPayload = payload;
+      return { status: 'abandoned' };
+    },
+  });
+
+  const request = createMessage({
+    type: MESSAGE_TYPES.ABANDON_WORKOUT,
+    messageId: 'abandon-1',
+    sessionId: 'Squat Day',
+    payload: {
+      workoutName: 'Squat Day',
+      routineName: 'Liftosaur',
+      abandonedAt: 123456789,
+    },
+  });
+
+  const response = await router.handle(request);
+  assert.equal(response.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
+  assert.equal(response.replyToId, 'abandon-1');
+  assert.equal(response.payload.abandoned, true);
+  assert.equal(abandonedPayload.workoutName, 'Squat Day');
+});
+
+
 
 
