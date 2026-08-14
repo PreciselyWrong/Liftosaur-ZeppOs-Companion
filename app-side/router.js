@@ -12,7 +12,6 @@ export function createSideRouter({
   playgroundSimulator = null,
   historySubmitter = null,
 } = {}) {
-  // In-memory idempotency cache for history submissions (startedAt -> response)
   const submittedHistoryCache = new Map();
 
   return {
@@ -47,7 +46,7 @@ export function createSideRouter({
               });
             }
 
-            const requestedDayIndex = rawMessage.payload?.dayIndex ?? 0;
+            const requestedDayIndex = rawMessage.payload?.dayIndex ?? null;
             const programData = await programProvider();
 
             if (!programData) {
@@ -62,7 +61,34 @@ export function createSideRouter({
               });
             }
 
-            const parsedWorkout = parseLiftoscriptWorkout(programData, requestedDayIndex);
+            // Extract program text from API response
+            const programText =
+              programData.data?.text ||
+              programData.text ||
+              programData.program?.text ||
+              '';
+
+            let resolvedWorkoutText = null;
+
+            // 1. Ask Liftosaur Cloud Playground to compute the official next workout
+            if (playgroundSimulator && programText) {
+              try {
+                const playgroundRes = await playgroundSimulator({
+                  programText,
+                  day: requestedDayIndex !== null ? requestedDayIndex + 1 : null,
+                });
+                if (playgroundRes?.data?.workout) {
+                  resolvedWorkoutText = playgroundRes.data.workout;
+                }
+              } catch (simErr) {
+                console.log('[liftosaur-router] playground resolution fallback to local parser:', simErr?.message || String(simErr));
+              }
+            }
+
+            // 2. Parse resolved workout text (or fallback to full program text)
+            const inputToParse = resolvedWorkoutText || programData;
+            const parsedWorkout = parseLiftoscriptWorkout(inputToParse, requestedDayIndex);
+
             return createMessage({
               type: MESSAGE_TYPES.WORKOUT_DATA,
               replyToId: rawMessage.messageId,
@@ -82,15 +108,13 @@ export function createSideRouter({
           }
         }
 
-
-
         case MESSAGE_TYPES.SYNC_JOURNAL: {
           try {
             const journal = rawMessage.payload?.journal || [];
             let simulationResult = null;
 
             if (playgroundSimulator) {
-              simulationResult = await playgroundSimulator(journal);
+              simulationResult = await playgroundSimulator({ journal });
             }
 
             return createMessage({
@@ -117,7 +141,6 @@ export function createSideRouter({
             const history = rawMessage.payload || {};
             const deduplicationKey = String(history.startedAt || history.workoutId || rawMessage.sessionId);
 
-            // Idempotency check: return cached success if already submitted
             if (submittedHistoryCache.has(deduplicationKey)) {
               return createMessage({
                 type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE,
