@@ -265,6 +265,52 @@ test('parseLiftoscriptWorkout handles arbitrary slash ordering with rest, RPE, a
   assert.equal(ex.sets[0].targetRpe, 9);
 });
 
+test('parseLiftoscriptWorkout cleans markdown bullets, tier tags, and bold formatting', () => {
+  const text = `
+    # Push Day
+    - **Barbell Bench Press** / 3x5 / 80kg
+    * T1: Overhead Press / 3x8 / 45kg
+    1. Incline Dumbbell Press 3x10 24kg
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.exercises.length, 3);
+  assert.equal(workout.exercises[0].name, 'Barbell Bench Press');
+  assert.equal(workout.exercises[0].sets[0].targetWeight, 80);
+  assert.equal(workout.exercises[1].name, 'Overhead Press');
+  assert.equal(workout.exercises[1].sets[0].targetWeight, 45);
+  assert.equal(workout.exercises[2].name, 'Incline Dumbbell Press');
+  assert.equal(workout.exercises[2].sets[0].targetWeight, 24);
+});
+
+test('parseLiftoscriptWorkout parses DSL with inner custom progress braces without truncation', () => {
+  const text = `
+    day("Squat Day") {
+      Squat / 3x5 140kg / progress: custom() {
+        if (completedReps >= 5) {
+          state.weight += 2.5;
+        }
+      }
+      Leg Press / 3x10 200kg
+    }
+    day("Bench Day") {
+      Bench Press / 3x5 100kg
+    }
+  `;
+  const workout = parseLiftoscriptWorkout({ text });
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Squat');
+  assert.equal(workout.exercises[0].sets[0].targetWeight, 140);
+  assert.equal(workout.exercises[1].name, 'Leg Press');
+  assert.equal(workout.exercises[1].sets[0].targetWeight, 200);
+
+  // Day 2 check
+  const day2 = parseLiftoscriptWorkout({ text }, 1);
+  assert.equal(day2.name, 'Bench Day');
+  assert.equal(day2.exercises.length, 1);
+  assert.equal(day2.exercises[0].name, 'Bench Press');
+});
+
+
 
 
 

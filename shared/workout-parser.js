@@ -101,8 +101,10 @@ export function resolveNextProgramSession({
     targetIndex = Math.max(0, Math.min(requestedDayIndex, totalDays - 1));
   } else {
     // Determine next workout from history records
-    targetIndex = findNextDayIndexFromHistory(days, historyRecords, programName);
-    if (targetIndex === null || targetIndex === undefined) {
+    const historyIndex = findNextDayIndexFromHistory(days, historyRecords, programName);
+    if (historyIndex !== null && historyIndex !== undefined) {
+      targetIndex = historyIndex;
+    } else {
       targetIndex = resolveNextDayIndexFromState(days, programState, programText);
     }
   }
@@ -116,20 +118,24 @@ export function resolveNextProgramSession({
     exercises: [getDefaultFallbackExercise()],
   };
 
+  const finalExercises = activeDay.exercises && activeDay.exercises.length > 0
+    ? activeDay.exercises
+    : [getDefaultFallbackExercise()];
+
   return {
     dayIndex: safeIndex,
     dayName: activeDay.name || programName,
     fullName: activeDay.fullName || activeDay.name || programName,
     week: activeDay.weekNumber || 1,
     dayInWeek: activeDay.dayNumber || 1,
-    exercises: activeDay.exercises && activeDay.exercises.length > 0 ? activeDay.exercises : [getDefaultFallbackExercise()],
+    exercises: finalExercises,
     totalDays,
     availableDays: days.map((d) => d.fullName || d.name),
   };
 }
 
 export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
-  const isDslFormat = /day\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText) || /week\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText);
+  const isDslFormat = /\bday\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText) || /\bweek\s*\(\s*["']?[^"')]+["']?\s*\)\s*\{/i.test(rawText);
 
   if (isDslFormat) {
     const dslWeeks = parseDslStructure(rawText, defaultName);
@@ -175,7 +181,7 @@ export function extractProgramStructure(rawText = '', defaultName = 'Workout') {
   };
 
   return {
-    weeks: [{ weekNumber: 1, name: 'Week 1', days: [singleDay] }],
+    weeks: [{ weekNumber: 1, name: 'Week 1', days: [singleDay], hasExplicitWeekHeader: false }],
     flatDays: [singleDay],
   };
 }
@@ -187,7 +193,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
   let currentDay = null;
   let currentBodyLines = [];
 
-  // Track week-ranged exercises: dayKey -> list of { rawLine, fromWeek, toWeek }
+  // Track week-ranged exercises: { line, dayTitle, fromWeek, toWeek }
   const recurringExercises = [];
 
   function flushDay() {
@@ -197,7 +203,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
       // Extract any recurring exercises defined in this day
       for (const line of rawLines) {
-        const match = line.match(/^([^/]+?)\s*\[\s*([0-9]+)(?:\s*-\s*([0-9]+))?\s*\]/);
+        const match = line.match(/^([^/]+?)\s*\[\s*(?:[0-9]+\s*,\s*)?([0-9]+)(?:\s*-\s*([0-9]+))?\s*\]/);
         if (match) {
           const fromWeek = parseInt(match[2], 10);
           const toWeek = match[3] ? parseInt(match[3], 10) : fromWeek;
@@ -236,7 +242,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
-    if (!line) continue;
+    if (!line || line.startsWith('```')) continue;
 
     // Check for # Week X or ## Week X
     const weekHeading = line.match(/^#{1,2}\s+(Week\s+([0-9A-Za-z]+).*)$/i);
@@ -267,7 +273,7 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
     if (currentDay) {
       currentBodyLines.push(line);
-    } else if (line.includes('/') || line.includes('@')) {
+    } else if (line.includes('/') || line.includes('@') || line.match(/[0-9]+\s*x\s*[0-9]+/i)) {
       if (!currentDay) {
         currentDay = { title: defaultName || 'Day 1' };
       }
@@ -277,13 +283,14 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
 
   flushWeek();
 
-  // Now compile exercises for each day, including inherited recurring exercises
+  // Compile exercises for each day, including inherited recurring exercises
   const weeks = [];
 
   for (const w of rawWeeks) {
     const weekObj = {
       weekNumber: w.weekNumber,
       name: w.name,
+      hasExplicitWeekHeader: Boolean(w.hasExplicitWeekHeader),
       days: [],
     };
 
@@ -322,62 +329,59 @@ function parseMarkdownStructure(rawText, defaultName = 'Workout') {
   return weeks;
 }
 
-function parseDslStructure(rawText, defaultName) {
+function parseDslStructure(rawText, defaultName = 'Workout') {
   const weeks = [];
   const flatDays = [];
 
-  const weekBlockRegex = /week(?:\s*\(\s*["']?([^"')]+)["']?\s*\))?\s*\{([\s\S]*?)\n\s*\}/gi;
-  let weekMatch;
-  let foundAnyWeek = false;
+  // 1. Extract week(...) { ... } outer blocks with brace matching
+  const weekBlocks = extractDslBlocks(rawText, 'week');
 
-  while ((weekMatch = weekBlockRegex.exec(rawText)) !== null) {
-    foundAnyWeek = true;
-    const weekTitle = (weekMatch[1] || `Week ${weeks.length + 1}`).trim();
-    const rawNum = parseInt(weekTitle.replace(/[^0-9]/g, ''), 10);
-    const weekNumber = !isNaN(rawNum) && rawNum > 0 ? rawNum : weeks.length + 1;
-    const weekBody = weekMatch[2] || '';
+  if (weekBlocks.length > 0) {
+    weekBlocks.forEach((wBlock, wIdx) => {
+      const weekTitle = wBlock.title || `Week ${wIdx + 1}`;
+      const rawNum = parseInt(weekTitle.replace(/[^0-9]/g, ''), 10);
+      const weekNumber = !isNaN(rawNum) && rawNum > 0 ? rawNum : wIdx + 1;
 
-    const weekObj = {
-      weekNumber,
-      name: weekTitle,
-      days: [],
-    };
+      const weekObj = {
+        weekNumber,
+        name: weekTitle,
+        hasExplicitWeekHeader: true,
+        days: [],
+      };
 
-    const dayRegex = /day(?:\s*\(\s*["']?([^"')]+)["']?\s*\))?\s*\{([^}]*)\}/gi;
-    let dayMatch;
+      const dayBlocks = extractDslBlocks(wBlock.body, 'day');
+      dayBlocks.forEach((dBlock, dIdx) => {
+        const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
+        const exercises = parseExercisesFromBody(dBlock.body, weekNumber);
+        if (exercises.length > 0) {
+          const dayNumber = dIdx + 1;
+          const dayObj = {
+            name: dayTitle,
+            fullName: `${weekTitle} - ${dayTitle}`,
+            weekNumber,
+            dayNumber,
+            globalIndex: flatDays.length,
+            exercises,
+          };
+          weekObj.days.push(dayObj);
+          flatDays.push(dayObj);
+        }
+      });
 
-    while ((dayMatch = dayRegex.exec(weekBody)) !== null) {
-      const daySubTitle = (dayMatch[1] || `Day ${weekObj.days.length + 1}`).trim();
-      const exercises = parseExercisesFromBody(dayMatch[2], weekNumber);
-      if (exercises.length > 0) {
-        const dayNumber = weekObj.days.length + 1;
-        const dayObj = {
-          name: daySubTitle,
-          fullName: `${weekTitle} - ${daySubTitle}`,
-          weekNumber,
-          dayNumber,
-          globalIndex: flatDays.length,
-          exercises,
-        };
-        weekObj.days.push(dayObj);
-        flatDays.push(dayObj);
+      if (weekObj.days.length > 0) {
+        weeks.push(weekObj);
       }
-    }
-
-    if (weekObj.days.length > 0) {
-      weeks.push(weekObj);
-    }
+    });
   }
 
-  if (!foundAnyWeek || flatDays.length === 0) {
-    const dayBlockRegex = /day(?:\s*\(\s*["']?([^"')]+)["']?\s*\))?\s*\{([^}]*)\}/gi;
-    let match;
-
-    while ((match = dayBlockRegex.exec(rawText)) !== null) {
-      const dayTitle = (match[1] || `Day ${flatDays.length + 1}`).trim();
-      const exercises = parseExercisesFromBody(match[2], 1);
+  // 2. If no weeks, extract top-level day(...) { ... } blocks
+  if (flatDays.length === 0) {
+    const dayBlocks = extractDslBlocks(rawText, 'day');
+    dayBlocks.forEach((dBlock, dIdx) => {
+      const dayTitle = dBlock.title || `Day ${dIdx + 1}`;
+      const exercises = parseExercisesFromBody(dBlock.body, 1);
       if (exercises.length > 0) {
-        const dayNumber = flatDays.length + 1;
+        const dayNumber = dIdx + 1;
         const dayObj = {
           name: dayTitle,
           fullName: dayTitle,
@@ -388,17 +392,62 @@ function parseDslStructure(rawText, defaultName) {
         };
         flatDays.push(dayObj);
       }
+    });
+
+    if (flatDays.length > 0) {
+      weeks.push({
+        weekNumber: 1,
+        name: 'Week 1',
+        hasExplicitWeekHeader: false,
+        days: flatDays,
+      });
     }
   }
 
   return { weeks, flatDays };
 }
 
+function extractDslBlocks(text, keyword) {
+  const blocks = [];
+  const regex = new RegExp(`\\b${keyword}(?:\\s*\\(\\s*["']?([^"')]+)["']?\\s*\\))?\\s*\\{`, 'gi');
+  let match;
+
+  while ((match = regex.exec(text)) !== null) {
+    const title = match[1] ? match[1].trim() : '';
+    const startIndex = match.index + match[0].length;
+    let depth = 1;
+    let endIndex = startIndex;
+
+    while (endIndex < text.length && depth > 0) {
+      const char = text[endIndex];
+      if (char === '{') {
+        depth++;
+      } else if (char === '}') {
+        depth--;
+      }
+      endIndex++;
+    }
+
+    if (depth === 0) {
+      const body = text.slice(startIndex, endIndex - 1);
+      blocks.push({
+        title,
+        body,
+        startIndex: match.index,
+        endIndex,
+      });
+      regex.lastIndex = endIndex;
+    }
+  }
+
+  return blocks;
+}
+
 function parseExercisesFromBody(bodyText, targetWeek = null) {
   const lines = bodyText
     .split('\n')
     .map((l) => l.trim())
-    .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'));
+    .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//') && !l.startsWith('```'));
 
   const exercises = [];
 
@@ -419,10 +468,11 @@ function parseExercisesFromBody(bodyText, targetWeek = null) {
 }
 
 function isScriptCodeLine(line) {
-  if (line.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/i)) {
+  const clean = line.trim();
+  if (clean.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/i)) {
     return true;
   }
-  if (line.includes('exercises:') || line.includes('dayName:') || line.includes('program:')) {
+  if (clean.includes('exercises:') || clean.includes('dayName:') || clean.includes('program:')) {
     return true;
   }
 
@@ -444,12 +494,9 @@ function isScriptCodeLine(line) {
     'timer =',
     'reps =',
     'weight =',
-    '{',
-    '}',
-    ';',
   ];
 
-  const lower = line.toLowerCase();
+  const lower = clean.toLowerCase();
   for (const kw of codeKeywords) {
     if (lower.startsWith(kw) || lower === kw) {
       return true;
@@ -460,35 +507,79 @@ function isScriptCodeLine(line) {
     return true;
   }
 
-  if (!line.includes('/') && !line.includes('@') && !line.match(/[0-9]+\s*x\s*[0-9]+/i)) {
+  if (clean === '{' || clean === '}' || clean === ';') {
+    return true;
+  }
+
+  // Must have some exercise-like token (slash, @, or sets notation like 3x5, or numbers)
+  if (!clean.includes('/') && !clean.includes('@') && !clean.includes(':') && !clean.match(/[0-9]+\s*x\s*[0-9]+/i)) {
     return true;
   }
 
   return false;
 }
 
+function cleanExerciseName(raw) {
+  let name = String(raw || '').trim();
+  // Strip Markdown bold/italic: **Name**, *Name*, _Name_, __Name__
+  name = name.replace(/^(\*\*|__|\*|_|~)+|(\*\*|__|\*|_|~)+$/g, '').trim();
+  // Strip quotes and outer parentheses: "Name", 'Name'
+  name = name.replace(/^["'(]+|["');]+$/g, '').trim();
+  // Strip leading list bullets/numbering: "- ", "* ", "1. ", "1) ", "• "
+  name = name.replace(/^[-*•\d+.)\]\s]+/, '').trim();
+  // Strip tier/tag prefixes: "t1: ", "t2: ", "tier 1: ", "tag1: ", "main: "
+  name = name.replace(/^(?:t\d+|tier\s*\d+|tag\s*\d+|main|accessory):\s*/i, '').trim();
+  return name;
+}
+
 function parseExerciseLine(line, index, targetWeek = null) {
   let supersetGroup = null;
   let supersetTag = null;
-  let cleanLine = line;
+  let cleanLine = line.trim();
 
-  // 1. Superset prefix: [SUPERSET A1] or [A]
-  const supersetMatch = cleanLine.match(/^\[(?:SUPERSET\s+)?([A-Za-z0-9]+)\]\s*(.*)$/i);
+  // Strip trailing comments (// comment or ; at end)
+  cleanLine = cleanLine.replace(/;\s*$/, '').replace(/\/\/.*$/, '').trim();
+
+  // 1. Superset prefix: [SUPERSET A1] or [A] or (A1)
+  const supersetMatch = cleanLine.match(/^[\[(](?:SUPERSET\s+)?([A-Za-z0-9]+)[\])]\s*(.*)$/i);
   if (supersetMatch) {
     const fullTag = supersetMatch[1].toUpperCase();
     supersetGroup = fullTag.charAt(0);
     supersetTag = `SUPERSET ${fullTag}`;
-    cleanLine = supersetMatch[2];
+    cleanLine = supersetMatch[2].trim();
   }
 
-  const parts = cleanLine.split('/').map((p) => p.trim());
+  let parts = [];
+
+  if (cleanLine.includes('/')) {
+    parts = cleanLine.split('/').map((p) => p.trim());
+  } else {
+    // Attempt splitting by colon or space before sets
+    const colonMatch = cleanLine.match(/^(.*?)\s*:\s*([0-9]+\s*x\s*.*)$/i);
+    if (colonMatch) {
+      parts = [colonMatch[1], colonMatch[2]];
+    } else {
+      const spaceSetsMatch = cleanLine.match(/^(.*?)\s+([0-9]+\s*x\s*[0-9]+.*)$/i);
+      if (spaceSetsMatch) {
+        parts = [spaceSetsMatch[1], spaceSetsMatch[2]];
+      } else {
+        parts = [cleanLine];
+      }
+    }
+  }
+
   if (parts.length === 0 || !parts[0]) return null;
 
-  let rawName = parts[0].replace(/^["'(]+|["');]+$/g, '').trim();
-  if (rawName.length === 0 || rawName === 'day' || rawName === 'week' || rawName === 'calib') return null;
+  let rawName = cleanExerciseName(parts[0]);
+  if (!rawName || rawName.length === 0) return null;
 
-  // 2. Week range in exercise name: e.g. "Bench Press[1-4]" or "Squat[2]"
-  const weekRangeMatch = rawName.match(/^(.*?)\[([0-9]+)(?:\s*-\s*([0-9]+))?\]$/);
+  const lowerName = rawName.toLowerCase();
+  if (lowerName === 'day' || lowerName === 'week' || lowerName.startsWith('calib') || lowerName.startsWith('setup')) {
+    return null;
+  }
+
+  // 2. Week range in exercise name: e.g. "Bench Press[1-4]" or "Squat[1, 1-4]" or "Squat[2]"
+  const weekRangeMatch = rawName.match(/^(.*?)\s*\[\s*(?:[0-9]+\s*,\s*)?([0-9]+)(?:\s*-\s*([0-9]+))?\s*\]$/);
   if (weekRangeMatch) {
     rawName = weekRangeMatch[1].trim();
     const fromWeek = parseInt(weekRangeMatch[2], 10);
@@ -496,10 +587,13 @@ function parseExerciseLine(line, index, targetWeek = null) {
 
     if (targetWeek !== null && targetWeek !== undefined) {
       if (targetWeek < fromWeek || targetWeek > toWeek) {
-        return null; // Exercise does not apply to the current target week
+        return null;
       }
     }
   }
+
+  rawName = cleanExerciseName(rawName);
+  if (!rawName) return null;
 
   // 3. Scan all parts (1 to n) for sets, weight, rest, and rpe
   let setsDefPart = null;
@@ -508,22 +602,22 @@ function parseExerciseLine(line, index, targetWeek = null) {
   let defaultRpe = null;
 
   for (let p = 1; p < parts.length; p++) {
-    const part = parts[p];
+    const part = parts[p].trim();
     const lower = part.toLowerCase();
 
-    if (lower.startsWith('progress:') || lower.startsWith('custom(') || lower.startsWith('state.')) {
+    if (lower.startsWith('progress:') || lower.startsWith('custom(') || lower.startsWith('state.') || lower.startsWith('reuse:')) {
       continue;
     }
 
-    if (lower.startsWith('rpe')) {
-      const rpeMatch = part.match(/rpe\s*:?\s*([0-9.]+)/i);
+    if (lower.startsWith('rpe') || lower.match(/^@\s*[0-9.]+\s*$/)) {
+      const rpeMatch = part.match(/rpe\s*:?\s*([0-9.]+)/i) || part.match(/^@\s*([0-9.]+)/);
       if (rpeMatch) {
         defaultRpe = parseFloat(rpeMatch[1]);
       }
       continue;
     }
 
-    if (lower.startsWith('rest') || lower.match(/^[0-9.]+\s*(?:s|sec|m|min)\b/i)) {
+    if (lower.startsWith('rest') || lower.startsWith('timer') || lower.match(/^[0-9.]+\s*(?:s|sec|m|min)\b/i)) {
       restSeconds = parseRestSeconds(part);
       continue;
     }
@@ -538,8 +632,8 @@ function parseExerciseLine(line, index, targetWeek = null) {
       continue;
     }
 
-    // Check if this part is an explicit weight: "135lb", "60kg", "135.5 lb", "@ 50kg", "bodyweight"
-    const isPureWeight = part.match(/^@?\s*([0-9.]+)\s*(?:kg|lbs?|kilograms?|pounds?)?$/i) || lower === 'bodyweight';
+    // Check if this part is an explicit weight: "135lb", "60kg", "135.5 lb", "@ 50kg", "@ 50", "bodyweight"
+    const isPureWeight = part.match(/^@?\s*([0-9.]+)\s*(?:kg|lbs?|kilograms?|pounds?|%)?$/i) || lower === 'bodyweight';
     if (isPureWeight && !part.match(/[0-9]+\s*x\s*[0-9]+/i)) {
       if (lower === 'bodyweight') {
         explicitWeight = 0;
@@ -550,10 +644,9 @@ function parseExerciseLine(line, index, targetWeek = null) {
       continue;
     }
 
-    // Check if this part defines sets/reps: "3x5", "3x5 @ 100kg", "3x5 135lb", "1x5, 1x5, 1x5+"
-    if (part.match(/[0-9]+\s*x\s*[0-9]+/i) || part.match(/^[0-9]+\s*x/i) || part.match(/[0-9]+\+/)) {
+    // Check if this part defines sets/reps: "3x5", "3x5 @ 100kg", "3x5 135lb", "1x5, 1x5, 1x5+", "12, 5, 5, 5"
+    if (part.match(/[0-9]+\s*x\s*[0-9]+/i) || part.match(/^[0-9]+\s*x/i) || part.match(/[0-9]+\+/) || part.match(/^[0-9]+(?:,\s*[0-9]+)+/)) {
       setsDefPart = part;
-      // Also check if weight is attached inline: "3x5 135lb" or "3x5 @ 60kg"
       const inlineWeight = part.match(/@\s*([0-9.]+)/i) || part.match(/\s+([0-9.]+)\s*(?:kg|lbs?)\b/i);
       if (inlineWeight) {
         explicitWeight = parseFloat(inlineWeight[1]);
@@ -583,7 +676,7 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
     return [
       {
         targetReps: 10,
-        targetWeight: defaultWeight || 20,
+        targetWeight: defaultWeight || 0,
         targetRpe: defaultRpe,
         restSeconds,
         isAmrap: false,
@@ -595,7 +688,6 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
   const setDefs = setsDefPart.split(',').map((s) => s.trim());
 
   for (const setDef of setDefs) {
-    // Extract set-specific weight if present: "1x5 135lb" or "1x5 @ 135lb"
     let setWeight = defaultWeight;
     const itemWeightMatch = setDef.match(/@\s*([0-9.]+)/i) || setDef.match(/\s+([0-9.]+)\s*(?:kg|lbs?)\b/i);
     if (itemWeightMatch) {
@@ -603,12 +695,14 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
     }
 
     const cleanDef = setDef.split('@')[0].replace(/\s+[0-9.]+\s*(?:kg|lbs?)\b/i, '').trim();
-    const match = cleanDef.match(/(?:([0-9]+)\s*x\s*)?([0-9]+|amrap)(\+)?/i);
+    const match = cleanDef.match(/(?:([0-9]+)\s*x\s*)?([0-9]+(?:-[0-9]+)?|amrap)(\+)?/i);
 
     if (match) {
       const count = match[1] ? parseInt(match[1], 10) : 1;
       const isAmrapStr = match[2]?.toLowerCase() === 'amrap';
-      const reps = isAmrapStr ? 10 : parseInt(match[2], 10) || 5;
+      // For rep ranges like "8-12", take the target (e.g. 8)
+      const rawReps = match[2]?.split('-')[0];
+      const reps = isAmrapStr ? 10 : parseInt(rawReps, 10) || 5;
       const isAmrap = Boolean(match[3]) || isAmrapStr;
 
       for (let s = 0; s < count; s++) {
@@ -620,13 +714,25 @@ function parseSetsDefinition(setsDefPart, defaultWeight, restSeconds, defaultRpe
           isAmrap,
         });
       }
+    } else {
+      // Direct number (e.g. "12" in myo-reps)
+      const directNum = parseInt(cleanDef, 10);
+      if (!isNaN(directNum) && directNum > 0) {
+        sets.push({
+          targetReps: directNum,
+          targetWeight: setWeight,
+          targetRpe: defaultRpe,
+          restSeconds: Math.max(0, restSeconds),
+          isAmrap: false,
+        });
+      }
     }
   }
 
   if (sets.length === 0) {
     sets.push({
       targetReps: 10,
-      targetWeight: defaultWeight || 20,
+      targetWeight: defaultWeight || 0,
       targetRpe: defaultRpe,
       restSeconds,
       isAmrap: false,
@@ -658,7 +764,8 @@ function isCalibrationDay(name = '') {
     lower.includes('calib') ||
     lower.includes('calibration') ||
     lower.startsWith('setup') ||
-    lower.includes('1rm test')
+    lower.includes('1rm test') ||
+    lower === 'readme'
   );
 }
 
@@ -694,51 +801,51 @@ function findNextDayIndexFromHistory(days, historyRecords, programName) {
     return null;
   }
 
-  // Find the latest history record for this program (or latest record)
   const normProg = programName.toLowerCase().trim();
   let latest = null;
 
   for (const rec of historyRecords) {
-    const text = rec.text || rec.source || '';
+    const text = rec.text || rec.source || (typeof rec === 'string' ? rec : '');
     const progMatch = text.match(/program:\s*["']([^"']+)["']/i);
-    const recProg = progMatch ? progMatch[1].toLowerCase().trim() : '';
+    const recProg = progMatch ? progMatch[1].toLowerCase().trim() : (rec.program ? String(rec.program).toLowerCase().trim() : '');
 
     if (!normProg || !recProg || normProg.includes(recProg) || recProg.includes(normProg)) {
-      latest = text;
+      latest = text || rec;
       break;
     }
   }
 
   if (!latest && historyRecords[0]) {
-    latest = historyRecords[0].text || historyRecords[0].source || '';
+    latest = historyRecords[0].text || historyRecords[0].source || historyRecords[0];
   }
 
   if (!latest) return null;
 
-  const weekMatch = latest.match(/week:\s*([0-9]+)/i);
-  const dayInWeekMatch = latest.match(/dayInWeek:\s*([0-9]+)/i) || latest.match(/day:\s*([0-9]+)/i);
-  const dayNameMatch = latest.match(/dayName:\s*["']([^"']+)["']/i);
+  const latestText = typeof latest === 'string' ? latest : (latest.text || JSON.stringify(latest));
+  const weekMatch = latestText.match(/week:\s*([0-9]+)/i);
+  const dayInWeekMatch = latestText.match(/dayInWeek:\s*([0-9]+)/i) || latestText.match(/day:\s*([0-9]+)/i);
+  const dayNameMatch = latestText.match(/dayName:\s*["']([^"']+)["']/i);
 
-  let lastWeek = weekMatch ? parseInt(weekMatch[1], 10) : 1;
-  let lastDayInWeek = dayInWeekMatch ? parseInt(dayInWeekMatch[1], 10) : null;
-
-  if (lastDayInWeek === null && dayNameMatch) {
-    const lastName = dayNameMatch[1].toLowerCase();
-    const idx = days.findIndex((d) => d.name.toLowerCase() === lastName || d.fullName.toLowerCase().includes(lastName));
-    if (idx !== -1) {
-      return (idx + 1) % days.length;
-    }
-  }
+  const lastWeek = weekMatch ? parseInt(weekMatch[1], 10) : (latest.week || 1);
+  const lastDayInWeek = dayInWeekMatch ? parseInt(dayInWeekMatch[1], 10) : (latest.dayInWeek || latest.day || null);
 
   if (lastDayInWeek !== null) {
-    // Find the matching day in days
     const currentDayIdx = days.findIndex(
       (d) => d.weekNumber === lastWeek && d.dayNumber === lastDayInWeek
     );
 
     if (currentDayIdx !== -1) {
-      // Advance to next day in program
       return (currentDayIdx + 1) % days.length;
+    }
+  }
+
+  if (dayNameMatch || latest.dayName) {
+    const lastName = (dayNameMatch ? dayNameMatch[1] : latest.dayName).toLowerCase().trim();
+    const idx = days.findIndex(
+      (d) => d.name.toLowerCase().trim() === lastName || d.fullName.toLowerCase().includes(lastName) || lastName.includes(d.name.toLowerCase().trim())
+    );
+    if (idx !== -1) {
+      return (idx + 1) % days.length;
     }
   }
 
