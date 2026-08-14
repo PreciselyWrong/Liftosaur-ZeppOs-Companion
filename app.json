@@ -29,6 +29,9 @@
           "pages": [
             "page/common/index"
           ]
+        },
+        "app-side": {
+          "path": "app-side/index"
         }
       },
       "platforms": [
