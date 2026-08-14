@@ -1,11 +1,18 @@
 import { BaseSideService } from '@zeppos/zml/base-side';
-import { settings } from '@zeppos/device/settings';
 import { createSideRouter } from './router.js';
 import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 
+let sideServiceInstance = null;
+
 function getEffectiveApiKey() {
   try {
-    const raw = settings?.settingsStorage?.getItem('apiKey');
+    let raw = null;
+    if (sideServiceInstance?.settings?.getItem) {
+      raw = sideServiceInstance.settings.getItem('apiKey');
+    }
+    if (!raw && typeof settings !== 'undefined' && settings?.settingsStorage?.getItem) {
+      raw = settings.settingsStorage.getItem('apiKey');
+    }
     if (raw && typeof raw === 'string' && raw.trim().length > 0) {
       return raw.trim();
     }
@@ -19,7 +26,6 @@ function getApiClient() {
 }
 
 const router = createSideRouter({
-
   programProvider: async () => {
     const apiKey = getEffectiveApiKey();
     if (!apiKey) {
@@ -29,7 +35,6 @@ const router = createSideRouter({
     const client = getApiClient();
     return await client.getCurrentProgram();
   },
-
 
   playgroundSimulator: async (journal) => {
     const client = getApiClient();
@@ -47,7 +52,6 @@ const router = createSideRouter({
       return await client.submitWorkoutHistory(history);
     } catch (err) {
       console.log('[liftosaur-side] history submit error:', err?.message || String(err));
-      // Return local saved confirmation so the watch can close the session safely
       return { id: 'offline-saved-' + Date.now(), status: 'queued_offline' };
     }
   },
@@ -57,6 +61,7 @@ AppSideService(
   BaseSideService({
     onInit() {
       console.log('[liftosaur-side] onInit');
+      sideServiceInstance = this;
     },
 
     onRequest(req, res) {
@@ -75,10 +80,12 @@ AppSideService(
 
     onRun() {
       console.log('[liftosaur-side] onRun');
+      sideServiceInstance = this;
     },
 
     onDestroy() {
       console.log('[liftosaur-side] onDestroy');
+      sideServiceInstance = null;
     },
   })
 );
