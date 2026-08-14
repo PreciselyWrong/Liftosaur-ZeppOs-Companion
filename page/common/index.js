@@ -328,7 +328,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(90),
-      y: px(335),
+      y: px(330),
       w: px(300),
       h: px(76),
       radius: px(38),
@@ -343,15 +343,15 @@ function renderUI() {
     return;
   }
 
-  // ── 3. ACTIVE SET SCREEN (Ultra-Polished Circular UI) ──
+  // ── 3. ACTIVE SET SCREEN (Balanced Spacing) ──
   if (view.state === SESSION_STATES.ACTIVE_SET) {
     const setNum = view.currentSetIndex + 1;
     const dotsString = formatDots(view.exerciseSetsDots);
 
-    // Top Bar (Cleanly centered & inset from circular bezel): [< Back] [ ▶ 00:29 • HR 67 ]
+    // Top Bar (y=45): [< Back] [ ▶ 00:29 • HR 67 ]
     addWidget(widget.BUTTON, {
       x: px(82),
-      y: px(48),
+      y: px(45),
       w: px(40),
       h: px(40),
       radius: px(20),
@@ -367,7 +367,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(126),
-      y: px(48),
+      y: px(45),
       w: px(240),
       h: px(40),
       color: THEME.primaryLight,
@@ -379,13 +379,13 @@ function renderUI() {
     });
 
     // Superset pill (if present)
-    let titleY = px(92);
+    let titleY = px(90);
     if (view.supersetTag) {
       addWidget(widget.TEXT, {
         x: 0,
-        y: px(88),
+        y: px(86),
         w: W,
-        h: px(24),
+        h: px(22),
         color: THEME.blue,
         text_size: px(18),
         align_h: align.CENTER_H,
@@ -393,7 +393,7 @@ function renderUI() {
         text_style: text_style.NONE,
         text: `[${view.supersetTag}]`,
       });
-      titleY = px(112);
+      titleY = px(110);
     }
 
     // Exercise Name
@@ -411,14 +411,14 @@ function renderUI() {
       text: shortEx,
     });
 
-    // Set Status Line with Interactive Dots (y=144)
-    const setStatusY = view.supersetTag ? px(142) : px(126);
+    // Set Status Line with Interactive Dots
+    const setStatusY = view.supersetTag ? px(142) : px(124);
     addWidget(widget.BUTTON, {
       x: px(90),
       y: setStatusY,
       w: px(300),
-      h: px(34),
-      radius: px(17),
+      h: px(32),
+      radius: px(16),
       normal_color: THEME.bg,
       press_color: THEME.card,
       text: `Set ${setNum}/${view.totalSets}   ${dotsString}`,
@@ -431,9 +431,9 @@ function renderUI() {
       },
     });
 
-    // ── Input Boxes (Reps & Weight) ──
-    const boxesY = view.supersetTag ? px(178) : px(165);
-    const boxH = px(84);
+    // ── Input Boxes (y=164, h=86) ──
+    const boxesY = view.supersetTag ? px(176) : px(162);
+    const boxH = px(86);
 
     // Left Box: REPS
     addWidget(widget.FILL_RECT, {
@@ -445,6 +445,7 @@ function renderUI() {
       color: THEME.card,
     });
 
+    // Invisible tap areas for - and + with clean text display
     addWidget(widget.BUTTON, {
       x: px(65),
       y: boxesY,
@@ -464,7 +465,7 @@ function renderUI() {
       x: px(108),
       y: boxesY + px(4),
       w: px(74),
-      h: px(46),
+      h: px(48),
       color: THEME.textPrimary,
       text_size: px(34),
       align_h: align.CENTER_H,
@@ -475,7 +476,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(108),
-      y: boxesY + px(50),
+      y: boxesY + px(52),
       w: px(74),
       h: px(24),
       color: THEME.textSecondary,
@@ -504,7 +505,7 @@ function renderUI() {
     // Middle '×'
     addWidget(widget.TEXT, {
       x: px(226),
-      y: boxesY + px(20),
+      y: boxesY + px(22),
       w: px(28),
       h: px(44),
       color: THEME.textSecondary,
@@ -544,7 +545,7 @@ function renderUI() {
       x: px(298),
       y: boxesY + px(4),
       w: px(74),
-      h: px(46),
+      h: px(48),
       color: THEME.textPrimary,
       text_size: px(32),
       align_h: align.CENTER_H,
@@ -555,7 +556,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(298),
-      y: boxesY + px(50),
+      y: boxesY + px(52),
       w: px(74),
       h: px(24),
       color: THEME.textSecondary,
@@ -581,8 +582,8 @@ function renderUI() {
       },
     });
 
-    // Target prescription line
-    const targetY = boxesY + boxH + px(10);
+    // Target prescription line (y=258)
+    const targetY = boxesY + boxH + px(8);
     const rpeText = view.currentSet.rpe ? ` @ ${view.currentSet.rpe}` : '';
     addWidget(widget.TEXT, {
       x: 0,
@@ -597,16 +598,16 @@ function renderUI() {
       text: `Target: ${view.currentSet.targetReps} × ${view.currentSet.targetWeight} kg${rpeText}`,
     });
 
-    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Unified y=350, h=68, perfectly placed) ──
-    const actionY = px(348);
-    const actionH = px(68);
+    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Unified at y=318, perfectly spaced) ──
+    const actionY = px(316);
+    const actionH = px(74);
 
     addWidget(widget.BUTTON, {
-      x: px(82),
+      x: px(78),
       y: actionY,
-      w: px(60),
+      w: px(64),
       h: actionH,
-      radius: px(30),
+      radius: px(32),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
@@ -617,11 +618,11 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(162),
+      x: px(158),
       y: actionY,
-      w: px(156),
+      w: px(164),
       h: actionH,
-      radius: px(34),
+      radius: px(37),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: '✓',
@@ -635,9 +636,9 @@ function renderUI() {
     addWidget(widget.BUTTON, {
       x: px(338),
       y: actionY,
-      w: px(60),
+      w: px(64),
       h: actionH,
-      radius: px(30),
+      radius: px(32),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '>',
@@ -677,7 +678,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(120),
+      y: px(115),
       w: W,
       h: px(30),
       color: headerColor,
@@ -690,7 +691,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(165),
+      y: px(158),
       w: W,
       h: px(75),
       color: timerColor,
@@ -703,7 +704,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(255),
+      y: px(248),
       w: W,
       h: px(35),
       color: THEME.textSecondary,
@@ -716,7 +717,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(95),
-      y: px(335),
+      y: px(316),
       w: px(290),
       h: px(76),
       radius: px(38),
@@ -835,7 +836,7 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(110),
-      y: px(335),
+      y: px(325),
       w: px(260),
       h: px(76),
       radius: px(38),
