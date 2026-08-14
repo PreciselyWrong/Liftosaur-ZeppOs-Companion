@@ -12,8 +12,9 @@ test('redactSecret masks apiKey and Authorization headers reliably', () => {
 
 test('client handles fetching current program with redacted logging', async () => {
   const mockFetcher = async (url, options) => {
-    assert.equal(url, 'https://www.liftosaur.com/api/program');
+    assert.equal(url, 'https://www.liftosaur.com/api/v1/programs/current');
     assert.equal(options.headers['Authorization'], 'Bearer lftsk_secret_12345');
+
     return {
       ok: true,
       status: 200,
