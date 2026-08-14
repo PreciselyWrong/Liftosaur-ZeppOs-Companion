@@ -1,6 +1,6 @@
 import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
-import { HeartRate } from '@zos/sensor';
+import { HeartRate, Vibrator } from '@zos/sensor';
 import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT } from '@zos/interaction';
 import { BasePage } from '@zeppos/zml/base-page';
 
@@ -20,7 +20,7 @@ const THEME = {
   primaryDeep: 0x2c1065,      // Violet très sombre (#2C1065)
   blue: 0x45b3cb,             // Bleu / liens (#45B3CB)
   success: 0x2bdc9b,          // Vert / succès (#2BDC9B)
-  error: 0xff8066,            // Rouge / erreur (#FF8066)
+  error: 0xff8066,            // Rouge / erreur / overtime (#FF8066)
   yellow: 0xffd820,           // Jaune (#FFD820)
   orange: 0xffb544,           // Orange (#FFB544)
 
@@ -104,6 +104,8 @@ let session = createWorkoutSession({
 let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
+let vibrator = null;
+let hasVibratedThisRest = false;
 let restTimerId = null;
 let activeWidgets = [];
 
@@ -134,9 +136,23 @@ function persistAndRender(action) {
 }
 
 function formatSeconds(sec) {
-  const m = Math.floor(sec / 60);
-  const s = sec % 60;
-  return `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  const isNeg = sec < 0;
+  const abs = Math.abs(sec);
+  const m = Math.floor(abs / 60);
+  const s = abs % 60;
+  const formatted = `${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
+  return isNeg ? `-${formatted}` : formatted;
+}
+
+function triggerVibration() {
+  try {
+    if (!vibrator) {
+      vibrator = new Vibrator();
+    }
+    vibrator.start();
+  } catch (err) {
+    console.log('[liftosaur] vibrator error:', err?.message || String(err));
+  }
 }
 
 // ── UI Rendering (Centered for 480x480 Round Display) ────────────────────────
@@ -150,7 +166,7 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Top Bar: Heart Rate & Workout Title (Comfortably inside top safe zone at y=45)
+  // Top Bar: Heart Rate & Workout Title (Comfortably inside top safe zone at y=42)
   const shortTitle = view.workoutName.length > 20 ? view.workoutName.slice(0, 18) + '…' : view.workoutName;
   addWidget(widget.TEXT, {
     x: 0,
@@ -165,7 +181,7 @@ function renderUI() {
     text: `HR ${liveHr} • ${shortTitle}`,
   });
 
-  // Superset Tag Pill (y=75)
+  // Superset Tag Pill (y=74)
   if (view.supersetTag) {
     addWidget(widget.TEXT, {
       x: 0,
@@ -393,13 +409,20 @@ function renderUI() {
       text: 'COMPLETE SET',
       text_size: px(26),
       click_func: () => {
+        hasVibratedThisRest = false;
         persistAndRender(() => session.completeSet());
         startRestTimer();
       },
     });
   } else if (view.state === SESSION_STATES.REST) {
-    // ── REST SCREEN (Centered) ──
+    // ── REST SCREEN (Centered with Overtime Support) ──
+    const isOvertime = Boolean(view.rest?.isOvertime);
+    const remaining = view.rest ? view.rest.remaining : 0;
     const isTransition = view.rest?.isTransitionToNextExercise;
+
+    const timerColor = isOvertime ? THEME.error : THEME.textPrimary;
+    const headerLabel = isOvertime ? 'REST OVERTIME' : 'REST TIMER';
+    const headerColor = isOvertime ? THEME.error : THEME.blue;
     const subtitle = isTransition
       ? `Next: Superset Switch`
       : `Next: Set ${view.currentSetIndex + 2} of ${view.totalSets}`;
@@ -409,12 +432,12 @@ function renderUI() {
       y: px(145),
       w: W,
       h: px(30),
-      color: THEME.blue,
+      color: headerColor,
       text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: 'REST TIMER',
+      text: headerLabel,
     });
 
     addWidget(widget.TEXT, {
@@ -422,12 +445,12 @@ function renderUI() {
       y: px(185),
       w: W,
       h: px(70),
-      color: THEME.textPrimary,
+      color: timerColor,
       text_size: px(52),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: formatSeconds(view.rest ? view.rest.remaining : 0),
+      text: formatSeconds(remaining),
     });
 
     addWidget(widget.TEXT, {
@@ -449,9 +472,9 @@ function renderUI() {
       w: px(310),
       h: px(72),
       radius: px(36),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      text: isTransition ? 'NEXT EXERCISE' : 'SKIP REST',
+      normal_color: isOvertime ? THEME.primary : THEME.card,
+      press_color: isOvertime ? THEME.primaryDeep : THEME.cardActive,
+      text: isOvertime ? (isTransition ? 'NEXT EXERCISE' : 'START NEXT SET') : (isTransition ? 'NEXT EXERCISE' : 'SKIP REST'),
       text_size: px(26),
       click_func: () => {
         stopRestTimer();
@@ -511,10 +534,11 @@ function startRestTimer() {
   restTimerId = setInterval(() => {
     const view = session.view(Date.now());
     if (view.state === SESSION_STATES.REST) {
-      renderUI();
-      if (view.rest && view.rest.remaining <= 0) {
-        stopRestTimer();
+      if (view.rest && view.rest.remaining <= 0 && !hasVibratedThisRest) {
+        hasVibratedThisRest = true;
+        triggerVibration();
       }
+      renderUI();
     } else {
       stopRestTimer();
     }
