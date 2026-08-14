@@ -148,7 +148,7 @@ real data page.
 | --- | --- |
 | `sport_data` and `edit_widget_group_type` are exported by `@zos/ui` | TESTED |
 | `SPORT_DATA` renders `mock_data` in the simulator | TESTED |
-| `DataWidget` keeps custom properties (`state`, `statusText`, `render`) with a correct `this` — same shape as `Page()`, undocumented for `DataWidget` | TESTED |
+| `DataWidget` custom object properties are **not** accessible via `this` inside arrow-function callbacks — `this` is the module scope, not the DataWidget object. Mutable state must live in **module-level closure variables**. | TESTED |
 | The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
 | The simulator renders a `data-widget` **outside** any workout | TESTED |
 | A `TEXT` widget has **no** `addEventListener`: calling it throws and aborts `build()` | TESTED |
@@ -156,6 +156,8 @@ real data page.
 | `widget.BUTTON` with `click_func` **does** fire | TESTED |
 | `setProperty(prop.MORE, …)` on a `FILL_RECT` **does** repaint it | TESTED |
 | `setProperty` on a `TEXT` widget **never refreshes it** — neither `prop.TEXT`, nor `prop.MORE` with only `{text}`, nor `prop.MORE` with the full geometry | TESTED |
+| ASCII hyphen/dash (`-`) is **invisible** in the Zepp OS font renderer — confirmed by bisect: `'--'` rendered as empty, `'?'` and `'N/A'` rendered correctly | TESTED |
+
 
 ### UI constraints this imposes
 
@@ -169,8 +171,15 @@ misdiagnoses. Each step was rebuilt and observed in the simulator:
 
 So **every tap target must be a `BUTTON`**, and **no text can be mutated in place**. This
 lands squarely on phase 1, where weight, reps, RPE and the rest countdown all have to update
-live. Candidate replacements are being probed: `deleteWidget` + `createWidget`, and
-pre-created texts toggled with `prop.VISIBLE`.
+live.
+
+**`deleteWidget` + `createWidget` works** (P0-6 resolved, 2026-08-14): deleting the old
+`TEXT` widget and creating a fresh one in its place is confirmed by the emulator. The counter
+incremented correctly on each tap. `prop.VISIBLE` had already been ruled out (aborts `build()`
+if set before the widget is fully initialised).
+
+Consequence for phase 1: **all dynamic text must be rendered via delete + recreate**. Keep
+the widget reference in a module-level closure variable, never on `this`.
 
 A runtime error inside `build()` aborts the rest of it **silently** — the widgets already
 created stay on screen, so a half-built widget looks deliberate. Any unexplained missing

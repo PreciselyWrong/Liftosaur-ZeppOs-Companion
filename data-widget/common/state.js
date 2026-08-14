@@ -7,7 +7,8 @@
 
 export const STATUS_READY = 'READY';
 export const STATUS_TEST = 'TEST';
-export const NO_HEART_RATE = '--';
+export const NO_HEART_RATE = 'N/A';
+
 
 function isUsableHeartRate(value) {
   return typeof value === 'number' && Number.isFinite(value) && value > 0;
