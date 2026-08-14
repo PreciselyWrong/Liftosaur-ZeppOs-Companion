@@ -47,6 +47,7 @@ export function createSideRouter({
               });
             }
 
+            const requestedDayIndex = rawMessage.payload?.dayIndex ?? 0;
             const programData = await programProvider();
 
             if (!programData) {
@@ -61,7 +62,7 @@ export function createSideRouter({
               });
             }
 
-            const parsedWorkout = parseLiftoscriptWorkout(programData);
+            const parsedWorkout = parseLiftoscriptWorkout(programData, requestedDayIndex);
             return createMessage({
               type: MESSAGE_TYPES.WORKOUT_DATA,
               replyToId: rawMessage.messageId,
@@ -71,6 +72,7 @@ export function createSideRouter({
                 workout: parsedWorkout,
               },
             });
+
           } catch (err) {
             return createError(
               rawMessage,
