@@ -42,18 +42,19 @@ export function parseLiftoscriptWorkout(input = {}, requestedDayIndex = null) {
   }
 
   // 1. Check if rawText is in Playground / History format: "... / exercises: { ... }"
-  const playgroundWorkout = extractPlaygroundWorkout(rawText, programName);
+  const playgroundWorkout = extractPlaygroundWorkout(rawText, programName, routineName);
   if (playgroundWorkout) {
     return {
       id,
       name: playgroundWorkout.name,
-      routineName,
+      routineName: playgroundWorkout.routineName,
       exercises: playgroundWorkout.exercises,
       availableDays: [playgroundWorkout.name],
       currentDayIndex: 0,
       totalDays: 1,
     };
   }
+
 
   // 2. Extract all available days (including nested week(...) blocks and markdown headings)
   const allDays = extractDaysFromLiftoscript(rawText, programName);
@@ -98,17 +99,21 @@ function isCalibrationDay(name) {
   );
 }
 
-function extractPlaygroundWorkout(rawText, defaultName) {
+function extractPlaygroundWorkout(rawText, defaultName, defaultRoutine = 'Liftosaur Routine') {
   const exercisesMatch = rawText.match(/exercises:\s*\{([\s\S]*?)\}/i);
   if (!exercisesMatch) return null;
 
   let dayName = defaultName;
+  let routineName = defaultRoutine;
+
+  const progMatch = rawText.match(/program:\s*["']([^"']+)["']/i);
+  if (progMatch) routineName = progMatch[1];
+
   const dayMatch = rawText.match(/dayName:\s*["']([^"']+)["']/i);
   if (dayMatch) {
     dayName = dayMatch[1];
-  } else {
-    const progMatch = rawText.match(/program:\s*["']([^"']+)["']/i);
-    if (progMatch) dayName = progMatch[1];
+  } else if (progMatch) {
+    dayName = progMatch[1];
   }
 
   const exercises = parseExercisesFromBody(exercisesMatch[1]);
@@ -116,9 +121,11 @@ function extractPlaygroundWorkout(rawText, defaultName) {
 
   return {
     name: dayName,
+    routineName,
     exercises,
   };
 }
+
 
 function resolveNextDayIndex(days, state, rawText) {
   if (days.length <= 1) return 0;
@@ -304,6 +311,14 @@ function parseExercisesFromBody(bodyText) {
 }
 
 function isScriptCodeLine(line) {
+  // Reject ISO date lines or metadata headers (e.g. 2026-08-14T... or program: "...")
+  if (line.match(/^[0-9]{4}-[0-9]{2}-[0-9]{2}/i)) {
+    return true;
+  }
+  if (line.includes('exercises:') || line.includes('dayName:') || line.includes('program:')) {
+    return true;
+  }
+
   const codeKeywords = [
     'state.',
     'let ',
@@ -344,6 +359,7 @@ function isScriptCodeLine(line) {
 
   return false;
 }
+
 
 function parseExerciseLine(line, index) {
   let supersetGroup = null;

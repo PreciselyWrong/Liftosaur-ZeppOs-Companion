@@ -132,16 +132,19 @@ test('parseLiftoscriptWorkout parses markdown headings and skips calibration day
 });
 
 test('parseLiftoscriptWorkout parses playground exercise blocks', () => {
-  const playgroundText = `2026-03-07T10:00:00Z / program: "GZCLP" / dayName: "Day 1 - Squat" / exercises: {
+  const playgroundText = `2026-08-14T13:30:00Z / program: "GZCLP 4-Day" / dayName: "Day 1 - Squat" / exercises: {
     Squat, Barbell / 3x5 100kg / target: 3x5 100kg 180s
     Bench Press / 3x10 60kg / target: 3x10 60kg 90s
   }`;
 
   const workout = parseLiftoscriptWorkout({ text: playgroundText });
+  assert.equal(workout.routineName, 'GZCLP 4-Day');
   assert.equal(workout.name, 'Day 1 - Squat');
   assert.equal(workout.exercises.length, 2);
   assert.equal(workout.exercises[0].name, 'Squat, Barbell');
   assert.equal(workout.exercises[0].sets.length, 3);
   assert.equal(workout.exercises[0].sets[0].targetWeight, 100);
+  assert.equal(workout.exercises[1].name, 'Bench Press');
 });
+
 
