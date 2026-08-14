@@ -1,5 +1,6 @@
 import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
+import { HeartRate } from '@zos/sensor';
 
 import { createWidgetState } from './state.js';
 
@@ -23,17 +24,18 @@ function textProps({ y, h, size, text }) {
   };
 }
 
-// ── Widget state (closure, not `this` — confirmed EMULATOR TESTED 2026-08-14) ─
+// ── State & sensor (closure variables) ───────────────────────────────────────
 
 const state = createWidgetState();
 
 let titleWidget = null;
 let statusWidget = null;
 let hrWidget = null;
+let hrSensor = null;
+let hrCallback = null;
 
 function render() {
   const view = state.view();
-
 
   if (titleWidget) deleteWidget(titleWidget);
   titleWidget = createWidget(widget.TEXT, textProps({
@@ -80,6 +82,27 @@ Page({
       },
     });
 
+    if (!hrSensor) {
+      try {
+        hrSensor = new HeartRate();
+        const initialHr = hrSensor.getCurrent?.() || hrSensor.getLast?.();
+        if (initialHr) {
+          state.setHeartRate(initialHr);
+        }
+        hrCallback = () => {
+          const currentHr = hrSensor.getCurrent?.() || hrSensor.getLast?.();
+          console.log('[liftosaur] hr update: ' + currentHr);
+          if (currentHr) {
+            state.setHeartRate(currentHr);
+            render();
+          }
+        };
+        hrSensor.onCurrentChange?.(hrCallback);
+      } catch (err) {
+        console.log('[liftosaur] hr sensor init error: ' + err);
+      }
+    }
+
     render();
   },
 
@@ -93,5 +116,10 @@ Page({
 
   onDestroy() {
     console.log('[liftosaur] onDestroy');
+    if (hrSensor && hrCallback) {
+      try {
+        hrSensor.offCurrentChange?.(hrCallback);
+      } catch (e) {}
+    }
   },
 });

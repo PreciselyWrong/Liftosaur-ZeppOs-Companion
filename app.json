@@ -12,7 +12,9 @@
     "vender": "",
     "description": "Liftosaur workout tracker for Amazfit watches"
   },
-  "permissions": [],
+  "permissions": [
+    "data:user.hd.heart_rate"
+  ],
   "runtime": {
     "apiVersion": {
       "compatible": "3.6",
