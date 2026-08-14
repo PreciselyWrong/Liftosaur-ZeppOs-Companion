@@ -4,11 +4,14 @@ AppSettingsPage({
   },
 
   build(props) {
-    this.getStorage(props);
+    this.state.apiKey = props.settingsStorage.getItem('apiKey') || '';
 
-    return Section({
-      title: 'Liftosaur Account',
-      children: [
+    return Section(
+      {
+        title: 'Liftosaur Account',
+        description: 'Enter your Liftosaur API Key to sync workouts',
+      },
+      [
         TextInput({
           label: 'API Key',
           placeholder: 'lftsk_...',
@@ -19,11 +22,7 @@ AppSettingsPage({
             this.state.apiKey = val;
           },
         }),
-      ],
-    });
-  },
-
-  getStorage(props) {
-    this.state.apiKey = props.settingsStorage.getItem('apiKey') || '';
+      ]
+    );
   },
 });
