@@ -243,7 +243,17 @@ export function formatDateForHistory(date) {
  * because it has no notion of when the watch actually started or how long the
  * session ran. Those two facts are the watch's to state.
  */
-export function rewriteRecordHeader(text, { date = null, durationSeconds = null } = {}) {
+export function rewriteRecordHeader(
+  text,
+  {
+    date = null,
+    durationSeconds = null,
+    programName = null,
+    dayName = null,
+    week = null,
+    dayInWeek = null,
+  } = {}
+) {
   if (typeof text !== 'string') return text;
 
   const lines = text.split('\n');
@@ -253,18 +263,33 @@ export function rewriteRecordHeader(text, { date = null, durationSeconds = null 
   const header = parseHeader(lines[headerIndex]);
   const parts = [];
 
-  const resolvedDate = date instanceof Date || typeof date === 'number'
-    ? formatDateForHistory(date)
-    : (typeof date === 'string' ? date : header.date);
+  const resolvedDate =
+    date instanceof Date || typeof date === 'number'
+      ? formatDateForHistory(date)
+      : typeof date === 'string'
+        ? date
+        : header.date;
   if (resolvedDate) parts.push(resolvedDate);
-  if (header.programName) parts.push(`program: "${header.programName}"`);
-  if (header.dayName) parts.push(`dayName: "${header.dayName}"`);
-  if (header.week !== null) parts.push(`week: ${header.week}`);
-  if (header.dayInWeek !== null) parts.push(`dayInWeek: ${header.dayInWeek}`);
 
-  const resolvedDuration = durationSeconds !== null && durationSeconds !== undefined
-    ? Math.max(0, Math.round(durationSeconds))
-    : header.durationSeconds;
+  const resolvedProgram = programName || header.programName;
+  if (resolvedProgram) parts.push(`program: "${resolvedProgram}"`);
+
+  const resolvedDayName = dayName || header.dayName;
+  if (resolvedDayName) parts.push(`dayName: "${resolvedDayName}"`);
+
+  const resolvedWeek = week !== null && week !== undefined ? week : header.week;
+  if (resolvedWeek !== null && resolvedWeek !== undefined) parts.push(`week: ${resolvedWeek}`);
+
+  const resolvedDayInWeek =
+    dayInWeek !== null && dayInWeek !== undefined ? dayInWeek : header.dayInWeek;
+  if (resolvedDayInWeek !== null && resolvedDayInWeek !== undefined) {
+    parts.push(`dayInWeek: ${resolvedDayInWeek}`);
+  }
+
+  const resolvedDuration =
+    durationSeconds !== null && durationSeconds !== undefined
+      ? Math.max(0, Math.round(durationSeconds))
+      : header.durationSeconds;
   if (resolvedDuration !== null && resolvedDuration !== undefined) {
     parts.push(`duration: ${resolvedDuration}s`);
   }
