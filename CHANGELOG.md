@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.4] - 14 août 2026
+
+### Améliorations
+- Les séries d'échauffement sont désormais clairement signalées par un badge et un texte distincts.
+- Correction du calcul et de l'envoi de la durée totale de la séance vers le compte en ligne.
+
 ## [2.0.3] - 14 août 2026
 
 ### Corrections

@@ -1397,15 +1397,15 @@ function renderActiveSetScreen(view) {
   const ssBadge = view.supersetGroup ? ` (SS ${view.supersetGroup})` : '';
 
   const setLabel = set.isWarmup
-    ? `Warmup ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
-    : `Set ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${ssBadge}`;
+    ? `🔥 WARMUP ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
+    : `SET ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${ssBadge}`;
 
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(122),
     w: px(356),
     h: px(26),
-    color: view.supersetGroup ? ssColor : THEME.textSecondary,
+    color: set.isWarmup ? 0xffb544 : (view.supersetGroup ? ssColor : THEME.textSecondary),
     text_size: px(16),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -1416,11 +1416,11 @@ function renderActiveSetScreen(view) {
   let targetText;
   if (set.isWarmup) {
     if (set.targetWeight !== null) {
-      targetText = `Warmup ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
+      targetText = `Warmup Target: ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
         set.targetWeightPercent ? ` (${set.targetWeightPercent}%)` : ''
       }`;
     } else {
-      targetText = `Warmup ${formatTargetReps(set)} × ${
+      targetText = `Warmup Target: ${formatTargetReps(set)} × ${
         set.targetWeightPercent ? `${set.targetWeightPercent}%` : '-'
       }`;
     }
@@ -1644,10 +1644,9 @@ function renderRestScreen(view) {
   if (rest.nextExerciseName) {
     const ssColor = supersetColor(rest.nextSupersetGroup);
     const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
-    const kind = rest.nextIsWarmup ? 'Warmup' : 'Set';
     const setProg = rest.nextIsWarmup
-      ? `${kind} ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
-      : `${kind} ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
+      ? `🔥 WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
+      : `SET ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
 
     addWidget(widget.FILL_RECT, {
       x: px(52),
@@ -1698,7 +1697,7 @@ function renderRestScreen(view) {
       y: px(270),
       w: px(360),
       h: px(22),
-      color: rest.nextSupersetGroup ? ssColor : THEME.primaryLight,
+      color: rest.nextIsWarmup ? 0xffb544 : (rest.nextSupersetGroup ? ssColor : THEME.primaryLight),
       text_size: px(15),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,

@@ -258,6 +258,10 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         const exercise = currentExercise();
         if (!prog || !exercise) break;
 
+        if (workoutStartTime === null) {
+          workoutStartTime = event.timestamp;
+        }
+
         const setIndex = prog.currentSetIndex;
         const target = exercise.sets[setIndex];
 
@@ -466,14 +470,17 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         0
       );
 
+      const effectiveStartTime =
+        workoutStartTime ?? (completed.length > 0 ? completed[0].completedAt : null);
+
       const currentPauseMs =
         pauseStartedAt !== null ? Math.max(0, (workoutEndTime ?? now) - pauseStartedAt) : 0;
       const activeElapsedMs =
-        workoutStartTime === null
+        effectiveStartTime === null
           ? 0
           : Math.max(
               0,
-              (workoutEndTime ?? now) - workoutStartTime - totalPausedWorkoutDurationMs - currentPauseMs
+              (workoutEndTime ?? now) - effectiveStartTime - totalPausedWorkoutDurationMs - currentPauseMs
             );
       const elapsedSeconds = Math.floor(activeElapsedMs / 1000);
 
@@ -542,7 +549,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         dayInWeek: plan?.dayInWeek ?? null,
         programVersion: plan?.programVersion ?? null,
         elapsedSeconds,
-        startedAt: workoutStartTime,
+        startedAt: effectiveStartTime,
         totalVolume,
         totalCompletedSetsCount: completed.length,
         totalExercises: exercises.length,
