@@ -4,6 +4,7 @@
 
 ### Added
 - Tester guide for installing the app from a QR code with a phone only, no computer required (`docs/tester-guide.md`).
+- Public test build QR code in the README, with its supported models and its expiry date.
 
 ### Changed
 - README now links the changelog and the tester guide, and documents the 7 day validity of a `zeus preview` QR code.

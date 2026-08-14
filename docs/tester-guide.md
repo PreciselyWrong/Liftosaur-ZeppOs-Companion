@@ -9,23 +9,20 @@ Allow about five minutes.
 
 You need:
 
-- One of the supported Amazfit watches, already paired with your phone:
-
-  - Active 2
-  - Active Max
-  - Balance 2
-  - Balance 2 XT
-  - Cheetah 2 Ultra
-  - T-Rex 3 Pro (44mm)
-  - T-Rex 3 Pro (48mm)
+- A supported Amazfit watch, already paired with your phone. The current build
+  covers 22 round models: Active 2 (Round), Active 2 NFC (Round), Active 3
+  Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3,
+  Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra,
+  Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm),
+  T-Rex 3 Pro (48mm), T-Rex Ultra and T-Rex Ultra 2.
 
 - The **Zepp** app installed and signed in to your account.
 - The QR code that was sent to you.
 
-> **Any watch not in that list is unsupported today**, including Bip 6 and every
-> other rectangular screen model, and including older round models that predate
-> Zepp OS 3.6. There is no point trying: the install will fail or the display
-> will be unusable.
+> **Any watch missing from that list is unsupported by this build**, including
+> Bip 6 and every other rectangular screen model, and including older round
+> models such as the GTR 3, the GTR 4 and the T-Rex 2. There is no point
+> trying: the install will fail.
 
 ## Step 1: enable Developer Mode
 
