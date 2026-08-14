@@ -17,7 +17,13 @@ const BENCH_PRESS_MOCK = {
   ],
 };
 
+test('unconfigured session starts in SETUP_REQUIRED state', () => {
+  const session = createWorkoutSession();
+  assert.equal(session.view().state, SESSION_STATES.SETUP_REQUIRED);
+});
+
 test('new session starts in READY state with prescription', () => {
+
   const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
   const view = session.view();
 

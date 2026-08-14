@@ -46,5 +46,32 @@
       "designWidth": 480
     }
   },
+  "i18n": {
+    "en-US": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    },
+    "fr-FR": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    },
+    "zh-CN": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    },
+    "de-DE": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    },
+    "es-ES": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    },
+    "it-IT": {
+      "name": "Liftosaur",
+      "appName": "Liftosaur"
+    }
+  },
   "defaultLanguage": "en-US"
 }
+

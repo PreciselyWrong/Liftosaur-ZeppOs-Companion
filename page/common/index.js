@@ -12,7 +12,6 @@ import {
 } from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
 
-
 import {
   SESSION_STATES,
   createWorkoutSession,
@@ -49,58 +48,6 @@ const THEME = {
   textDisabled: 0x607284,     // Texte disabled / pending dot (#607284)
 };
 
-// ── Liftosaur Workout Routine Mock ──────────────────────────────────────────
-
-const WORKOUT_MOCK = {
-  id: 'week-1-workout-a',
-  name: 'Week 1 - Workout A',
-  routineName: 'Basic Beginner Routine',
-  exercises: [
-    {
-      id: 'bench-press',
-      name: 'Bench Press, Barbell',
-      supersetGroup: null,
-      supersetTag: null,
-      sets: [
-        { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
-        { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
-        { targetReps: 5, targetWeight: 60, targetRpe: 8.5, restSeconds: 60 },
-      ],
-    },
-    {
-      id: 'overhead-squat',
-      name: 'Overhead Squat, Barbell',
-      supersetGroup: null,
-      supersetTag: null,
-      sets: [
-        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
-        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
-        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
-      ],
-    },
-    {
-      id: 'incline-db-bench',
-      name: 'Incline DB Bench',
-      supersetGroup: 'A',
-      supersetTag: 'SUPERSET A1',
-      sets: [
-        { targetReps: 10, targetWeight: 30, targetRpe: 8, restSeconds: 30 },
-        { targetReps: 10, targetWeight: 30, targetRpe: 8.5, restSeconds: 30 },
-      ],
-    },
-    {
-      id: 'chest-supported-row',
-      name: 'DB Chest Row',
-      supersetGroup: 'A',
-      supersetTag: 'SUPERSET A2',
-      sets: [
-        { targetReps: 12, targetWeight: 26, targetRpe: 8, restSeconds: 60 },
-        { targetReps: 12, targetWeight: 26, targetRpe: 8.5, restSeconds: 60 },
-      ],
-    },
-  ],
-};
-
 // ── Persistent Storage Adapter ───────────────────────────────────────────────
 
 let storageData = null;
@@ -121,11 +68,13 @@ const sessionStore = createSessionStore(localStoreAdapter);
 
 let pageInstance = null;
 let session = createWorkoutSession({
-  workout: WORKOUT_MOCK,
+  workout: null,
   initialJournal: sessionStore.loadJournal(),
 });
 
 let isOverviewListOpen = false;
+let isSyncing = false;
+let syncErrorMessage = '';
 let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
@@ -151,6 +100,46 @@ function addWidget(type, props) {
   const w = createWidget(type, props);
   activeWidgets.push(w);
   return w;
+}
+
+function requestProgramFromSideService(isManual = false) {
+  if (!pageInstance || typeof pageInstance.request !== 'function') return;
+  isSyncing = true;
+  syncErrorMessage = '';
+  if (isManual) renderUI();
+
+  try {
+    pageInstance
+      .request(createMessage({ type: MESSAGE_TYPES.GET_CURRENT_WORKOUT }))
+      .then((res) => {
+        isSyncing = false;
+        if (res && res.type === MESSAGE_TYPES.WORKOUT_DATA && res.payload) {
+          if (res.payload.configured && res.payload.workout) {
+            console.log('[liftosaur] received workout:', res.payload.workout.name);
+            session = createWorkoutSession({ workout: res.payload.workout });
+            renderUI();
+          } else {
+            console.log('[liftosaur] side service: no api key configured');
+            syncErrorMessage = 'No API key in Zepp App';
+            renderUI();
+          }
+        } else if (res && res.type === MESSAGE_TYPES.ERROR) {
+          syncErrorMessage = res.payload?.message || 'Connection error';
+          renderUI();
+        }
+      })
+      .catch((err) => {
+        isSyncing = false;
+        console.log('[liftosaur] side fetch error:', err?.message || String(err));
+        syncErrorMessage = 'Phone not reachable';
+        renderUI();
+      });
+  } catch (err) {
+    isSyncing = false;
+    console.log('[liftosaur] request dispatch error:', err?.message || String(err));
+    syncErrorMessage = 'Dispatch error';
+    renderUI();
+  }
 }
 
 function asyncSideSyncJournal() {
@@ -254,6 +243,77 @@ function renderUI() {
 
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
+
+  // ── 0. SETUP REQUIRED (NO API KEY / NO WORKOUT) ONBOARDING SCREEN ──
+  if (view.state === SESSION_STATES.SETUP_REQUIRED) {
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(45),
+      w: W,
+      h: px(30),
+      color: THEME.primaryLight,
+      text_size: px(22),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: 'Liftosaur',
+    });
+
+    addWidget(widget.FILL_RECT, {
+      x: px(60),
+      y: px(95),
+      w: px(360),
+      h: px(215),
+      radius: px(20),
+      color: THEME.card,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(75),
+      y: px(110),
+      w: px(330),
+      h: px(30),
+      color: THEME.orange,
+      text_size: px(22),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: isSyncing ? 'Connecting...' : 'API Key Required',
+    });
+
+    const statusDetail = syncErrorMessage
+      ? `Error: ${syncErrorMessage}\n\nCheck Zepp App > Liftosaur > Settings.`
+      : 'Enter your Liftosaur API key in the Zepp app on your phone:\n\nProfile > Apps > Liftosaur > Settings';
+
+    addWidget(widget.TEXT, {
+      x: px(80),
+      y: px(148),
+      w: px(320),
+      h: px(140),
+      color: THEME.textSecondary,
+      text_size: px(17),
+      align_h: align.CENTER_H,
+      align_v: align.TOP,
+      text_style: text_style.WRAP,
+      text: statusDetail,
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(90),
+      y: px(330),
+      w: px(300),
+      h: px(76),
+      radius: px(38),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      text: isSyncing ? 'Checking...' : 'Sync Program',
+      text_size: px(26),
+      click_func: () => {
+        requestProgramFromSideService(true);
+      },
+    });
+    return;
+  }
 
   // ── 1. OVERVIEW EXERCISE LIST VIEW ──
   if (isOverviewListOpen && view.state !== SESSION_STATES.READY && view.state !== SESSION_STATES.FINISHED) {
@@ -927,8 +987,7 @@ function renderUI() {
       click_func: () => {
         asyncSideSubmitHistory();
         sessionStore.clearSession();
-        session = createWorkoutSession({ workout: WORKOUT_MOCK });
-        renderUI();
+        requestProgramFromSideService(false);
       },
     });
   }
@@ -979,25 +1038,18 @@ Page(
       console.log('[liftosaur] page build');
       pageInstance = this;
 
+      // Keep screen on and prevent palm/wrist drop sleep during workouts
+      try {
+        setPageBrightTime({ brightTime: 0 });
+        pauseDropWristScreenOff({ duration: 0 });
+        pausePalmScreenOff({ duration: 0 });
+      } catch (err) {
+        console.log('[liftosaur] display keep-awake error:', err?.message || String(err));
+      }
+
       // Fetch fresh workout prescription from Side Service if no active in-flight session
-      if (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0) {
-        try {
-          this.request(createMessage({ type: MESSAGE_TYPES.GET_CURRENT_WORKOUT }))
-            .then((res) => {
-              if (res && res.type === MESSAGE_TYPES.WORKOUT_DATA && res.payload?.workout) {
-                console.log('[liftosaur] received workout from side service:', res.payload.workout.name);
-                if (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0) {
-                  session = createWorkoutSession({ workout: res.payload.workout });
-                  renderUI();
-                }
-              }
-            })
-            .catch((err) => {
-              console.log('[liftosaur] side service fetch skipped/offline:', err?.message || String(err));
-            });
-        } catch (err) {
-          console.log('[liftosaur] request dispatch error:', err?.message || String(err));
-        }
+      if (session.view().state === SESSION_STATES.SETUP_REQUIRED || (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0)) {
+        requestProgramFromSideService(false);
       }
 
       // Register horizontal swipe gestures to switch exercises
@@ -1041,15 +1093,6 @@ Page(
 
       renderUI();
       startUnifiedClock();
-
-      // Keep screen on and prevent palm/wrist drop sleep during workouts
-      try {
-        setPageBrightTime({ brightTime: 0 });
-        pauseDropWristScreenOff({ duration: 0 });
-        pausePalmScreenOff({ duration: 0 });
-      } catch (err) {
-        console.log('[liftosaur] display keep-awake error:', err?.message || String(err));
-      }
     },
 
     onDestroy() {
@@ -1070,6 +1113,5 @@ Page(
         } catch (e) {}
       }
     },
-
   })
 );

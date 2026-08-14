@@ -35,21 +35,21 @@ export function createSideRouter({
 
         case MESSAGE_TYPES.GET_CURRENT_WORKOUT: {
           try {
-            let programData;
+            let programData = null;
             if (programProvider) {
               programData = await programProvider();
-            } else {
-              programData = {
-                id: 'default-prog-1',
-                name: 'Week 1 - Workout A',
-                routineName: 'Basic Beginner Routine',
-                text: `
-                  Bench Press, Barbell / 3x5 @ 60kg / rest 60s / rpe 8
-                  Overhead Squat, Barbell / 3x5 @ 40kg / rest 90s / rpe 8
-                  [SUPERSET A1] Incline DB Bench / 2x10 @ 30kg / rest 30s / rpe 8.5
-                  [SUPERSET A2] DB Chest Row / 2x12 @ 26kg / rest 60s / rpe 8.5
-                `,
-              };
+            }
+
+            if (!programData || !programData.text) {
+              return createMessage({
+                type: MESSAGE_TYPES.WORKOUT_DATA,
+                replyToId: rawMessage.messageId,
+                sessionId: rawMessage.sessionId,
+                payload: {
+                  configured: false,
+                  workout: null,
+                },
+              });
             }
 
             const parsedWorkout = parseLiftoscriptWorkout(programData);
@@ -57,7 +57,10 @@ export function createSideRouter({
               type: MESSAGE_TYPES.WORKOUT_DATA,
               replyToId: rawMessage.messageId,
               sessionId: rawMessage.sessionId,
-              payload: { workout: parsedWorkout },
+              payload: {
+                configured: true,
+                workout: parsedWorkout,
+              },
             });
           } catch (err) {
             return createError(
@@ -67,6 +70,7 @@ export function createSideRouter({
             );
           }
         }
+
 
         case MESSAGE_TYPES.SYNC_JOURNAL: {
           try {

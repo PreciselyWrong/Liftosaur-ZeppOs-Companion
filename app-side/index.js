@@ -19,25 +19,17 @@ function getApiClient() {
 }
 
 const router = createSideRouter({
+
   programProvider: async () => {
-    const client = getApiClient();
-    try {
-      return await client.getCurrentProgram();
-    } catch (err) {
-      console.log('[liftosaur-side] api fetch error, using cached fixture:', err?.message || String(err));
-      return {
-        id: 'fixture-week-1-a',
-        name: 'Week 1 - Workout A',
-        routineName: 'Basic Beginner Routine',
-        text: `
-          Bench Press, Barbell / 3x5 @ 60kg / rest 60s / rpe 8
-          Overhead Squat, Barbell / 3x5 @ 40kg / rest 90s / rpe 8
-          [SUPERSET A1] Incline DB Bench / 2x10 @ 30kg / rest 30s / rpe 8.5
-          [SUPERSET A2] DB Chest Row / 2x12 @ 26kg / rest 60s / rpe 8.5
-        `,
-      };
+    const apiKey = getEffectiveApiKey();
+    if (!apiKey) {
+      console.log('[liftosaur-side] no API key configured in mobile settings');
+      return null;
     }
+    const client = getApiClient();
+    return await client.getCurrentProgram();
   },
+
 
   playgroundSimulator: async (journal) => {
     const client = getApiClient();
