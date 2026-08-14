@@ -11,7 +11,14 @@
  * only. Both are 1-based, matching the playground command grammar.
  */
 
-import { parseLiftohistoryRecord, expandSetGroups } from './liftohistory.js';
+import { parseLiftohistoryRecord, parseSetGroups, expandSetGroups } from './liftohistory.js';
+
+export function normalizeName(name) {
+  return String(name || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
+}
 
 /**
  * Builds a day plan from a probe response: a playground run whose only purpose
@@ -33,6 +40,7 @@ export function buildDayPlan(workoutText) {
       equipment: exercise.equipment,
       supersetGroup: null,
       supersetTag: null,
+      warmupSets: [],
       sets: targetSets.map((set, setIndex) => ({
         index: setIndex + 1,
         targetReps: set.reps,
@@ -55,6 +63,77 @@ export function buildDayPlan(workoutText) {
     unit: detectUnit(exercises),
     exercises: exercises.filter((exercise) => exercise.sets.length > 0),
   };
+}
+
+/**
+ * Enriches a day plan with warmups and superset groupings read from the program
+ * text. Applies metadata only when the exercise names and count align
+ * strictly with the playground's output.
+ *
+ * @param {object} plan Day plan produced by buildDayPlan
+ * @param {Array<{name: string, equipment: string|null, warmupText: string|null, supersetTag: string|null}>} programExercises
+ * @param {{referenceData?: object}} options
+ * @returns {object} The enriched plan
+ */
+export function applyProgramMetadata(plan, programExercises, { referenceData = null } = {}) {
+  if (!plan || !Array.isArray(plan.exercises) || !Array.isArray(programExercises)) return plan;
+  if (plan.exercises.length !== programExercises.length) return plan;
+
+  for (let i = 0; i < plan.exercises.length; i++) {
+    if (normalizeName(plan.exercises[i].name) !== normalizeName(programExercises[i].name)) {
+      return plan; // Name mismatch: do not guess
+    }
+  }
+
+  for (let i = 0; i < plan.exercises.length; i++) {
+    const ex = plan.exercises[i];
+    const meta = programExercises[i];
+
+    ex.supersetGroup = meta.supersetTag || null;
+    ex.supersetTag = meta.supersetTag || null;
+    ex.warmupSets = [];
+
+    if (meta.warmupText && meta.warmupText.toLowerCase() !== 'none') {
+      const warmupGroups = parseSetGroups(meta.warmupText);
+      const rawWarmupSets = expandSetGroups(warmupGroups);
+      const firstWorkSetWeight = ex.sets[0]?.targetWeight ?? null;
+
+      for (let wIdx = 0; wIdx < rawWarmupSets.length; wIdx++) {
+        const wSet = rawWarmupSets[wIdx];
+        let targetWeight = null;
+
+        if (wSet.percent !== null) {
+          if (Number.isFinite(firstWorkSetWeight) && firstWorkSetWeight > 0) {
+            const rawTarget = (wSet.percent / 100) * firstWorkSetWeight;
+            if (referenceData && typeof referenceData.resolveWeight === 'function') {
+              const resolved = referenceData.resolveWeight(ex.name, ex.equipment, rawTarget, plan.unit);
+              targetWeight = resolved.resolved ? resolved.value : null;
+            } else {
+              targetWeight = null;
+            }
+          }
+        } else {
+          targetWeight = wSet.weight;
+        }
+
+        ex.warmupSets.push({
+          index: wIdx + 1,
+          isWarmup: true,
+          targetReps: wSet.reps,
+          targetRepsMax: wSet.maxReps,
+          targetWeight,
+          targetWeightPercent: wSet.percent ?? null,
+          targetRpe: wSet.rpe,
+          unit: wSet.unit || plan.unit,
+          restSeconds: wSet.restSeconds,
+          isAmrap: wSet.isAmrap,
+          askWeight: wSet.askWeight,
+        });
+      }
+    }
+  }
+
+  return plan;
 }
 
 function detectUnit(exercises) {
@@ -96,13 +175,16 @@ function formatWeightArg(weight, unit) {
  * Adjustments are emitted before the completion they belong to, so the server
  * records exactly the weight, reps and RPE the user confirmed on the watch.
  *
- * @param {Array<{exerciseIndex: number, setIndex: number, weight: number|null, reps: number, rpe: number|null, unit: string, seconds: number|null}>} completedSets
+ * Warmup sets are skipped because the playground does not track them.
+ *
+ * @param {Array<{exerciseIndex: number, setIndex: number, weight: number|null, reps: number, rpe: number|null, unit: string, seconds: number|null, isWarmup?: boolean}>} completedSets
  *        Indices are 1-based and refer to the day plan.
  */
 export function buildWorkoutCommands(completedSets, { finish = false } = {}) {
   const commands = [];
 
   for (const set of completedSets) {
+    if (set.isWarmup) continue;
     const { exerciseIndex, setIndex } = set;
     if (!Number.isFinite(exerciseIndex) || !Number.isFinite(setIndex)) continue;
 

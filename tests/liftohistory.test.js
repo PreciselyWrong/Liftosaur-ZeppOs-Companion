@@ -107,6 +107,7 @@ test('expands a group into individual sets', () => {
     maxReps: null,
     repsLeft: null,
     isAmrap: false,
+    percent: null,
     weight: 100,
     unit: 'kg',
     askWeight: false,
@@ -133,4 +134,21 @@ test('rewrites the header without touching the exercises block', () => {
   assert.equal(record.week, 2);
   assert.equal(record.dayInWeek, 3);
   assert.ok(rewritten.includes('  Squat / 3x5 100kg / target: 3x5 100kg 120s'));
+});
+
+test('parses and expands percentage-based set groups', () => {
+  const groups = parseSetGroups('1x8 40%, 1x5 70%, 1x3 85%');
+  assert.equal(groups.length, 3);
+  assert.equal(groups[0].percent, 40);
+  assert.equal(groups[0].weight, null);
+  assert.equal(groups[0].unit, null);
+  assert.equal(groups[1].percent, 70);
+  assert.equal(groups[2].percent, 85);
+
+  const expanded = expandSetGroups(groups);
+  assert.equal(expanded.length, 3);
+  assert.equal(expanded[0].percent, 40);
+  assert.equal(expanded[0].reps, 8);
+  assert.equal(expanded[1].percent, 70);
+  assert.equal(expanded[2].percent, 85);
 });

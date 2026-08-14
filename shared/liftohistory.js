@@ -33,7 +33,7 @@ const SET_GROUP_RE = new RegExp(
     '(?:-([0-9]+))?' + //                3 max reps of a range
     '(?:\\|([0-9]+))?' + //              4 reps of the weaker side (unilateral)
     '(\\+)?' + //                        5 AMRAP marker
-    '(?:\\s+([0-9]*\\.?[0-9]+)\\s*(kg|lb|lbs)(\\+)?)?' + // 6 weight 7 unit 8 ask-weight marker
+    '(?:\\s+([0-9]*\\.?[0-9]+)\\s*(kg|lb|lbs|%)(\\+)?)?' + // 6 weight or percent 7 unit 8 ask-weight marker
     '(?:\\s*@\\s*([0-9]*\\.?[0-9]+)(\\+)?)?' + //           9 RPE 10 logged marker
     '(?:\\s+([0-9]+)\\s*s\\b)?' + //     11 rest timer
     '(?:\\s*\\(([^)]*)\\))?' + //        12 label
@@ -56,14 +56,18 @@ function parseSetGroup(raw) {
   const reps = parseInt(match[2], 10);
   if (!Number.isFinite(reps) || !Number.isFinite(count) || count < 1) return null;
 
+  const isPercent = match[7] === '%';
+  const rawNum = match[6] !== undefined ? parseFloat(match[6]) : null;
+
   return {
     count,
     reps,
     maxReps: match[3] ? parseInt(match[3], 10) : null,
     repsLeft: match[4] ? parseInt(match[4], 10) : null,
     isAmrap: Boolean(match[5]),
-    weight: match[6] !== undefined ? parseFloat(match[6]) : null,
-    unit: match[7] ? (match[7] === 'lbs' ? 'lb' : match[7]) : null,
+    percent: isPercent ? rawNum : null,
+    weight: !isPercent ? rawNum : null,
+    unit: match[7] ? (match[7] === '%' ? null : match[7] === 'lbs' ? 'lb' : match[7]) : null,
     askWeight: Boolean(match[8]),
     rpe: match[9] !== undefined ? parseFloat(match[9]) : null,
     isRpeLogged: Boolean(match[10]),
@@ -97,6 +101,7 @@ export function expandSetGroups(groups) {
         maxReps: group.maxReps,
         repsLeft: group.repsLeft,
         isAmrap: group.isAmrap,
+        percent: group.percent ?? null,
         weight: group.weight,
         unit: group.unit,
         askWeight: group.askWeight,

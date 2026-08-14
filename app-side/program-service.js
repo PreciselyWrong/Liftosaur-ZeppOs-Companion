@@ -16,12 +16,13 @@
  * holds; the user chooses on the watch.
  */
 
-import { parseProgramOutline, findOutlineDay } from '../shared/liftoscript-outline.js';
+import { parseProgramOutline, findOutlineDay, parseProgramDayExercises } from '../shared/liftoscript-outline.js';
 import {
   buildDayPlan,
   buildProbeCommands,
   exerciseCountFromProbeError,
   buildWorkoutCommands,
+  applyProgramMetadata,
 } from '../shared/day-plan.js';
 import { parseLiftohistoryRecord, rewriteRecordHeader } from '../shared/liftohistory.js';
 
@@ -48,7 +49,7 @@ export function programVersion(text) {
   return hash.toString(16).padStart(8, '0');
 }
 
-export function createProgramService({ client } = {}) {
+export function createProgramService({ client, referenceData = null } = {}) {
   if (!client) {
     throw new Error('createProgramService requires a Liftosaur API client');
   }
@@ -194,6 +195,17 @@ export function createProgramService({ client } = {}) {
           `Asked for week ${week} day ${day}, playground answered week ${plan.week} day ${plan.dayInWeek}`
         );
       }
+
+      if (referenceData && !referenceData.isLoaded()) {
+        try {
+          await referenceData.load();
+        } catch (err) {
+          // Graceful degradation: warmups will show percent if reference data fails.
+        }
+      }
+
+      const declaredExercises = parseProgramDayExercises(program.text, week, day);
+      applyProgramMetadata(plan, declaredExercises, { referenceData });
 
       // Liftosaur prefixes the day with the week name only when the program has
       // more than one week, so both spellings count as a match. The numeric

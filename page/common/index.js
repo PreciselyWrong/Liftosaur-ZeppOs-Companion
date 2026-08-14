@@ -964,6 +964,7 @@ function renderOverviewScreen(view) {
   all.slice(start, start + LIST_PAGE_SIZE).forEach((ex, i) => {
     const idx = start + i;
     const isCurrent = idx === view.currentExerciseIndex;
+    const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
     addWidget(widget.BUTTON, {
       x: px(64),
       y,
@@ -973,7 +974,7 @@ function renderOverviewScreen(view) {
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
       color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
-      text: `${truncate(ex.name, 18)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
+      text: `${ssPrefix}${truncate(ex.name, 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
       text_size: px(16),
       click_func: () => {
         session.selectExercise(idx);
@@ -1093,6 +1094,12 @@ function renderActiveSetScreen(view) {
     text: truncate(view.exerciseName, 24),
   });
 
+  const setLabel = set.isWarmup
+    ? `Warmup ${set.warmupIndex}/${set.totalWarmups}`
+    : `Set ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${
+        view.supersetGroup ? ` (SS ${view.supersetGroup})` : ''
+      }`;
+
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(122),
@@ -1103,8 +1110,25 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `Set ${view.currentSetIndex + 1}/${view.totalSets}   ${formatDots(view.exerciseSetsDots)}`,
+    text: `${setLabel}   ${formatDots(view.exerciseSetsDots)}`,
   });
+
+  let targetText;
+  if (set.isWarmup) {
+    if (set.targetWeight !== null) {
+      targetText = `Warmup ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
+        set.targetWeightPercent ? ` (${set.targetWeightPercent}%)` : ''
+      }`;
+    } else {
+      targetText = `Warmup ${formatTargetReps(set)} × ${
+        set.targetWeightPercent ? `${set.targetWeightPercent}%` : '—'
+      }`;
+    }
+  } else {
+    targetText = `Target ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
+      set.targetRpe !== null ? ` @${set.targetRpe}` : ''
+    }`;
+  }
 
   addWidget(widget.TEXT, {
     x: px(62),
@@ -1116,9 +1140,7 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `Target ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
-      set.targetRpe !== null ? ` @${set.targetRpe}` : ''
-    }`,
+    text: targetText,
   });
 
   // Weight stepper
@@ -1256,6 +1278,13 @@ function renderRestScreen(view) {
     text: formatSeconds(rest.remaining),
   });
 
+  let nextSummary = 'Last set done';
+  if (rest.nextExerciseName) {
+    const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
+    const kind = rest.nextIsWarmup ? 'Warmup' : 'Set';
+    nextSummary = `Next: ${truncate(rest.nextExerciseName, 20)}${ssText}\n${kind} ${(rest.nextSetIndex ?? 0) + 1}/${rest.nextTotalSets}`;
+  }
+
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(250),
@@ -1266,9 +1295,7 @@ function renderRestScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.WRAP,
-    text: rest.nextExerciseName
-      ? `Next: ${truncate(rest.nextExerciseName, 22)}\nSet ${(rest.nextSetIndex ?? 0) + 1}/${rest.nextTotalSets}`
-      : 'Last set done',
+    text: nextSummary,
   });
 
   addWidget(widget.BUTTON, {

@@ -227,3 +227,163 @@ test('carries the plan identity needed to write back', () => {
   assert.equal(view.dayInWeek, 1);
   assert.equal(view.dayName, 'Semaine 1 - Mardi: PUSH A');
 });
+
+test('warmup sets run before work sets and are omitted from playground replay', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Bench Press',
+        warmupSets: [
+          { index: 1, targetReps: 10, targetWeight: 35, targetWeightPercent: 40, restSeconds: 60 },
+          { index: 2, targetReps: 5, targetWeight: 60, targetWeightPercent: 70, restSeconds: 60 },
+        ],
+        sets: [
+          { index: 1, targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: 120 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  let view = session.view();
+  assert.equal(view.totalSets, 3);
+  assert.equal(view.currentSet.isWarmup, true);
+  assert.equal(view.currentSet.warmupIndex, 1);
+  assert.equal(view.currentSet.totalWarmups, 2);
+  assert.equal(view.currentSet.targetWeight, 35);
+  assert.equal(view.currentSet.targetWeightPercent, 40);
+
+  // Complete warmup 1
+  session.completeSet({ timestamp: 10 });
+  view = session.view();
+  assert.equal(view.state, SESSION_STATES.REST);
+  assert.equal(view.rest.nextIsWarmup, true);
+
+  // Advance to warmup 2
+  session.nextSet({ timestamp: 70 });
+  view = session.view();
+  assert.equal(view.currentSet.isWarmup, true);
+  assert.equal(view.currentSet.warmupIndex, 2);
+  assert.equal(view.currentSet.targetWeight, 60);
+
+  // Complete warmup 2
+  session.completeSet({ timestamp: 80 });
+  session.nextSet({ timestamp: 140 });
+
+  // Now in work set 1
+  view = session.view();
+  assert.equal(view.currentSet.isWarmup, false);
+  assert.equal(view.currentSet.workSetIndex, 1);
+  assert.equal(view.currentSet.targetWeight, 80);
+
+  // Complete work set 1
+  session.completeSet({ timestamp: 150 });
+  assert.equal(session.view().state, SESSION_STATES.FINISHED);
+
+  // Only the working set is returned for playground replay
+  const replay = session.getCompletedSets();
+  assert.deepEqual(replay, [
+    { exerciseIndex: 1, setIndex: 1, weight: 80, reps: 8, rpe: 8, unit: 'kg' },
+  ]);
+});
+
+test('exercises in a superset group alternate working sets', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Bench Press',
+        supersetGroup: 'A',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 8, targetWeight: 80, restSeconds: 60 },
+          { index: 2, targetReps: 8, targetWeight: 80, restSeconds: 60 },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Triceps Pushdown',
+        supersetGroup: 'A',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 12, targetWeight: 35, restSeconds: 60 },
+          { index: 2, targetReps: 12, targetWeight: 35, restSeconds: 60 },
+        ],
+      },
+      {
+        index: 3,
+        name: 'Lateral Raise',
+        supersetGroup: null,
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 15, targetWeight: 10, restSeconds: 60 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  // 1. Bench Press - Set 1
+  assert.equal(session.view().exerciseName, 'Bench Press');
+  assert.equal(session.view().currentSet.workSetIndex, 1);
+  session.completeSet({ timestamp: 10 });
+
+  // Rest screen announces Triceps Pushdown Set 1
+  assert.equal(session.view().rest.nextExerciseName, 'Triceps Pushdown');
+  assert.equal(session.view().rest.nextSetIndex, 0); // 0 completed -> set 1
+  session.nextSet({ timestamp: 70 });
+
+  // 2. Triceps Pushdown - Set 1
+  assert.equal(session.view().exerciseName, 'Triceps Pushdown');
+  assert.equal(session.view().currentSet.workSetIndex, 1);
+  session.completeSet({ timestamp: 80 });
+
+  // Rest screen announces Bench Press Set 2
+  assert.equal(session.view().rest.nextExerciseName, 'Bench Press');
+  assert.equal(session.view().rest.nextSetIndex, 1); // 1 completed -> set 2
+  session.nextSet({ timestamp: 140 });
+
+  // 3. Bench Press - Set 2
+  assert.equal(session.view().exerciseName, 'Bench Press');
+  assert.equal(session.view().currentSet.workSetIndex, 2);
+  session.completeSet({ timestamp: 150 });
+
+  // Rest screen announces Triceps Pushdown Set 2
+  assert.equal(session.view().rest.nextExerciseName, 'Triceps Pushdown');
+  session.nextSet({ timestamp: 210 });
+
+  // 4. Triceps Pushdown - Set 2 (Superset A complete!)
+  assert.equal(session.view().exerciseName, 'Triceps Pushdown');
+  assert.equal(session.view().currentSet.workSetIndex, 2);
+  session.completeSet({ timestamp: 220 });
+
+  // Rest screen announces Lateral Raise (outside superset)
+  assert.equal(session.view().rest.nextExerciseName, 'Lateral Raise');
+  session.nextSet({ timestamp: 280 });
+
+  // 5. Lateral Raise - Set 1
+  assert.equal(session.view().exerciseName, 'Lateral Raise');
+  session.completeSet({ timestamp: 290 });
+
+  // All finished
+  assert.equal(session.view().state, SESSION_STATES.FINISHED);
+
+  const replay = session.getCompletedSets();
+  assert.equal(replay.length, 5);
+  assert.deepEqual(replay.map((s) => [s.exerciseIndex, s.setIndex]), [
+    [1, 1],
+    [2, 1],
+    [1, 2],
+    [2, 2],
+    [3, 1],
+  ]);
+});

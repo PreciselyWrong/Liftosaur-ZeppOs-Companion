@@ -104,3 +104,96 @@ export function findOutlineDay(outline, weekNumber, dayNumber) {
   if (!day) return null;
   return { week, day };
 }
+
+/**
+ * Extracts exercise declarations for one day from the Liftoscript source text.
+ * Reads `warmup:` and `superset:` tags. Exercise names have Liftoscript template
+ * brackets (e.g. `[1,2]`) stripped.
+ *
+ * @param {string} programText Verbatim Liftoscript source.
+ * @param {number} weekNumber  1-based week index.
+ * @param {number} dayNumber   1-based day index within the week.
+ * @returns {Array<{name: string, equipment: string|null, warmupText: string|null, supersetTag: string|null}>}
+ */
+export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
+  const lines = String(programText || '').split('\n');
+  let currentWeek = 0;
+  let currentDay = 0;
+  let inTargetDay = false;
+  let scriptDepth = 0;
+  const exercises = [];
+
+  for (const rawLine of lines) {
+    const line = rawLine.trim();
+
+    const opens = countOccurrences(line, '{~');
+    const closes = countOccurrences(line, '~}');
+    if (scriptDepth > 0) {
+      scriptDepth = Math.max(0, scriptDepth + opens - closes);
+      continue;
+    }
+    if (opens > closes) {
+      scriptDepth = opens - closes;
+      continue;
+    }
+
+    if (line === '' || line.startsWith('//')) continue;
+
+    const weekMatch = line.match(WEEK_HEADER_RE);
+    if (weekMatch) {
+      currentWeek += 1;
+      currentDay = 0;
+      inTargetDay = false;
+      continue;
+    }
+
+    const dayMatch = line.match(DAY_HEADER_RE);
+    if (dayMatch) {
+      if (currentWeek === 0) currentWeek = 1;
+      currentDay += 1;
+      inTargetDay = currentWeek === weekNumber && currentDay === dayNumber;
+      continue;
+    }
+
+    if (inTargetDay) {
+      const parts = line
+        .split(' / ')
+        .map((p) => p.trim())
+        .filter((p) => p.length > 0);
+      if (parts.length === 0) continue;
+
+      const rawNameAndEquipment = parts[0];
+      const cleaned = rawNameAndEquipment.replace(/\[[^\]]*\]/g, '').trim();
+      const commaIdx = cleaned.indexOf(',');
+      const name = (commaIdx === -1 ? cleaned : cleaned.slice(0, commaIdx)).trim();
+      const equipment = commaIdx === -1 ? null : cleaned.slice(commaIdx + 1).trim() || null;
+      if (!name) continue;
+
+      let warmupText = null;
+      let supersetTag = null;
+
+      for (let i = 1; i < parts.length; i++) {
+        const part = parts[i];
+        const warmupMatch = part.match(/^warmup\s*:\s*(.*)$/i);
+        if (warmupMatch) {
+          warmupText = warmupMatch[1].trim();
+          continue;
+        }
+        const supersetMatch = part.match(/^superset\s*:\s*(.*)$/i);
+        if (supersetMatch) {
+          supersetTag = supersetMatch[1].trim();
+          continue;
+        }
+      }
+
+      exercises.push({
+        name,
+        equipment,
+        warmupText,
+        supersetTag,
+      });
+    }
+  }
+
+  return exercises;
+}

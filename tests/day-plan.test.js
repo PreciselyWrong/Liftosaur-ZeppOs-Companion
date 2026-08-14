@@ -6,6 +6,7 @@ import {
   buildProbeCommands,
   exerciseCountFromProbeError,
   buildWorkoutCommands,
+  applyProgramMetadata,
 } from '../shared/day-plan.js';
 
 // Shape of `data.workout` returned by POST /api/v1/playground after a probe run.
@@ -120,4 +121,55 @@ test('writes the unit the plan used', () => {
   ]);
 
   assert.ok(commands.includes('change_weight(1, 1, 185lb)'));
+});
+
+test('buildWorkoutCommands skips warmup sets', () => {
+  const commands = buildWorkoutCommands([
+    { exerciseIndex: 1, setIndex: 1, weight: 35, reps: 10, unit: 'kg', isWarmup: true },
+    { exerciseIndex: 1, setIndex: 1, weight: 80, reps: 8, rpe: 8, unit: 'kg', isWarmup: false },
+  ]);
+
+  assert.deepEqual(commands, [
+    'change_weight(1, 1, 80kg)',
+    'change_reps(1, 1, 8)',
+    'complete_set(1, 1)',
+    'change_rpe(1, 1, 8)',
+  ]);
+});
+
+test('applyProgramMetadata attaches superset and resolved warmups when aligned', () => {
+  const plan = buildDayPlan(PROBE_RESPONSE);
+  const declared = [
+    { name: 'Lat Pulldown', equipment: null, warmupText: '1x8 50%', supersetTag: 'A' },
+    { name: 'Incline Curl', equipment: null, warmupText: '1x5 10kg', supersetTag: 'A' },
+  ];
+
+  const fakeReference = {
+    resolveWeight: (name, eq, target, unit) => ({ value: 30, resolved: true }),
+  };
+
+  applyProgramMetadata(plan, declared, { referenceData: fakeReference });
+
+  assert.equal(plan.exercises[0].supersetGroup, 'A');
+  assert.equal(plan.exercises[0].warmupSets.length, 1);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
+
+  assert.equal(plan.exercises[1].supersetGroup, 'A');
+  assert.equal(plan.exercises[1].warmupSets.length, 1);
+  assert.equal(plan.exercises[1].warmupSets[0].targetWeight, 10);
+  assert.equal(plan.exercises[1].warmupSets[0].targetWeightPercent, null);
+});
+
+test('applyProgramMetadata leaves plan untouched when alignment fails', () => {
+  const plan = buildDayPlan(PROBE_RESPONSE);
+  const declared = [
+    { name: 'Bench Press', equipment: null, warmupText: '1x8 50%', supersetTag: 'A' },
+    { name: 'Incline Curl', equipment: null, warmupText: '1x5 10kg', supersetTag: 'A' },
+  ];
+
+  applyProgramMetadata(plan, declared);
+
+  assert.equal(plan.exercises[0].supersetGroup, null);
+  assert.deepEqual(plan.exercises[0].warmupSets, []);
 });
