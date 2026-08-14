@@ -23,24 +23,40 @@ export const EVENT_TYPES = {
 };
 
 export function createWorkoutSession({ workout, exercise, initialJournal = [] } = {}) {
-  const exercises = workout?.exercises ?? (exercise ? [exercise] : []);
-  const workoutName = workout?.name ?? (exercise?.name ?? 'No Workout');
-  const routineName = workout?.routineName ?? 'Setup Required';
+  let exercises = workout?.exercises ?? (exercise ? [exercise] : []);
+  let workoutName = workout?.name ?? (exercise?.name ?? 'No Workout');
+  let routineName = workout?.routineName ?? 'Liftosaur';
+  let availableDays = workout?.availableDays ?? [];
+  let currentDayIndex = workout?.currentDayIndex ?? 0;
+  let totalDays = workout?.totalDays ?? (availableDays.length > 0 ? availableDays.length : 1);
+
+  // Sanitize all exercises so each has at least one valid set
+  exercises = exercises.map((ex, i) => {
+    const rawSets = Array.isArray(ex.sets) && ex.sets.length > 0 ? ex.sets : [
+      { targetReps: 10, targetWeight: 20, targetRpe: null, restSeconds: 60, isAmrap: false }
+    ];
+    return {
+      ...ex,
+      id: ex.id || `ex-${i}`,
+      name: ex.name || `Exercise ${i + 1}`,
+      sets: rawSets,
+    };
+  });
 
   let state = exercises.length === 0 ? SESSION_STATES.SETUP_REQUIRED : SESSION_STATES.READY;
   let currentExerciseIndex = 0;
   let workoutStartTime = null;
   let workoutEndTime = null;
 
-
-  // Per-exercise progress tracking: exerciseIndex -> { setIndex, currentWeight, currentReps, currentRpe, completedSets: [] }
+  // Per-exercise progress tracking
   const exerciseProgress = exercises.map((ex) => ({
     currentSetIndex: 0,
-    currentWeight: ex.sets[0]?.targetWeight ?? 0,
-    currentReps: ex.sets[0]?.targetReps ?? 0,
+    currentWeight: ex.sets[0]?.targetWeight ?? 20,
+    currentReps: ex.sets[0]?.targetReps ?? 5,
     currentRpe: ex.sets[0]?.targetRpe ?? null,
     completedSets: [],
   }));
+
 
   let restInfo = null; // { startedAt, duration, endsAt }
   let journal = [];
@@ -350,6 +366,33 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
         };
       });
 
+      if (!ex) {
+        return {
+          state,
+          workoutName,
+          routineName,
+          elapsedSeconds: 0,
+          totalVolume: 0,
+          totalCompletedSetsCount: 0,
+          totalExercises: 0,
+          currentExerciseIndex: 0,
+          exerciseId: 'none',
+          exerciseName: 'No Exercise',
+          supersetTag: null,
+          totalSets: 0,
+          currentSetIndex: 0,
+          availableDays,
+          currentDayIndex,
+          totalDays,
+          exerciseSetsDots: [],
+          overviewExercises: [],
+          currentSet: { weight: 0, reps: 0, rpe: null, targetWeight: 0, targetReps: 0, targetRpe: null },
+          completedSets: [],
+          allCompletedSets: [],
+          rest: null,
+        };
+      }
+
       return {
         state,
         workoutName,
@@ -364,6 +407,9 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
         supersetTag: ex.supersetTag ?? null,
         totalSets: ex.sets.length,
         currentSetIndex: prog.currentSetIndex,
+        availableDays,
+        currentDayIndex,
+        totalDays,
         exerciseSetsDots,
         overviewExercises,
         currentSet: {
@@ -379,6 +425,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
         rest: calculatedRest,
       };
     },
+
 
 
     startWorkout({ timestamp = Date.now() } = {}) {
