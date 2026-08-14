@@ -225,14 +225,7 @@ export function formatDateForHistory(date) {
   if (!date) return null;
   const d = date instanceof Date ? date : new Date(date);
   if (!Number.isFinite(d.getTime())) return null;
-  const pad = (n) => String(n).padStart(2, '0');
-  const YYYY = d.getUTCFullYear();
-  const MM = pad(d.getUTCMonth() + 1);
-  const DD = pad(d.getUTCDate());
-  const HH = pad(d.getUTCHours());
-  const mm = pad(d.getUTCMinutes());
-  const ss = pad(d.getUTCSeconds());
-  return `${YYYY}-${MM}-${DD} ${HH}:${mm}:${ss} +00:00`;
+  return d.toISOString().replace(/\.\d{3}Z$/, 'Z');
 }
 
 /**
