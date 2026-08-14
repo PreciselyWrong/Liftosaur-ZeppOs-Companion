@@ -415,6 +415,7 @@ function syncProgress() {
         index: exercise.index,
         name: exercise.name,
         equipment: exercise.equipment,
+        sets: exercise.sets,
       })),
     },
   })

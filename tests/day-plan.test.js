@@ -148,15 +148,18 @@ test('a live record carries no duration, so Liftosaur reads it as ongoing', () =
   assert.ok(!text.includes('duration:'), 'an ongoing session has no duration yet');
 });
 
-test('a live record states no target, because progression is the server\'s to compute', () => {
+test('a live record carries the prescription, like any Liftosaur record', () => {
   const plan = buildDayPlan(PROBE_RESPONSE);
   const text = buildProgressRecord({
     plan,
     completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' }],
   });
 
-  assert.ok(!text.includes('target:'));
-  assert.ok(!text.includes('warmup:'));
+  assert.ok(
+    text.includes('/ target: 3x10 60kg @8 120s, 1x10+ 60kg @9 120s'),
+    'the target keeps its rep counts, weight, RPE, AMRAP marker and rest timer'
+  );
+  assert.ok(!text.includes('warmup:'), 'warmups are still not obtainable');
 });
 
 test('there is no live record before the first set', () => {
