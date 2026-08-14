@@ -1,78 +1,36 @@
 AppSettingsPage({
-  state: {
-    apiKey: '',
-  },
-
   build(props) {
-    this.getStorage(props);
-
     return Section(
       {
         title: 'Liftosaur Account',
-        description: 'Connect with your Liftosaur Cloud account',
+        description: 'Sync with Liftosaur Cloud',
       },
       [
         TextInput({
           label: 'API Key',
+          settingsKey: 'apiKey',
+          placeholder: 'lftsk_...',
           labelStyle: {
             color: '#111111',
             fontSize: '15px',
             fontWeight: 'bold',
           },
-          placeholder: 'lftsk_...',
-          value: this.state.apiKey,
-          settingsKey: 'apiKey',
           subStyle: {
             color: '#666666',
             fontSize: '12px',
           },
-          description: 'Personal API key starting with lftsk_',
-          onChange: (val) => {
-            const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
-            this.state.apiKey = clean;
-            props.settingsStorage.setItem('apiKey', clean);
-          },
-        }),
-        Button({
-          label: 'Save API Key',
-          style: {
-            marginTop: '16px',
-            backgroundColor: '#8356F6',
-            color: '#FFFFFF',
-            borderRadius: '8px',
-          },
-          onClick: () => {
-            if (this.state.apiKey) {
-              props.settingsStorage.setItem('apiKey', this.state.apiKey.trim());
-            }
-          },
+          description: 'Paste your API key (starts with lftsk_)',
         }),
         Text({
           style: {
             color: '#555555',
             fontSize: '13px',
-            marginTop: '14px',
+            marginTop: '12px',
             lineHeight: '18px',
           },
-          value: 'To get your API Key: Open liftosaur.com -> Settings -> API Keys (or in the mobile Liftosaur app).',
+          value: 'How to find your key: Open liftosaur.com or the Liftosaur app -> Settings -> API Keys.',
         }),
       ]
     );
-  },
-
-  getStorage(props) {
-    const raw = props.settingsStorage.getItem('apiKey');
-    if (typeof raw === 'string') {
-      try {
-        const parsed = JSON.parse(raw);
-        this.state.apiKey = typeof parsed === 'string' ? parsed : (parsed?.value || raw);
-      } catch (e) {
-        this.state.apiKey = raw;
-      }
-    } else if (typeof raw === 'object' && raw !== null) {
-      this.state.apiKey = raw.value || '';
-    } else {
-      this.state.apiKey = '';
-    }
   },
 });

@@ -5,7 +5,6 @@ import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 let sideServiceInstance = null;
 
 function extractApiKeyString(val) {
-
   if (!val) return null;
   if (typeof val === 'string') {
     let str = val.trim();
@@ -27,24 +26,47 @@ function extractApiKeyString(val) {
 
 function getEffectiveApiKey() {
   try {
-    let raw = null;
-    if (sideServiceInstance?.settings?.getItem) {
-      raw = sideServiceInstance.settings.getItem('apiKey');
+    let allSettings = {};
+
+    // 1. Try global settingsStorage
+    if (typeof settings !== 'undefined' && settings?.settingsStorage) {
+      const direct = settings.settingsStorage.getItem('apiKey');
+      const directExtracted = extractApiKeyString(direct);
+      if (directExtracted) {
+        console.log('[liftosaur-side] found direct apiKey in settingsStorage');
+        return directExtracted;
+      }
+      if (typeof settings.settingsStorage.toObject === 'function') {
+        allSettings = { ...allSettings, ...(settings.settingsStorage.toObject() || {}) };
+      }
     }
-    if (!raw && typeof settings !== 'undefined' && settings?.settingsStorage?.getItem) {
-      raw = settings.settingsStorage.getItem('apiKey');
+
+    // 2. Try sideServiceInstance.settings
+    if (sideServiceInstance?.settings) {
+      const fromInstance = sideServiceInstance.settings.getItem('apiKey');
+      const instExtracted = extractApiKeyString(fromInstance);
+      if (instExtracted) {
+        console.log('[liftosaur-side] found apiKey in sideServiceInstance.settings');
+        return instExtracted;
+      }
+      if (typeof sideServiceInstance.settings.getAll === 'function') {
+        allSettings = { ...allSettings, ...(sideServiceInstance.settings.getAll() || {}) };
+      }
     }
-    const extracted = extractApiKeyString(raw);
-    if (extracted) {
-      console.log('[liftosaur-side] effective API key loaded (length:', extracted.length, ')');
-      return extracted;
+
+    // 3. Search all collected settings entries
+    for (const [k, v] of Object.entries(allSettings)) {
+      const candidate = extractApiKeyString(v);
+      if (candidate) {
+        console.log('[liftosaur-side] found apiKey in setting entry key:', k);
+        return candidate;
+      }
     }
   } catch (e) {
-    console.log('[liftosaur-side] error loading api key:', e?.message || String(e));
+    console.log('[liftosaur-side] getEffectiveApiKey exception:', e?.message || String(e));
   }
   return null;
 }
-
 
 function getApiClient() {
   const apiKey = getEffectiveApiKey();
@@ -55,7 +77,7 @@ const router = createSideRouter({
   programProvider: async () => {
     const apiKey = getEffectiveApiKey();
     if (!apiKey) {
-      console.log('[liftosaur-side] no API key configured in mobile settings');
+      console.log('[liftosaur-side] no API key found in mobile settings storage');
       return null;
     }
     const client = getApiClient();
@@ -90,7 +112,13 @@ AppSideService(
       sideServiceInstance = this;
     },
 
+    onSettingsChange({ key, newValue, oldValue } = {}) {
+      console.log('[liftosaur-side] onSettingsChange key:', key);
+      sideServiceInstance = this;
+    },
+
     onRequest(req, res) {
+      sideServiceInstance = this;
       console.log('[liftosaur-side] onRequest', JSON.stringify(req));
       router
         .handle(req)
