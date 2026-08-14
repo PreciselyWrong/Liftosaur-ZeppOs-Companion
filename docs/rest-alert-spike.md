@@ -5,7 +5,7 @@ the user. Nothing here is implemented yet; this document defines what must be ob
 
 The Workout Extension is a plug-in inside the system Workout app. It is not guaranteed to
 be focused, foreground, or even running when `restEndsAt` is reached. Every scenario below
-must therefore be answered with real-device evidence — the emulator cannot settle any of
+must therefore be answered with real-device evidence - the emulator cannot settle any of
 the screen-off or wrist-down cases.
 
 ## Scenarios to observe
@@ -28,7 +28,7 @@ the screen-off or wrist-down cases.
 2. Whether any vibration/haptic API is reachable from a `data-widget` context, and under
    which permission.
 3. Whether a scheduled alarm or timer API exists that survives screen-off, or whether the
-   only option is polling while focused — which the project forbids.
+   only option is polling while focused - which the project forbids.
 4. Whether the system Workout itself already vibrates on its own events, and whether a
    second source would be confusing or suppressed.
 
@@ -36,12 +36,12 @@ the screen-off or wrist-down cases.
 
 If the scenarios fail, degrade explicitly rather than silently:
 
-1. **Full** — alert fires at `restEndsAt` regardless of focus or screen state.
-2. **Focused only** — alert fires only while the extension is visible; the UI states this
+1. **Full** - alert fires at `restEndsAt` regardless of focus or screen state.
+2. **Focused only** - alert fires only while the extension is visible; the UI states this
    plainly instead of implying a background alert.
-3. **Visual catch-up** — no alert; on resume, the screen shows rest elapsed and overdue
+3. **Visual catch-up** - no alert; on resume, the screen shows rest elapsed and overdue
    time, derived from `restEndsAt`.
-4. **None** — the feature is dropped from V1 and recorded as such.
+4. **None** - the feature is dropped from V1 and recorded as such.
 
 Level 3 must work in every case, because it depends only on absolute-time arithmetic
 (ADR-004) and not on any background capability.

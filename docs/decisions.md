@@ -3,7 +3,7 @@
 Each ADR carries status, context, decision, alternatives, consequences, and evidence.
 Status is one of `PROPOSED`, `ACCEPTED`, `BLOCKED`, `SUPERSEDED`.
 
-## ADR-001 — Liftosaur Cloud stays the source of truth
+## ADR-001 - Liftosaur Cloud stays the source of truth
 
 **Status:** ACCEPTED
 
@@ -13,15 +13,15 @@ Reimplementing them would fork behaviour and drift.
 **Decision.** The watch never evaluates Liftoscript. `POST /playground` computes upcoming
 sets and progression. This project is an integration, not a reimplementation.
 
-**Alternatives.** Local Liftoscript interpreter — rejected: drift risk, AGPL exposure,
+**Alternatives.** Local Liftoscript interpreter - rejected: drift risk, AGPL exposure,
 watch runtime constraints.
 
 **Consequences.** Full offline programme evaluation is impossible; the local journal must
 carry the session until the phone is reachable.
 
-**Evidence.** [liftosaur-api.md](liftosaur-api.md) — Playground endpoint and commands.
+**Evidence.** [liftosaur-api.md](liftosaur-api.md) - Playground endpoint and commands.
 
-## ADR-002 — The Side Service is the only gateway to the cloud
+## ADR-002 - The Side Service is the only gateway to the cloud
 
 **Status:** ACCEPTED
 
@@ -31,7 +31,7 @@ least trustworthy and least observable place to hold it.
 **Decision.** The key is entered and stored on the phone. All HTTPS goes through
 `LiftosaurApiClient` in the Side Service. Nothing secret crosses BLE.
 
-**Alternatives.** Key on the watch — rejected outright. Third-party proxy — rejected: out
+**Alternatives.** Key on the watch - rejected outright. Third-party proxy - rejected: out
 of scope, adds an operator.
 
 **Consequences.** Every cloud action depends on phone reachability; the protocol must carry
@@ -39,7 +39,7 @@ every request/response pair explicitly.
 
 **Evidence.** [risks.md](risks.md) P0-2.
 
-## ADR-003 — Persist before render, sync afterwards
+## ADR-003 - Persist before render, sync afterwards
 
 **Status:** ACCEPTED
 
@@ -48,13 +48,13 @@ every request/response pair explicitly.
 **Decision.** Every critical event is appended to a durable local journal before the UI
 updates. Synchronisation is asynchronous and never blocks a gesture.
 
-**Alternatives.** Write-through to cloud on each set — rejected: unusable latency, no
+**Alternatives.** Write-through to cloud on each set - rejected: unusable latency, no
 offline path.
 
 **Consequences.** Replay logic and a recovery flow (`RESUME` / `DISCARD` / `RETRY`) are
 mandatory, not optional polish.
 
-## ADR-004 — Absolute-time rest timers
+## ADR-004 - Absolute-time rest timers
 
 **Status:** ACCEPTED
 
@@ -65,7 +65,7 @@ time is always derived from the current clock.
 
 **Consequences.** Clock changes must be considered; ticks are display-only.
 
-## ADR-005 — Target watch model
+## ADR-005 - Target watch model
 
 **Status:** BLOCKED
 
@@ -77,7 +77,7 @@ geometry are recorded.
 
 **Evidence.** [zepp-capabilities.md](zepp-capabilities.md), [risks.md](risks.md) P0-5.
 
-## ADR-006 — Licensing boundary with Liftosaur
+## ADR-006 - Licensing boundary with Liftosaur
 
 **Status:** PROPOSED
 
@@ -87,5 +87,5 @@ geometry are recorded.
 undocumented behaviour, with provenance noted and no transplantation. A licence for this
 repository must be chosen before the first public push.
 
-**Consequences.** Open item on the release gate — the repository currently has no LICENSE
+**Consequences.** Open item on the release gate - the repository currently has no LICENSE
 file.

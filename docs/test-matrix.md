@@ -3,9 +3,9 @@
 Three distinct evidence levels. A row validated in the emulator is never promoted to
 real-device evidence.
 
-- `DOC` — official documentation only.
-- `EMU` — reproduced in the Zepp OS Simulator.
-- `REAL` — reproduced on a physical watch.
+- `DOC` - official documentation only.
+- `EMU` - reproduced in the Zepp OS Simulator.
+- `REAL` - reproduced on a physical watch.
 
 Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at this level.
 
@@ -59,11 +59,11 @@ Legend: ✅ verified · ❌ failed · ⬜ not run · ⛔ cannot be validated at 
 
 | Scenario | DOC | EMU | REAL |
 | --- | --- | --- | --- |
-| 400 / 401 / 403 / 404 / 422 mapped to structured errors | ⬜ | ⬜ | — |
-| Timeout on `POST /history` → `UNKNOWN_COMMIT_STATE` | ⬜ | ⬜ | — |
-| Verification read prevents duplicate history record | ⬜ | ⬜ | — |
-| Changed remote program blocks progression write | ⬜ | ⬜ | — |
-| `Authorization` / `Bearer` / `lftsk_*` redacted | ⬜ | ⬜ | — |
+| 400 / 401 / 403 / 404 / 422 mapped to structured errors | ⬜ | ⬜ | - |
+| Timeout on `POST /history` → `UNKNOWN_COMMIT_STATE` | ⬜ | ⬜ | - |
+| Verification read prevents duplicate history record | ⬜ | ⬜ | - |
+| Changed remote program blocks progression write | ⬜ | ⬜ | - |
+| `Authorization` / `Bearer` / `lftsk_*` redacted | ⬜ | ⬜ | - |
 
 ## Rest alert
 

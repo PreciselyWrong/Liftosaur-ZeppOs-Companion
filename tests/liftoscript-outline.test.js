@@ -4,7 +4,7 @@ import assert from 'node:assert/strict';
 import { parseProgramOutline, findOutlineDay, parseProgramDayExercises } from '../shared/liftoscript-outline.js';
 
 const PROGRAM = `# Semaine 1
-// **Notation des séries** — \`2x10+ @7+\`
+// **Notation des séries** - \`2x10+ @7+\`
 // - saisie honnête du RPE
 ## Mardi: PUSH A
 calib / used: none / 2x10+ / @7+ / progress: custom() {~

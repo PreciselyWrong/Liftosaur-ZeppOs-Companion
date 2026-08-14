@@ -54,7 +54,7 @@ This plan breaks down the project roadmap without presuming any unverified Zepp 
 - [x] Send Device → Side Service → Device round-trip messages → verify: matching `messageId`, single acknowledgment, UI updates.
 - [x] Test disconnected link and reconnect handling → verify: explicit connection state without silent duplication.
 
-## Phase 0 — Architecture Spike
+## Phase 0 - Architecture Spike
 
 Goal: Resolve blocking architectural questions before implementing complex domain logic.
 
@@ -68,7 +68,7 @@ Goal: Resolve blocking architectural questions before implementing complex domai
 
 Milestone exit: Foundation documentation complete, environment verified, minimal app runnable, round-trip proven.
 
-## Phase 1 — Local Session & Persistence
+## Phase 1 - Local Session & Persistence
 
 Goal: Complete a full local workout (e.g., Bench Press 3x10 @ 60kg, rest 90s) with crash recovery.
 
@@ -99,7 +99,7 @@ Goal: Complete a full local workout (e.g., Bench Press 3x10 @ 60kg, rest 90s) wi
 
 Milestone exit: Complete local mock session, crash-proof journal storage, and validated recovery.
 
-## Phase 2 — Liftosaur Read-Only Integration
+## Phase 2 - Liftosaur Read-Only Integration
 
 Goal: Fetch and display real workout prescriptions without Cloud mutations.
 
@@ -122,7 +122,7 @@ Goal: Fetch and display real workout prescriptions without Cloud mutations.
 
 Milestone exit: Real workout prescriptions loaded from Liftosaur Cloud in read-only mode.
 
-## Phase 3 — Dynamic Workout & Prescriptions
+## Phase 3 - Dynamic Workout & Prescriptions
 
 Goal: Support dynamic workout features (warmups, supersets, loadable weights).
 
@@ -133,7 +133,7 @@ Goal: Support dynamic workout features (warmups, supersets, loadable weights).
 
 Milestone exit: Accurate warmup rounding, superset sequencing, and complete prescription support.
 
-## Phase 4 — Reliable History Write-Back
+## Phase 4 - Reliable History Write-Back
 
 Goal: Submit workout history reliably without duplicate records.
 
@@ -143,7 +143,7 @@ Goal: Submit workout history reliably without duplicate records.
 
 Milestone exit: Controlled history records created with deduplication guarantees.
 
-## Phase 5 — Progression & Conflict Handling
+## Phase 5 - Progression & Conflict Handling
 
 Goal: Apply Liftosaur progressions without overwriting concurrent remote changes.
 
@@ -154,7 +154,7 @@ Goal: Apply Liftosaur progressions without overwriting concurrent remote changes
 
 Milestone exit: History and progression synchronized safely with optimistic concurrency guards.
 
-## Phase 6 — Rest Alerts & Background Behavior
+## Phase 6 - Rest Alerts & Background Behavior
 
 Goal: Reliable rest timer alerts during workouts.
 
@@ -164,7 +164,7 @@ Goal: Reliable rest timer alerts during workouts.
 
 Milestone exit: Rest timer vibration alerts verified.
 
-## Phase 7 — Real Hardware Hardening
+## Phase 7 - Real Hardware Hardening
 
 Gate: Hardware verification on target Amazfit Active 2 smartwatch.
 
@@ -175,7 +175,7 @@ Gate: Hardware verification on target Amazfit Active 2 smartwatch.
 
 Milestone exit: Hardware validation matrix complete on physical watch.
 
-## Phase 8 — Final Release Preparation
+## Phase 8 - Final Release Preparation
 
 - [x] Code and documentation cleanup → verify: all tests pass, zero dead code or unredacted debug logging.
 - [x] Localization support: English (`en-US`) and French (`fr-FR`) translation catalogs.

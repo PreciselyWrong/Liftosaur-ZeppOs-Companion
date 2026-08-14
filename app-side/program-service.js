@@ -250,8 +250,8 @@ export function createProgramService({ client, referenceData = null } = {}) {
       let program = await loadProgram(programId);
 
       // The record is produced by replaying the session against the exact
-      // program text the plan was built from. If that text is gone — the Side
-      // Service restarted and the program has since changed — replaying against
+      // program text the plan was built from. If that text is gone - the Side
+      // Service restarted and the program has since changed - replaying against
       // a different text could produce a record for the wrong exercises, so
       // nothing is written and the watch is told to re-plan.
       if (expectedVersion && expectedVersion !== program.version) {

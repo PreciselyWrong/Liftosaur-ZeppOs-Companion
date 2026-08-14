@@ -6,7 +6,7 @@
  * this exercise actually be loaded with, so a `warmup: 1x8 40%` becomes a real
  * number instead of a percentage.
  *
- * Matching an exercise to its settings is the risky part — `Bench Press` exists
+ * Matching an exercise to its settings is the risky part - `Bench Press` exists
  * for barbell and for dumbbell. When the equipment cannot be pinned down the
  * lookup returns `ambiguous`, and the caller shows the percentage rather than a
  * weight that might be wrong.
