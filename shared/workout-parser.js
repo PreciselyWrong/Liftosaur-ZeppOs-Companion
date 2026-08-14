@@ -1,13 +1,41 @@
-export function parseLiftoscriptWorkout({
-  id = 'workout-' + Date.now(),
-  name = 'Workout',
-  routineName = 'Liftosaur Routine',
-  text = '',
-} = {}) {
+export function parseLiftoscriptWorkout(input = {}) {
+  let id = 'workout-' + Date.now();
+  let name = 'Workout';
+  let routineName = 'Liftosaur Routine';
+  let text = '';
+
+  if (typeof input === 'string') {
+    text = input;
+  } else if (typeof input === 'object' && input !== null) {
+    id = input.id || input.programId || id;
+    name = input.name || input.workoutName || name;
+    routineName = input.routineName || input.routine || routineName;
+
+    if (typeof input.text === 'string') {
+      text = input.text;
+    } else if (input.program && typeof input.program.text === 'string') {
+      text = input.program.text;
+      name = input.program.name || name;
+    } else if (input.data && typeof input.data.text === 'string') {
+      text = input.data.text;
+      name = input.data.name || name;
+    } else if (Array.isArray(input.days) && input.days.length > 0) {
+      const dayIdx = input.currentDayIndex || 0;
+      const day = input.days[dayIdx] || input.days[0];
+      text = day.text || day.source || '';
+      name = day.name || name;
+    } else if (typeof input.source === 'string') {
+      text = input.source;
+    } else if (typeof input.script === 'string') {
+      text = input.script;
+    }
+  }
+
   const lines = text
     .split('\n')
     .map((l) => l.trim())
     .filter((l) => l.length > 0 && !l.startsWith('#') && !l.startsWith('//'));
+
 
   const exercises = [];
 
