@@ -1,10 +1,17 @@
 /**
- * Pure state machine and event journal for workout sessions.
- * Platform-independent: runs in Node tests, Device App, and Side Service.
+ * Workout session state machine and event journal.
+ *
+ * The session is driven entirely by a day plan the API produced. It records
+ * what the user did — weight, reps, RPE, in which order — and nothing else. It
+ * computes no progression and rewrites no prescription: those belong to
+ * `POST /playground`, which replays this journal when the workout ends.
+ *
+ * Platform independent: runs under plain Node, on the device and in the Side
+ * Service.
  */
 
 export const SESSION_STATES = {
-  SETUP_REQUIRED: 'SETUP_REQUIRED',
+  NO_PLAN: 'NO_PLAN',
   READY: 'READY',
   ACTIVE_SET: 'ACTIVE_SET',
   REST: 'REST',
@@ -23,77 +30,99 @@ export const EVENT_TYPES = {
   CANCEL_WORKOUT: 'CANCEL_WORKOUT',
 };
 
+export function weightStepFor(unit) {
+  return unit === 'lb' ? 5 : 2.5;
+}
 
-export function createWorkoutSession({ workout, exercise, initialJournal = [] } = {}) {
-  let exercises = workout?.exercises ?? (exercise ? [exercise] : []);
-  let workoutName = workout?.name ?? (exercise?.name ?? 'No Workout');
-  let routineName = workout?.routineName ?? 'Liftosaur';
-  let availableDays = workout?.availableDays ?? [];
-  let currentDayIndex = workout?.currentDayIndex ?? 0;
-  let totalDays = workout?.totalDays ?? (availableDays.length > 0 ? availableDays.length : 1);
+export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) {
+  const unit = plan?.unit || 'kg';
+  const step = weightStepFor(unit);
 
-  // Sanitize all exercises so each has at least one valid set
-  exercises = exercises.map((ex, i) => {
-    const rawSets = Array.isArray(ex.sets) && ex.sets.length > 0 ? ex.sets : [
-      { targetReps: 10, targetWeight: 20, targetRpe: null, restSeconds: 60, isAmrap: false }
-    ];
-    return {
-      ...ex,
-      id: ex.id || `ex-${i}`,
-      name: ex.name || `Exercise ${i + 1}`,
-      sets: rawSets,
-    };
-  });
+  const exercises = (plan?.exercises || []).map((exercise, index) => ({
+    index: exercise.index ?? index + 1,
+    id: exercise.id || `ex-${index + 1}`,
+    name: exercise.name || `Exercise ${index + 1}`,
+    equipment: exercise.equipment || null,
+    sets: (exercise.sets || []).map((set, setIndex) => ({
+      index: set.index ?? setIndex + 1,
+      targetReps: set.targetReps ?? null,
+      targetRepsMax: set.targetRepsMax ?? null,
+      targetWeight: set.targetWeight ?? null,
+      targetRpe: set.targetRpe ?? null,
+      restSeconds: Number.isFinite(set.restSeconds) ? set.restSeconds : null,
+      isAmrap: Boolean(set.isAmrap),
+      unit: set.unit || unit,
+    })),
+  }));
 
-  let state = exercises.length === 0 ? SESSION_STATES.SETUP_REQUIRED : SESSION_STATES.READY;
+  let state = exercises.length === 0 ? SESSION_STATES.NO_PLAN : SESSION_STATES.READY;
   let currentExerciseIndex = 0;
   let workoutStartTime = null;
   let workoutEndTime = null;
+  let restInfo = null;
+  let journal = [];
 
-  // Per-exercise progress tracking
-  const exerciseProgress = exercises.map((ex) => ({
+  const progress = exercises.map((exercise) => ({
     currentSetIndex: 0,
-    currentWeight: ex.sets[0]?.targetWeight ?? 20,
-    currentReps: ex.sets[0]?.targetReps ?? 5,
-    currentRpe: ex.sets[0]?.targetRpe ?? null,
+    currentWeight: exercise.sets[0]?.targetWeight ?? null,
+    currentReps: exercise.sets[0]?.targetReps ?? null,
+    currentRpe: exercise.sets[0]?.targetRpe ?? null,
     completedSets: [],
   }));
 
-
-  let restInfo = null; // { startedAt, duration, endsAt }
-  let journal = [];
-
-  function getCurrentExercise() {
-    return exercises[currentExerciseIndex];
+  function currentExercise() {
+    return exercises[currentExerciseIndex] || null;
   }
 
-  function getCurrentProgress() {
-    return exerciseProgress[currentExerciseIndex];
+  function currentProgress() {
+    return progress[currentExerciseIndex] || null;
+  }
+
+  function loadSetTargets(exerciseIdx, setIdx) {
+    const exercise = exercises[exerciseIdx];
+    const prog = progress[exerciseIdx];
+    if (!exercise || !prog) return;
+    const target = exercise.sets[setIdx];
+    prog.currentSetIndex = setIdx;
+    if (target) {
+      prog.currentWeight = target.targetWeight;
+      prog.currentReps = target.targetReps;
+      prog.currentRpe = target.targetRpe;
+    }
+  }
+
+  function allSetsDone() {
+    return exercises.every((exercise, i) => progress[i].completedSets.length >= exercise.sets.length);
+  }
+
+  function firstUnfinishedExercise(from = 0) {
+    for (let i = from; i < exercises.length; i++) {
+      if (progress[i].completedSets.length < exercises[i].sets.length) return i;
+    }
+    for (let i = 0; i < from; i++) {
+      if (progress[i].completedSets.length < exercises[i].sets.length) return i;
+    }
+    return -1;
   }
 
   function applyEvent(event) {
     journal.push(event);
 
     switch (event.type) {
-      case EVENT_TYPES.START_WORKOUT:
+      case EVENT_TYPES.START_WORKOUT: {
         state = SESSION_STATES.ACTIVE_SET;
         workoutStartTime = event.timestamp;
+        loadSetTargets(currentExerciseIndex, 0);
         break;
-
+      }
 
       case EVENT_TYPES.SELECT_EXERCISE: {
-        const targetIdx = event.payload.exerciseIndex;
-        if (targetIdx >= 0 && targetIdx < exercises.length) {
-          currentExerciseIndex = targetIdx;
-          const prog = getCurrentProgress();
-          const ex = getCurrentExercise();
-          const currentSetTarget = ex.sets[prog.currentSetIndex];
-          if (prog.currentWeight === 0 && currentSetTarget) {
-            prog.currentWeight = currentSetTarget.targetWeight;
-            prog.currentReps = currentSetTarget.targetReps;
-            prog.currentRpe = currentSetTarget.targetRpe ?? null;
-          }
-          if (prog.completedSets.length < ex.sets.length) {
+        const target = event.payload.exerciseIndex;
+        if (target >= 0 && target < exercises.length) {
+          currentExerciseIndex = target;
+          const prog = currentProgress();
+          loadSetTargets(target, prog.completedSets.length);
+          if (prog.completedSets.length < exercises[target].sets.length) {
             state = SESSION_STATES.ACTIVE_SET;
             restInfo = null;
           }
@@ -102,239 +131,183 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
       }
 
       case EVENT_TYPES.ADJUST_WEIGHT: {
-        const prog = getCurrentProgress();
-        prog.currentWeight = Math.max(0, prog.currentWeight + event.payload.delta);
+        const prog = currentProgress();
+        if (!prog) break;
+        const base = prog.currentWeight ?? 0;
+        prog.currentWeight = Math.max(0, Math.round((base + event.payload.delta) * 100) / 100);
         break;
       }
 
       case EVENT_TYPES.ADJUST_REPS: {
-        const prog = getCurrentProgress();
-        prog.currentReps = Math.max(1, prog.currentReps + event.payload.delta);
+        const prog = currentProgress();
+        if (!prog) break;
+        prog.currentReps = Math.max(0, (prog.currentReps ?? 0) + event.payload.delta);
         break;
       }
 
       case EVENT_TYPES.ADJUST_RPE: {
-        const prog = getCurrentProgress();
-        const cur = prog.currentRpe ?? 8;
-        prog.currentRpe = Math.min(10, Math.max(5, cur + event.payload.delta));
+        const prog = currentProgress();
+        if (!prog) break;
+        const base = prog.currentRpe ?? 8;
+        prog.currentRpe = Math.min(10, Math.max(1, Math.round((base + event.payload.delta) * 2) / 2));
         break;
       }
 
       case EVENT_TYPES.COMPLETE_SET: {
-        const prog = getCurrentProgress();
-        const ex = getCurrentExercise();
+        const prog = currentProgress();
+        const exercise = currentExercise();
+        if (!prog || !exercise) break;
 
-        const completed = {
-          exerciseIndex: currentExerciseIndex,
-          exerciseName: ex.name,
-          setIndex: prog.currentSetIndex,
+        const setIndex = prog.currentSetIndex;
+        const target = exercise.sets[setIndex];
+
+        prog.completedSets.push({
+          exerciseIndex: exercise.index,
+          exerciseArrayIndex: currentExerciseIndex,
+          exerciseName: exercise.name,
+          setIndex: setIndex + 1,
           weight: prog.currentWeight,
           reps: prog.currentReps,
           rpe: prog.currentRpe,
+          unit,
           completedAt: event.timestamp,
-        };
-        prog.completedSets.push(completed);
+        });
 
-        const allCompleted = exercises.every(
-          (e, i) => exerciseProgress[i].completedSets.length >= e.sets.length
-        );
-
-        if (allCompleted) {
+        if (allSetsDone()) {
           state = SESSION_STATES.FINISHED;
           restInfo = null;
-        } else {
-          // Check if there is an alternating superset partner or next exercise
-          let isTransitionToNextExercise = false;
-          let nextExerciseName = null;
-          let nextSupersetTag = null;
-          let nextSetIndex = null;
-          let nextTotalSets = null;
+          break;
+        }
 
-          if (ex.supersetGroup) {
-            const groupIndices = exercises
-              .map((e, idx) => (e.supersetGroup === ex.supersetGroup ? idx : -1))
-              .filter((idx) => idx !== -1);
-            
-            // Check next exercise in group that still needs set (prog.completedSets.length - 1)
-            const currentCount = prog.completedSets.length;
-            const partnerIdx = groupIndices.find(
-              (idx) => idx !== currentExerciseIndex && exerciseProgress[idx].completedSets.length < currentCount
-            );
-            if (partnerIdx !== undefined) {
-              isTransitionToNextExercise = true;
-              const nextEx = exercises[partnerIdx];
-              nextExerciseName = nextEx.name;
-              nextSupersetTag = nextEx.supersetTag ?? null;
-              nextSetIndex = exerciseProgress[partnerIdx].completedSets.length;
-              nextTotalSets = nextEx.sets.length;
-            } else {
-              // Check if group loops back to first exercise
-              const nextInGroupWithSets = groupIndices.find(
-                (idx) => exerciseProgress[idx].completedSets.length < exercises[idx].sets.length
-              );
-              if (nextInGroupWithSets !== undefined) {
-                if (nextInGroupWithSets !== currentExerciseIndex) {
-                  isTransitionToNextExercise = true;
-                }
-                const nextEx = exercises[nextInGroupWithSets];
-                nextExerciseName = nextEx.name;
-                nextSupersetTag = nextEx.supersetTag ?? null;
-                nextSetIndex = exerciseProgress[nextInGroupWithSets].completedSets.length;
-                nextTotalSets = nextEx.sets.length;
-              }
-            }
-          } else {
-            const isLastSetOfExercise = prog.completedSets.length >= ex.sets.length;
-            if (isLastSetOfExercise && currentExerciseIndex + 1 < exercises.length) {
-              isTransitionToNextExercise = true;
-              const nextEx = exercises[currentExerciseIndex + 1];
-              nextExerciseName = nextEx.name;
-              nextSupersetTag = nextEx.supersetTag ?? null;
-              nextSetIndex = 0;
-              nextTotalSets = nextEx.sets.length;
-            } else if (!isLastSetOfExercise) {
-              nextExerciseName = ex.name;
-              nextSupersetTag = ex.supersetTag ?? null;
-              nextSetIndex = prog.completedSets.length;
-              nextTotalSets = ex.sets.length;
-            }
-          }
+        const restDuration = target?.restSeconds ?? null;
+        const next = describeNextSet();
 
-          const restDuration = ex.sets[prog.currentSetIndex]?.restSeconds ?? 90;
+        if (restDuration && restDuration > 0) {
           state = SESSION_STATES.REST;
           restInfo = {
             startedAt: event.timestamp,
             duration: restDuration,
             endsAt: event.timestamp + restDuration * 1000,
-            isTransitionToNextExercise,
-            nextExerciseName,
-            nextSupersetTag,
-            nextSetIndex,
-            nextTotalSets,
+            ...next,
           };
+        } else {
+          restInfo = null;
+          advanceToNextSet();
         }
         break;
       }
-
 
       case EVENT_TYPES.NEXT_SET: {
-        const prog = getCurrentProgress();
-        const ex = getCurrentExercise();
-
-        // 1. Superset alternating logic
-        if (ex.supersetGroup) {
-          const groupIndices = exercises
-            .map((e, idx) => (e.supersetGroup === ex.supersetGroup ? idx : -1))
-            .filter((idx) => idx !== -1);
-
-          const currentCount = prog.completedSets.length;
-          // Find partner in group that needs to catch up
-          const partnerIdx = groupIndices.find(
-            (idx) => idx !== currentExerciseIndex && exerciseProgress[idx].completedSets.length < currentCount
-          );
-
-          if (partnerIdx !== undefined) {
-            currentExerciseIndex = partnerIdx;
-            const nextProg = getCurrentProgress();
-            const nextEx = getCurrentExercise();
-            nextProg.currentSetIndex = nextProg.completedSets.length;
-            const nextTarget = nextEx.sets[nextProg.currentSetIndex];
-            nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
-            nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
-            nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
-            state = SESSION_STATES.ACTIVE_SET;
-            restInfo = null;
-            break;
-          }
-
-          // If all in group finished current round, check if group has more sets
-          const nextInGroupWithSets = groupIndices.find(
-            (idx) => exerciseProgress[idx].completedSets.length < exercises[idx].sets.length
-          );
-          if (nextInGroupWithSets !== undefined) {
-            currentExerciseIndex = nextInGroupWithSets;
-            const nextProg = getCurrentProgress();
-            const nextEx = getCurrentExercise();
-            nextProg.currentSetIndex = nextProg.completedSets.length;
-            const nextTarget = nextEx.sets[nextProg.currentSetIndex];
-            nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
-            nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
-            nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
-            state = SESSION_STATES.ACTIVE_SET;
-            restInfo = null;
-            break;
-          }
-        }
-
-        // 2. Standard sequential progression
-        if (prog.completedSets.length < ex.sets.length) {
-          prog.currentSetIndex = prog.completedSets.length;
-          const nextTarget = ex.sets[prog.currentSetIndex];
-          prog.currentWeight = nextTarget?.targetWeight ?? prog.currentWeight;
-          prog.currentReps = nextTarget?.targetReps ?? prog.currentReps;
-          prog.currentRpe = nextTarget?.targetRpe ?? prog.currentRpe;
-          state = SESSION_STATES.ACTIVE_SET;
-          restInfo = null;
-        } else if (currentExerciseIndex + 1 < exercises.length) {
-          currentExerciseIndex += 1;
-          const nextProg = getCurrentProgress();
-          const nextEx = getCurrentExercise();
-          nextProg.currentSetIndex = nextProg.completedSets.length;
-          const nextTarget = nextEx.sets[nextProg.currentSetIndex];
-          nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
-          nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
-          nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
-          state = SESSION_STATES.ACTIVE_SET;
-          restInfo = null;
-        } else {
-          state = SESSION_STATES.FINISHED;
-          restInfo = null;
-        }
+        restInfo = null;
+        advanceToNextSet();
         break;
       }
 
-
-      case EVENT_TYPES.FINISH_WORKOUT:
+      case EVENT_TYPES.FINISH_WORKOUT: {
         state = SESSION_STATES.FINISHED;
         workoutEndTime = event.timestamp;
         restInfo = null;
         break;
+      }
 
-      case EVENT_TYPES.CANCEL_WORKOUT:
-        state = exercises.length === 0 ? SESSION_STATES.SETUP_REQUIRED : SESSION_STATES.READY;
+      case EVENT_TYPES.CANCEL_WORKOUT: {
+        state = exercises.length === 0 ? SESSION_STATES.NO_PLAN : SESSION_STATES.READY;
         workoutStartTime = null;
         workoutEndTime = null;
         restInfo = null;
         currentExerciseIndex = 0;
-        exerciseProgress.forEach((p, idx) => {
-          p.currentSetIndex = 0;
-          p.completedSets = [];
-          const ex = exercises[idx];
-          p.currentWeight = ex?.sets[0]?.targetWeight ?? 20;
-          p.currentReps = ex?.sets[0]?.targetReps ?? 5;
-          p.currentRpe = ex?.sets[0]?.targetRpe ?? null;
+        progress.forEach((prog, i) => {
+          prog.completedSets = [];
+          prog.currentSetIndex = 0;
+          prog.currentWeight = exercises[i].sets[0]?.targetWeight ?? null;
+          prog.currentReps = exercises[i].sets[0]?.targetReps ?? null;
+          prog.currentRpe = exercises[i].sets[0]?.targetRpe ?? null;
         });
         journal = [];
         break;
+      }
     }
   }
 
+  function describeNextSet() {
+    const prog = currentProgress();
+    const exercise = currentExercise();
+    if (prog && exercise && prog.completedSets.length < exercise.sets.length) {
+      return {
+        isTransitionToNextExercise: false,
+        nextExerciseName: exercise.name,
+        nextSetIndex: prog.completedSets.length,
+        nextTotalSets: exercise.sets.length,
+      };
+    }
+    const nextIdx = firstUnfinishedExercise(currentExerciseIndex + 1);
+    if (nextIdx === -1) {
+      return {
+        isTransitionToNextExercise: false,
+        nextExerciseName: null,
+        nextSetIndex: null,
+        nextTotalSets: null,
+      };
+    }
+    return {
+      isTransitionToNextExercise: true,
+      nextExerciseName: exercises[nextIdx].name,
+      nextSetIndex: progress[nextIdx].completedSets.length,
+      nextTotalSets: exercises[nextIdx].sets.length,
+    };
+  }
 
-  // Replay initial journal
+  function advanceToNextSet() {
+    const prog = currentProgress();
+    const exercise = currentExercise();
+
+    if (prog && exercise && prog.completedSets.length < exercise.sets.length) {
+      loadSetTargets(currentExerciseIndex, prog.completedSets.length);
+      state = SESSION_STATES.ACTIVE_SET;
+      return;
+    }
+
+    const nextIdx = firstUnfinishedExercise(currentExerciseIndex + 1);
+    if (nextIdx === -1) {
+      state = SESSION_STATES.FINISHED;
+      return;
+    }
+
+    currentExerciseIndex = nextIdx;
+    loadSetTargets(nextIdx, progress[nextIdx].completedSets.length);
+    state = SESSION_STATES.ACTIVE_SET;
+  }
+
   for (const event of initialJournal) {
     applyEvent(event);
   }
 
+  function allCompletedSets() {
+    return progress
+      .flatMap((prog) => prog.completedSets)
+      .sort((a, b) => a.completedAt - b.completedAt);
+  }
+
   return {
     view(now = Date.now()) {
-      const ex = getCurrentExercise() || { name: 'Workout', sets: [] };
-      const prog = getCurrentProgress() || { currentSetIndex: 0, currentWeight: 0, currentReps: 0, currentRpe: null, completedSets: [] };
+      const exercise = currentExercise();
+      const prog = currentProgress();
+      const completed = allCompletedSets();
 
-      let calculatedRest = null;
+      const totalVolume = completed.reduce(
+        (sum, set) => sum + (set.weight || 0) * (set.reps || 0),
+        0
+      );
+
+      const elapsedSeconds =
+        workoutStartTime === null
+          ? 0
+          : Math.max(0, Math.floor(((workoutEndTime ?? now) - workoutStartTime) / 1000));
+
+      let rest = null;
       if (restInfo) {
-        const diffMs = restInfo.endsAt - now;
-        const remaining = Math.ceil(diffMs / 1000);
-        calculatedRest = {
+        const remaining = Math.ceil((restInfo.endsAt - now) / 1000);
+        rest = {
           duration: restInfo.duration,
           remaining,
           isOvertime: remaining <= 0,
@@ -342,211 +315,156 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] } 
           endsAt: restInfo.endsAt,
           isTransitionToNextExercise: Boolean(restInfo.isTransitionToNextExercise),
           nextExerciseName: restInfo.nextExerciseName ?? null,
-          nextSupersetTag: restInfo.nextSupersetTag ?? null,
           nextSetIndex: restInfo.nextSetIndex ?? null,
           nextTotalSets: restInfo.nextTotalSets ?? null,
         };
       }
 
-
-      // Elapsed time calculation
-      let elapsedSeconds = 0;
-      if (workoutStartTime) {
-        const end = workoutEndTime || (state === SESSION_STATES.FINISHED ? now : now);
-        elapsedSeconds = Math.max(0, Math.floor((end - workoutStartTime) / 1000));
-      }
-
-      // Total Volume calculation (sum of reps * weight across all completed sets)
-      const allCompletedSets = exerciseProgress.flatMap((p, idx) =>
-        p.completedSets.map((s) => ({
-          ...s,
-          exerciseName: s.exerciseName || exercises[idx]?.name || `Exercise ${idx + 1}`,
-        }))
-      );
-      const totalVolume = allCompletedSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
-
-      // Set status dots for current exercise (e.g. ['completed', 'active', 'pending'])
-      const exerciseSetsDots = ex.sets.map((_, setIdx) => {
-        if (setIdx < prog.completedSets.length) return 'completed';
-        if (setIdx === prog.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
-        return 'pending';
-      });
-
-      // Exercises overview summary for the list view
-      const overviewExercises = exercises.map((e, idx) => {
-        const p = exerciseProgress[idx];
-        const dots = e.sets.map((_, sIdx) => {
-          if (sIdx < p.completedSets.length) return 'completed';
-          if (idx === currentExerciseIndex && sIdx === p.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
-          return 'pending';
-        });
+      const overviewExercises = exercises.map((ex, idx) => {
+        const p = progress[idx];
         return {
           index: idx,
-          id: e.id,
-          name: e.name,
-          supersetTag: e.supersetTag ?? null,
-          totalSets: e.sets.length,
+          id: ex.id,
+          name: ex.name,
+          totalSets: ex.sets.length,
           completedSetsCount: p.completedSets.length,
-          setsDots: dots,
-          prescriptionSummary: `${e.sets.length} × ${e.sets[0]?.targetReps ?? 0} @ ${e.sets[0]?.targetWeight ?? 0} kg`,
+          setsDots: ex.sets.map((_, setIdx) => {
+            if (setIdx < p.completedSets.length) return 'completed';
+            if (idx === currentExerciseIndex && setIdx === p.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) {
+              return 'active';
+            }
+            return 'pending';
+          }),
+          prescriptionSummary: summarizeSets(ex.sets, unit),
         };
       });
 
-      if (!ex) {
+      const base = {
+        state,
+        unit,
+        programId: plan?.programId ?? null,
+        programName: plan?.programName ?? null,
+        dayName: plan?.dayName ?? null,
+        week: plan?.week ?? null,
+        dayInWeek: plan?.dayInWeek ?? null,
+        programVersion: plan?.programVersion ?? null,
+        elapsedSeconds,
+        startedAt: workoutStartTime,
+        totalVolume,
+        totalCompletedSetsCount: completed.length,
+        totalExercises: exercises.length,
+        overviewExercises,
+        allCompletedSets: completed,
+      };
+
+      if (!exercise || !prog) {
         return {
-          state,
-          workoutName,
-          routineName,
-          elapsedSeconds: 0,
-          totalVolume: 0,
-          totalCompletedSetsCount: 0,
-          totalExercises: 0,
+          ...base,
           currentExerciseIndex: 0,
-          exerciseId: 'none',
-          exerciseName: 'No Exercise',
-          supersetTag: null,
+          exerciseId: null,
+          exerciseName: null,
           totalSets: 0,
           currentSetIndex: 0,
-          availableDays,
-          currentDayIndex,
-          totalDays,
           exerciseSetsDots: [],
-          overviewExercises: [],
-          currentSet: { weight: 0, reps: 0, rpe: null, targetWeight: 0, targetReps: 0, targetRpe: null },
+          currentSet: null,
           completedSets: [],
-          allCompletedSets: [],
           rest: null,
         };
       }
 
+      const target = exercise.sets[prog.currentSetIndex] || null;
+
       return {
-        state,
-        workoutName,
-        routineName,
-        elapsedSeconds,
-        totalVolume,
-        totalCompletedSetsCount: allCompletedSets.length,
-        totalExercises: exercises.length,
+        ...base,
         currentExerciseIndex,
-        exerciseId: ex.id,
-        exerciseName: ex.name,
-        supersetTag: ex.supersetTag ?? null,
-        totalSets: ex.sets.length,
+        exerciseId: exercise.id,
+        exerciseName: exercise.name,
+        totalSets: exercise.sets.length,
         currentSetIndex: prog.currentSetIndex,
-        availableDays,
-        currentDayIndex,
-        totalDays,
-        exerciseSetsDots,
-        overviewExercises,
+        exerciseSetsDots: exercise.sets.map((_, setIdx) => {
+          if (setIdx < prog.completedSets.length) return 'completed';
+          if (setIdx === prog.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
+          return 'pending';
+        }),
         currentSet: {
           weight: prog.currentWeight,
           reps: prog.currentReps,
           rpe: prog.currentRpe,
-          targetWeight: ex.sets[prog.currentSetIndex]?.targetWeight ?? prog.currentWeight,
-          targetReps: ex.sets[prog.currentSetIndex]?.targetReps ?? prog.currentReps,
-          targetRpe: ex.sets[prog.currentSetIndex]?.targetRpe ?? null,
+          targetWeight: target?.targetWeight ?? null,
+          targetReps: target?.targetReps ?? null,
+          targetRepsMax: target?.targetRepsMax ?? null,
+          targetRpe: target?.targetRpe ?? null,
+          isAmrap: Boolean(target?.isAmrap),
+          restSeconds: target?.restSeconds ?? null,
         },
         completedSets: [...prog.completedSets],
-        allCompletedSets,
-        rest: calculatedRest,
+        rest,
       };
     },
 
-
-
     startWorkout({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.READY) return;
-      applyEvent({
-        type: EVENT_TYPES.START_WORKOUT,
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.START_WORKOUT, timestamp });
     },
 
     selectExercise(exerciseIndex, { timestamp = Date.now() } = {}) {
-      applyEvent({
-        type: EVENT_TYPES.SELECT_EXERCISE,
-        payload: { exerciseIndex },
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex }, timestamp });
     },
 
-    nextExercise() {
-      if (currentExerciseIndex + 1 < exercises.length) {
-        this.selectExercise(currentExerciseIndex + 1);
-      }
-    },
-
-    prevExercise() {
-      if (currentExerciseIndex > 0) {
-        this.selectExercise(currentExerciseIndex - 1);
-      }
-    },
-
-    adjustWeight(delta, { timestamp = Date.now() } = {}) {
+    adjustWeight(steps = 1, { timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
-      applyEvent({
-        type: EVENT_TYPES.ADJUST_WEIGHT,
-        payload: { delta },
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.ADJUST_WEIGHT, payload: { delta: steps * step }, timestamp });
     },
 
     adjustReps(delta, { timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
-      applyEvent({
-        type: EVENT_TYPES.ADJUST_REPS,
-        payload: { delta },
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.ADJUST_REPS, payload: { delta }, timestamp });
     },
 
     adjustRpe(delta, { timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
-      applyEvent({
-        type: EVENT_TYPES.ADJUST_RPE,
-        payload: { delta },
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.ADJUST_RPE, payload: { delta }, timestamp });
     },
-
 
     completeSet({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
-      applyEvent({
-        type: EVENT_TYPES.COMPLETE_SET,
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.COMPLETE_SET, timestamp });
     },
 
     nextSet({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.REST) return;
-      applyEvent({
-        type: EVENT_TYPES.NEXT_SET,
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.NEXT_SET, timestamp });
     },
 
     finishWorkout({ timestamp = Date.now() } = {}) {
-      applyEvent({
-        type: EVENT_TYPES.FINISH_WORKOUT,
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.FINISH_WORKOUT, timestamp });
     },
 
     cancelWorkout({ timestamp = Date.now() } = {}) {
-      applyEvent({
-        type: EVENT_TYPES.CANCEL_WORKOUT,
-        timestamp,
-      });
+      applyEvent({ type: EVENT_TYPES.CANCEL_WORKOUT, timestamp });
     },
 
-
-    isAllCompleted() {
-      return exercises.every((ex, i) => exerciseProgress[i].completedSets.length >= ex.sets.length);
+    /** The payload `POST /playground` replays, in the order the user did it. */
+    getCompletedSets() {
+      return allCompletedSets().map((set) => ({
+        exerciseIndex: set.exerciseIndex,
+        setIndex: set.setIndex,
+        weight: set.weight,
+        reps: set.reps,
+        rpe: set.rpe,
+        unit: set.unit,
+      }));
     },
 
-    getJournal() {
-      return [...journal];
-    },
+    isAllCompleted: allSetsDone,
+    getJournal: () => [...journal],
   };
+}
+
+function summarizeSets(sets, unit) {
+  if (!sets || sets.length === 0) return '';
+  const first = sets[0];
+  const reps = first.targetRepsMax ? `${first.targetReps}-${first.targetRepsMax}` : first.targetReps;
+  const weight = first.targetWeight === null ? '—' : `${first.targetWeight}${first.unit || unit}`;
+  return `${sets.length} × ${reps} · ${weight}`;
 }

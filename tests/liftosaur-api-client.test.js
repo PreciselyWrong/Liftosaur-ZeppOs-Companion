@@ -1,111 +1,138 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createLiftosaurApiClient, redactSecret } from '../app-side/liftosaur-api-client.js';
+import {
+  createLiftosaurApiClient,
+  LiftosaurApiError,
+  redactSecret,
+} from '../app-side/liftosaur-api-client.js';
 
-test('redactSecret masks apiKey and Authorization headers reliably', () => {
-  assert.equal(redactSecret('lftsk_1234567890abcdef'), 'lftsk_***cdef');
-  assert.equal(redactSecret('Bearer lftsk_1234567890abcdef'), 'Bearer lftsk_***cdef');
-  assert.equal(redactSecret('short'), '***');
-  assert.equal(redactSecret(null), '<empty>');
-});
-
-test('client handles fetching current program with redacted logging', async () => {
-  const mockFetcher = async (url, options) => {
-    assert.equal(url, 'https://www.liftosaur.com/api/v1/programs/current');
-    assert.equal(options.headers['Authorization'], 'Bearer lftsk_secret_12345');
-
-    return {
-      ok: true,
-      status: 200,
-      json: async () => ({
-        id: 'prog-1',
-        name: 'GZCLP 4-Day',
-        routine: 'Basic Beginner Routine',
-        currentDayIndex: 0,
-        days: [
-          {
-            name: 'Day 1 - Squat T1',
-            text: 'Squat / 5x3+ @ 100kg / rest 180s\nBench Press / 3x10 @ 60kg / rest 90s',
-          },
-        ],
-      }),
-    };
+function fakeFetch(handler) {
+  const calls = [];
+  const fetcher = async (url, options) => {
+    calls.push({ url, options });
+    return handler(url, options);
   };
+  fetcher.calls = calls;
+  return fetcher;
+}
 
-  const client = createLiftosaurApiClient({
-    apiKey: 'lftsk_secret_12345',
-    fetcher: mockFetcher,
-  });
+function jsonResponse(body, { ok = true, status = 200 } = {}) {
+  return {
+    ok,
+    status,
+    statusText: ok ? 'OK' : 'Error',
+    text: async () => JSON.stringify(body),
+  };
+}
 
-  const program = await client.getCurrentProgram();
-  assert.equal(program.name, 'GZCLP 4-Day');
-  assert.equal(program.days.length, 1);
+test('redacts the key everywhere it could leak', () => {
+  assert.equal(redactSecret('lftsk_abcdefghijklmnop'), 'lftsk_***mnop');
+  assert.equal(redactSecret('Bearer lftsk_abcdefghijklmnop'), 'Bearer lftsk_***mnop');
+  assert.equal(redactSecret('short'), '***');
+  assert.equal(redactSecret(''), '<empty>');
 });
 
-test('client throws structured redacted error on HTTP failure without leaking secret', async () => {
-  const mockFetcher = async () => ({
-    ok: false,
+test('an error message never carries the key', () => {
+  const err = new LiftosaurApiError('bad key lftsk_supersecretvalue rejected', {
     status: 401,
-    statusText: 'Unauthorized',
-    text: async () => 'Invalid API key lftsk_secret_12345',
+    endpoint: '/programs',
   });
 
-  const client = createLiftosaurApiClient({
-    apiKey: 'lftsk_secret_12345',
-    fetcher: mockFetcher,
+  assert.ok(!err.message.includes('supersecret'));
+  assert.match(err.message, /lftsk_\*\*\*/);
+  assert.equal(err.status, 401);
+});
+
+test('sends the bearer token and unwraps data', async () => {
+  const fetcher = fakeFetch(async () =>
+    jsonResponse({ data: { programs: [{ id: 'p1', name: 'Test', isCurrent: true }] } })
+  );
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
+
+  const programs = await client.listPrograms();
+
+  assert.deepEqual(programs, [{ id: 'p1', name: 'Test', isCurrent: true }]);
+  assert.equal(fetcher.calls[0].url, 'https://www.liftosaur.com/api/v1/programs');
+  assert.equal(fetcher.calls[0].options.headers.Authorization, 'Bearer lftsk_key_value');
+});
+
+test('refuses to call the API without a key', async () => {
+  const fetcher = fakeFetch(async () => jsonResponse({ data: {} }));
+  const client = createLiftosaurApiClient({ apiKey: null, fetcher });
+
+  await assert.rejects(() => client.listPrograms(), (err) => err.code === 'NO_API_KEY');
+  assert.equal(fetcher.calls.length, 0);
+});
+
+test('posts a playground run with only the fields that were given', async () => {
+  const fetcher = fakeFetch(async () =>
+    jsonResponse({ data: { workout: 'text', updatedProgramText: 'updated' } })
+  );
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
+
+  await client.runPlayground({ programText: 'P', week: 2, day: 3, commands: ['finish_workout()'] });
+  const firstBody = JSON.parse(fetcher.calls[0].options.body);
+  assert.deepEqual(firstBody, {
+    programText: 'P',
+    week: 2,
+    day: 3,
+    commands: ['finish_workout()'],
   });
+
+  await client.runPlayground({ programText: 'P' });
+  assert.deepEqual(JSON.parse(fetcher.calls[1].options.body), { programText: 'P' });
+});
+
+test('builds the history query and normalizes the response', async () => {
+  const fetcher = fakeFetch(async () =>
+    jsonResponse({ data: { records: [{ id: 1, text: 'x' }], hasMore: true, nextCursor: 7 } })
+  );
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
+
+  const history = await client.listHistory({ limit: 5, cursor: 7 });
+
+  assert.match(fetcher.calls[0].url, /\/history\?limit=5&cursor=7$/);
+  assert.equal(history.records.length, 1);
+  assert.equal(history.hasMore, true);
+  assert.equal(history.nextCursor, 7);
+});
+
+test('turns an API error body into a typed error', async () => {
+  const fetcher = fakeFetch(async () =>
+    jsonResponse({ error: { message: 'Parse error on line 3' } }, { ok: false, status: 422 })
+  );
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
 
   await assert.rejects(
-    async () => {
-      await client.getCurrentProgram();
-    },
+    () => client.runPlayground({ programText: 'bad' }),
     (err) => {
-      assert.equal(err.name, 'LiftosaurApiError');
-      assert.equal(err.status, 401);
-      assert.ok(!err.message.includes('lftsk_secret_12345'));
+      assert.equal(err.status, 422);
+      assert.equal(err.apiMessage, 'Parse error on line 3');
       return true;
     }
   );
 });
 
-test('client submits workout history and supports idempotent verification', async () => {
-  const recordedHistory = [];
-  const mockFetcher = async (url, options) => {
-    if (options.method === 'POST' && url.endsWith('/history')) {
-      const payload = JSON.parse(options.body);
-      recordedHistory.push(payload);
-      return {
-        ok: true,
-        status: 201,
-        json: async () => ({ id: 'hist-1', status: 'saved', startedAt: payload.startedAt }),
-      };
-    } else if (options.method === 'GET' && url.includes('/history/check')) {
-      return {
-        ok: true,
-        status: 200,
-        json: async () => ({ exists: recordedHistory.length > 0 }),
-      };
-    }
-    return { ok: false, status: 404 };
-  };
-
-  const client = createLiftosaurApiClient({
-    apiKey: 'lftsk_test_token',
-    fetcher: mockFetcher,
+test('reports a network failure as status 0', async () => {
+  const fetcher = fakeFetch(async () => {
+    throw new Error('socket hang up');
   });
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
 
-  const entry = {
-    workoutId: 'w-1',
-    startedAt: 10000,
-    completedAt: 15000,
-    exercises: [{ name: 'Bench Press', sets: [{ weight: 60, reps: 5 }] }],
-  };
+  await assert.rejects(
+    () => client.getProgram('current'),
+    (err) => err.status === 0 && err.code === 'NETWORK'
+  );
+});
 
-  const result = await client.submitWorkoutHistory(entry);
-  assert.equal(result.id, 'hist-1');
-  assert.equal(result.status, 'saved');
+test('creates a history record from raw Liftohistory text', async () => {
+  const fetcher = fakeFetch(async () => jsonResponse({ data: { id: 5, text: 'record' } }));
+  const client = createLiftosaurApiClient({ apiKey: 'lftsk_key_value', fetcher });
 
-  const check = await client.checkWorkoutHistoryExists({ startedAt: 10000 });
-  assert.equal(check.exists, true);
+  const created = await client.createHistoryRecord('record');
+
+  assert.equal(created.id, 5);
+  assert.equal(fetcher.calls[0].options.method, 'POST');
+  assert.deepEqual(JSON.parse(fetcher.calls[0].options.body), { text: 'record' });
 });

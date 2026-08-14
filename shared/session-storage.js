@@ -1,17 +1,24 @@
 /**
- * Persistent session store for crash recovery and offline durability.
+ * Durable session snapshot.
+ *
+ * A session is only recoverable if the plan is stored alongside the journal:
+ * the journal alone is a list of taps with no exercises to replay them against.
+ * Both are written as one snapshot on every critical event.
+ *
+ * The adapter is injected so this file stays runnable under plain Node. On the
+ * watch it is backed by `@zos/storage`.
  */
+
+const SNAPSHOT_VERSION = 1;
 
 export function createMemoryStorageAdapter() {
   let memoryData = null;
   return {
-    read() {
-      return memoryData;
-    },
-    write(data) {
+    read: () => memoryData,
+    write: (data) => {
       memoryData = data;
     },
-    remove() {
+    remove: () => {
       memoryData = null;
     },
   };
@@ -19,42 +26,55 @@ export function createMemoryStorageAdapter() {
 
 export function createSessionStore(adapter) {
   return {
-    hasActiveSession() {
-      const journal = this.loadJournal();
-      return Array.isArray(journal) && journal.length > 0;
-    },
-
-    loadJournal() {
+    /** Returns `{plan, journal, startedAt}` or null when there is nothing to resume. */
+    load() {
+      let raw;
       try {
-        const raw = adapter.read();
-        if (!raw) return [];
-        const parsed = JSON.parse(raw);
-        return Array.isArray(parsed) ? parsed : [];
+        raw = adapter.read();
       } catch (err) {
-        console.log('[session-store] failed to parse journal', err?.message || String(err));
-        return [];
+        console.log('[session-store] read failed:', err?.message || String(err));
+        return null;
+      }
+      if (!raw) return null;
+
+      try {
+        const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!parsed || parsed.version !== SNAPSHOT_VERSION) return null;
+        if (!parsed.plan || !Array.isArray(parsed.journal)) return null;
+        return {
+          plan: parsed.plan,
+          journal: parsed.journal,
+          startedAt: parsed.startedAt ?? null,
+          historyId: parsed.historyId ?? null,
+        };
+      } catch (err) {
+        console.log('[session-store] snapshot unreadable:', err?.message || String(err));
+        return null;
       }
     },
 
-    saveJournal(journal) {
+    save({ plan, journal, startedAt = null, historyId = null }) {
+      if (!plan || !Array.isArray(journal)) return false;
       try {
-        adapter.write(JSON.stringify(journal));
+        adapter.write(
+          JSON.stringify({ version: SNAPSHOT_VERSION, plan, journal, startedAt, historyId })
+        );
+        return true;
       } catch (err) {
-        console.log('[session-store] failed to write journal', err?.message || String(err));
+        console.log('[session-store] write failed:', err?.message || String(err));
+        return false;
       }
     },
 
-    appendEvent(event) {
-      const current = this.loadJournal();
-      current.push(event);
-      this.saveJournal(current);
+    hasSession() {
+      return this.load() !== null;
     },
 
-    clearSession() {
+    clear() {
       try {
         adapter.remove();
       } catch (err) {
-        console.log('[session-store] failed to clear session', err?.message || String(err));
+        console.log('[session-store] clear failed:', err?.message || String(err));
       }
     },
   };

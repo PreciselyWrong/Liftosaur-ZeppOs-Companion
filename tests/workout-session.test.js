@@ -1,307 +1,229 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  SESSION_STATES,
-  EVENT_TYPES,
-  createWorkoutSession,
-} from '../shared/workout-session.js';
+import { createWorkoutSession, SESSION_STATES, weightStepFor } from '../shared/workout-session.js';
 
-const BENCH_PRESS_MOCK = {
-  id: 'bench-press-1',
-  name: 'Bench Press',
-  sets: [
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-    { targetReps: 10, targetWeight: 60, restSeconds: 90 },
-  ],
-};
+function makePlan(overrides = {}) {
+  return {
+    programId: 'prog-1',
+    programName: 'Test',
+    programVersion: 'abc123',
+    dayName: 'Semaine 1 - Mardi: PUSH A',
+    week: 1,
+    dayInWeek: 1,
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        id: 'ex-1',
+        name: 'Decline Bench Press',
+        sets: [
+          { index: 1, targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: 120, isAmrap: false },
+          { index: 2, targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: 120, isAmrap: false },
+        ],
+      },
+      {
+        index: 2,
+        id: 'ex-2',
+        name: 'Triceps Pushdown',
+        sets: [
+          { index: 1, targetReps: 11, targetWeight: 35, targetRpe: 8, restSeconds: 75, isAmrap: true },
+        ],
+      },
+    ],
+    ...overrides,
+  };
+}
 
-test('unconfigured session starts in SETUP_REQUIRED state', () => {
-  const session = createWorkoutSession();
-  assert.equal(session.view().state, SESSION_STATES.SETUP_REQUIRED);
+test('a session with no plan needs one', () => {
+  const view = createWorkoutSession({ plan: null }).view();
+  assert.equal(view.state, SESSION_STATES.NO_PLAN);
+  assert.equal(view.totalExercises, 0);
 });
 
-test('new session starts in READY state with prescription', () => {
+test('starts on the first set with the API targets loaded', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  assert.equal(session.view().state, SESSION_STATES.READY);
 
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  const view = session.view();
-
-  assert.equal(view.state, SESSION_STATES.READY);
-  assert.equal(view.exerciseName, 'Bench Press');
-  assert.equal(view.totalSets, 3);
-  assert.equal(view.currentSetIndex, 0);
-  assert.equal(view.currentSet.weight, 60);
-  assert.equal(view.currentSet.reps, 10);
-});
-
-test('startWorkout transitions from READY to ACTIVE_SET', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
   session.startWorkout({ timestamp: 1000 });
+  const view = session.view(1000);
 
-  const view = session.view();
   assert.equal(view.state, SESSION_STATES.ACTIVE_SET);
-  assert.equal(view.currentSetIndex, 0);
-  assert.equal(session.getJournal().length, 1);
-  assert.equal(session.getJournal()[0].type, EVENT_TYPES.START_WORKOUT);
+  assert.equal(view.exerciseName, 'Decline Bench Press');
+  assert.equal(view.currentSet.weight, 80);
+  assert.equal(view.currentSet.reps, 8);
+  assert.equal(view.currentSet.rpe, 8);
+  assert.equal(view.currentSet.restSeconds, 120);
 });
 
-test('adjustWeight and adjustReps modify current set values', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
+test('rests for the duration the API prescribed', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1000 });
 
-  session.adjustWeight(2.5, { timestamp: 1010 });
-  assert.equal(session.view().currentSet.weight, 62.5);
-
-  session.adjustReps(-1, { timestamp: 1020 });
-  assert.equal(session.view().currentSet.reps, 9);
-});
-
-test('completeSet transitions to REST and starts rest timer', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
-  session.completeSet({ timestamp: 2000 });
-
-  const view = session.view(2000);
+  const view = session.view(1000);
   assert.equal(view.state, SESSION_STATES.REST);
-  assert.equal(view.currentSetIndex, 0); // set 0 just completed
-  assert.equal(view.rest.duration, 90);
-  assert.equal(view.rest.remaining, 90);
-  assert.equal(view.completedSets.length, 1);
-  assert.equal(view.completedSets[0].reps, 10);
-  assert.equal(view.completedSets[0].weight, 60);
+  assert.equal(view.rest.duration, 120);
+  assert.equal(view.rest.remaining, 120);
+  assert.equal(view.rest.nextSetIndex, 1);
+  assert.equal(view.rest.isTransitionToNextExercise, false);
 });
 
-test('rest timer remaining calculates from absolute timestamp and tracks overtime', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
-  session.completeSet({ timestamp: 2000 }); // ends at 2000 + 90*1000 = 92000
+test('rest is absolute, so a late render still counts down correctly', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 10_000 });
 
-  // 30 seconds later (timestamp 32000)
-  const view30s = session.view(32000);
-  assert.equal(view30s.rest.remaining, 60);
-  assert.equal(view30s.rest.isOvertime, false);
-
-  // 95 seconds later (timestamp 97000): 5 seconds overtime (-5s)
-  const viewOvertime = session.view(97000);
-  assert.equal(viewOvertime.rest.remaining, -5);
-  assert.equal(viewOvertime.rest.isOvertime, true);
+  assert.equal(session.view(70_000).rest.remaining, 60);
+  assert.equal(session.view(140_000).rest.isOvertime, true);
+  assert.equal(session.view(140_000).rest.remaining, -10);
 });
 
+test('moves to the next exercise once the current one is done', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1 });
+  session.nextSet({ timestamp: 2 });
+  session.completeSet({ timestamp: 3 });
 
-test('skipRest / nextSet transitions from REST to ACTIVE_SET on next set', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
-  session.completeSet({ timestamp: 2000 });
+  assert.equal(session.view(3).rest.isTransitionToNextExercise, true);
+  assert.equal(session.view(3).rest.nextExerciseName, 'Triceps Pushdown');
 
-  session.nextSet({ timestamp: 5000 });
-  const view = session.view();
+  session.nextSet({ timestamp: 4 });
+  const view = session.view(4);
+  assert.equal(view.exerciseName, 'Triceps Pushdown');
+  assert.equal(view.currentSet.isAmrap, true);
+});
+
+test('finishes when the last set is completed', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1 });
+  session.nextSet({ timestamp: 2 });
+  session.completeSet({ timestamp: 3 });
+  session.nextSet({ timestamp: 4 });
+  session.completeSet({ timestamp: 5 });
+
+  assert.equal(session.view(5).state, SESSION_STATES.FINISHED);
+  assert.equal(session.isAllCompleted(), true);
+});
+
+test('skips the rest screen when the API prescribed no timer', () => {
+  const plan = makePlan();
+  plan.exercises[0].sets[0].restSeconds = null;
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1 });
+
+  const view = session.view(1);
   assert.equal(view.state, SESSION_STATES.ACTIVE_SET);
   assert.equal(view.currentSetIndex, 1);
 });
 
-test('completing final set transitions to FINISHED', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
+test('adjusts weight by the step of the plan unit', () => {
+  assert.equal(weightStepFor('kg'), 2.5);
+  assert.equal(weightStepFor('lb'), 5);
 
-  // Set 1
-  session.completeSet({ timestamp: 2000 });
-  session.nextSet({ timestamp: 3000 });
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.adjustWeight(1);
+  assert.equal(session.view().currentSet.weight, 82.5);
 
-  // Set 2
-  session.completeSet({ timestamp: 4000 });
-  session.nextSet({ timestamp: 5000 });
+  session.adjustWeight(-2);
+  assert.equal(session.view().currentSet.weight, 77.5);
+});
 
-  // Set 3 (final)
-  session.completeSet({ timestamp: 6000 });
+test('adjusts reps and RPE within sane bounds', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+
+  session.adjustReps(2);
+  assert.equal(session.view().currentSet.reps, 10);
+
+  session.adjustRpe(0.5);
+  assert.equal(session.view().currentSet.rpe, 8.5);
+
+  session.adjustRpe(5);
+  assert.equal(session.view().currentSet.rpe, 10);
+});
+
+test('records what the user actually did, as playground indices', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.adjustWeight(1);
+  session.adjustReps(-1);
+  session.completeSet({ timestamp: 1 });
+  session.nextSet({ timestamp: 2 });
+  session.completeSet({ timestamp: 3 });
+
+  assert.deepEqual(session.getCompletedSets(), [
+    { exerciseIndex: 1, setIndex: 1, weight: 82.5, reps: 7, rpe: 8, unit: 'kg' },
+    { exerciseIndex: 1, setIndex: 2, weight: 80, reps: 8, rpe: 8, unit: 'kg' },
+  ]);
+});
+
+test('an adjustment applies to the current set only', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.adjustWeight(2);
+  session.completeSet({ timestamp: 1 });
+  session.nextSet({ timestamp: 2 });
+
+  assert.equal(session.view().currentSet.weight, 80, 'set 2 keeps its prescribed weight');
+});
+
+test('jumping to another exercise resumes it where it stopped', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.selectExercise(1);
 
   const view = session.view();
-  assert.equal(view.state, SESSION_STATES.FINISHED);
-  assert.equal(view.completedSets.length, 3);
+  assert.equal(view.exerciseName, 'Triceps Pushdown');
+  assert.equal(view.currentSet.weight, 35);
+  assert.equal(view.state, SESSION_STATES.ACTIVE_SET);
 });
 
-test('replaying journal restores identical state', () => {
-  const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
-  session.startWorkout({ timestamp: 1000 });
-  session.adjustWeight(5, { timestamp: 1010 });
-  session.completeSet({ timestamp: 2000 });
-  session.nextSet({ timestamp: 3000 });
+test('replaying the journal rebuilds the same state', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.adjustWeight(1);
+  session.completeSet({ timestamp: 1 });
 
-  const journal = session.getJournal();
+  const restored = createWorkoutSession({ plan: makePlan(), initialJournal: session.getJournal() });
 
-  // Replay into fresh session
-  const replayed = createWorkoutSession({ exercise: BENCH_PRESS_MOCK, initialJournal: journal });
-  assert.deepEqual(replayed.view(), session.view());
+  assert.deepEqual(restored.getCompletedSets(), session.getCompletedSets());
+  assert.equal(restored.view(1).state, session.view(1).state);
 });
 
-test('multi-exercise workout allows exercise navigation and automatic progression', () => {
-  const MULTI_WORKOUT = {
-    id: 'workout-1',
-    name: 'Push Day',
-    exercises: [
-      {
-        id: 'bench',
-        name: 'Bench Press',
-        sets: [{ targetReps: 10, targetWeight: 60, restSeconds: 60 }],
-      },
-      {
-        id: 'overhead',
-        name: 'Overhead Press',
-        sets: [{ targetReps: 8, targetWeight: 40, restSeconds: 90 }],
-      },
-    ],
-  };
+test('cancelling clears the journal and returns to ready', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1 });
+  session.cancelWorkout({ timestamp: 2 });
 
-  const session = createWorkoutSession({ workout: MULTI_WORKOUT });
-  session.startWorkout();
-
-  assert.equal(session.view().exerciseName, 'Bench Press');
-  assert.equal(session.view().totalExercises, 2);
-  assert.equal(session.view().currentExerciseIndex, 0);
-
-  session.selectExercise(1);
-  assert.equal(session.view().exerciseName, 'Overhead Press');
-  assert.equal(session.view().currentExerciseIndex, 1);
-
-  session.completeSet();
-  session.nextSet();
-
-  session.selectExercise(0);
-  assert.equal(session.view().exerciseName, 'Bench Press');
-  session.completeSet();
-
-  assert.equal(session.isAllCompleted(), true);
+  assert.equal(session.view().state, SESSION_STATES.READY);
+  assert.deepEqual(session.getCompletedSets(), []);
+  assert.deepEqual(session.getJournal(), []);
 });
 
-test('session automatically jumps alternately between exercises in a superset', () => {
-  const SUPERSET_WORKOUT = {
-    id: 'superset-day',
-    name: 'Upper Body Superset (Heavy Intensity Focus)',
-    exercises: [
-      {
-        id: 'bench-incline',
-        name: 'Incline DB Bench',
-        supersetGroup: 'A',
-        supersetTag: 'SUPERSET A1',
-        sets: [
-          { targetReps: 10, targetWeight: 30, restSeconds: 30 },
-          { targetReps: 10, targetWeight: 30, restSeconds: 30 },
-        ],
-      },
-      {
-        id: 'chest-row',
-        name: 'DB Chest Row',
-        supersetGroup: 'A',
-        supersetTag: 'SUPERSET A2',
-        sets: [
-          { targetReps: 12, targetWeight: 26, restSeconds: 60 },
-          { targetReps: 12, targetWeight: 26, restSeconds: 60 },
-        ],
-      },
-    ],
-  };
+test('reports volume and elapsed time for the summary', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1000 });
 
-  const session = createWorkoutSession({ workout: SUPERSET_WORKOUT });
-  session.startWorkout();
-
-  // 1. Starts on A1 Set 1
-  assert.equal(session.view().exerciseName, 'Incline DB Bench');
-  assert.equal(session.view().currentSetIndex, 0);
-
-  // 2. Complete A1 Set 1 -> Rest -> Next Set jumps to A2 Set 1!
-  session.completeSet();
-  assert.equal(session.view().rest.isTransitionToNextExercise, true);
-  assert.equal(session.view().rest.nextExerciseName, 'DB Chest Row');
-  assert.equal(session.view().rest.nextSupersetTag, 'SUPERSET A2');
-  assert.equal(session.view().rest.nextSetIndex, 0);
-  session.nextSet();
-
-  assert.equal(session.view().exerciseName, 'DB Chest Row');
-  assert.equal(session.view().currentSetIndex, 0);
-
-  // 3. Complete A2 Set 1 -> Rest -> Next Set jumps back to A1 Set 2!
-  session.completeSet();
-  assert.equal(session.view().rest.nextExerciseName, 'Incline DB Bench');
-  assert.equal(session.view().rest.nextSetIndex, 1);
-  session.nextSet();
-
-
-  assert.equal(session.view().exerciseName, 'Incline DB Bench');
-  assert.equal(session.view().currentSetIndex, 1);
-
-  // 4. Complete A1 Set 2 -> Rest -> Next Set jumps to A2 Set 2!
-  session.completeSet();
-  session.nextSet();
-
-  assert.equal(session.view().exerciseName, 'DB Chest Row');
-  assert.equal(session.view().currentSetIndex, 1);
-
-  // 5. Complete A2 Set 2 -> All done -> FINISHED
-  session.completeSet();
-  assert.equal(session.isAllCompleted(), true);
-  assert.equal(session.view().state, SESSION_STATES.FINISHED);
+  const view = session.view(61_000);
+  assert.equal(view.totalVolume, 640);
+  assert.equal(view.elapsedSeconds, 61);
+  assert.equal(view.totalCompletedSetsCount, 1);
 });
 
-test('session calculates total workout volume, elapsed time, and set dots status', () => {
-  const WORKOUT = {
-    id: 'w-1',
-    name: 'Week 1 - Workout A',
-    routineName: 'Basic Beginner Routine',
-    exercises: [
-      {
-        id: 'bench',
-        name: 'Bench Press, Barbell',
-        sets: [
-          { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
-          { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
-          { targetReps: 5, targetWeight: 60, targetRpe: 8.5, restSeconds: 60 },
-        ],
-      },
-      {
-        id: 'squat',
-        name: 'Overhead Squat, Barbell',
-        sets: [
-          { targetReps: 5, targetWeight: 40, restSeconds: 90 },
-        ],
-      },
-    ],
-  };
+test('carries the plan identity needed to write back', () => {
+  const view = createWorkoutSession({ plan: makePlan() }).view();
 
-  const session = createWorkoutSession({ workout: WORKOUT });
-  session.startWorkout({ timestamp: 1000 });
-
-  // Initial set dots on bench press
-  const v1 = session.view(2000);
-  assert.deepEqual(v1.exerciseSetsDots, ['active', 'pending', 'pending']);
-  assert.equal(v1.elapsedSeconds, 1);
-
-  // Complete set 1 of bench press (5 * 60 = 300 kg)
-  session.completeSet({ timestamp: 3000 });
-  session.nextSet({ timestamp: 4000 });
-
-  const v2 = session.view(5000);
-  assert.deepEqual(v2.exerciseSetsDots, ['completed', 'active', 'pending']);
-
-  // Complete set 2 (5 * 60 = 300 kg)
-  session.completeSet({ timestamp: 6000 });
-  session.nextSet({ timestamp: 7000 });
-
-  // Complete set 3 (5 * 60 = 300 kg)
-  session.completeSet({ timestamp: 8000 });
-  session.nextSet({ timestamp: 9000 });
-
-  // Now on Squat, complete 1 set (5 * 40 = 200 kg)
-  session.completeSet({ timestamp: 10000 });
-
-  // Summary check
-  const summary = session.view(11000);
-  assert.equal(summary.state, SESSION_STATES.FINISHED);
-  assert.equal(summary.totalVolume, 300 + 300 + 300 + 200); // 1100 kg
-  assert.equal(summary.totalCompletedSetsCount, 4);
-  assert.equal(summary.elapsedSeconds, 10); // 11000 - 1000 = 10s
+  assert.equal(view.programId, 'prog-1');
+  assert.equal(view.programVersion, 'abc123');
+  assert.equal(view.week, 1);
+  assert.equal(view.dayInWeek, 1);
+  assert.equal(view.dayName, 'Semaine 1 - Mardi: PUSH A');
 });
-
-
-
-
-

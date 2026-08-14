@@ -5,8 +5,8 @@
     "appName": "Liftosaur",
     "appType": "app",
     "version": {
-      "code": 13,
-      "name": "0.1.7"
+      "code": 14,
+      "name": "2.0.0"
     },
 
 
@@ -55,7 +55,8 @@
     }
   },
   "permissions": [
-    "data:user.hd.heart_rate"
+    "data:user.hd.heart_rate",
+    "device:os.local_storage"
   ],
   "runtime": {
     "apiVersion": {

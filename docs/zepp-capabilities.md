@@ -206,11 +206,27 @@ Consequences: the simulator cannot yet answer whether the extension is scoped to
 how it behaves as a data page, or whether taps work in a real workout. Those move to
 "needs the system Workout app", and P0-1 stays open.
 
+## Local storage (CONFIRMED)
+
+| Item | Value | Status |
+| --- | --- | --- |
+| Module | `import { LocalStorage } from '@zos/storage'` | CONFIRMED |
+| Constructor | `new LocalStorage(storagePath?)` — defaults to the mini program's own storage file | CONFIRMED |
+| Methods | `setItem(key, value)`, `getItem(key, defaultValue?)`, `removeItem(key)`, `clear()` | CONFIRMED |
+| Required API_LEVEL | 3.0 (this project targets 3.6) | CONFIRMED |
+| Permission | `device:os.local_storage` — must be listed in `app.json` | CONFIRMED |
+| Durability | survives app restart; cleared on uninstall | CONFIRMED |
+| Quota | not documented | UNKNOWN |
+
+Source: [LocalStorage](https://docs.zepp.com/docs/reference/device-app-api/newAPI/storage/localStorage/).
+Documented, not yet device-tested — the writes are wrapped so a failure degrades to an
+in-memory store rather than breaking a session.
+
 ## Open questions (blocking)
 
 1. Numeric `subType` for Strength Training, and whether the extension can be scoped to it.
 2. Whether the extension can be restricted to Strength Training only, or must accept `[]`.
-3. Local storage API, quota, and durability guarantees on the device.
+3. `LocalStorage` quota, and its write latency for a per-set save.
 4. Where the Side Service can store the Liftosaur API key, and its security properties.
 5. Whether the extension runs while the watch screen is off, and rest-alert delivery.
 6. `onDestroy` timing guarantees and whether writes can complete inside it.
