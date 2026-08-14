@@ -153,8 +153,9 @@ real data page.
 | `DataWidget` custom object properties are **not** accessible via `this` inside arrow-function callbacks — `this` is the module scope, not the DataWidget object. Mutable state must live in **module-level closure variables**. | TESTED |
 | The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
 | The simulator renders a `data-widget` **outside** any workout — in a direct preview context | TESTED |
-| The Active 2 simulator image has **no Workout system app** — `Home` only shows Settings. Workout-context testing (lifecycle, HR, subType scoping) is **BLOCKED** on this image. | TESTED |
-| The path forward: open the simulator's built-in **Device Simulator download manager**, download an officially supported device image (T-Rex 3, Cheetah Pro, Cheetah Round, Cheetah Square, T-Rex Ultra, or Falcon), rebuild with the matching `-t` target. | CONFIRMED (doc) |
+| The Active 2 simulator image has **no Workout system app** — `Home` only shows Settings. | TESTED |
+| T-Rex 3 simulator image (officially supported device) **also has no Workout system app** — same result as Active 2. The Workout app is absent from **all** simulator device images. This is a simulator limitation, not a device limitation. | TESTED |
+| Workout-context testing (lifecycle in workout, HR from system, subType scoping) is **BLOCKED** in the simulator for all images. The only test path is the real device in Developer Mode. | TESTED |
 | A `TEXT` widget has **no** `addEventListener`: calling it throws and aborts `build()` | TESTED |
 | A `FILL_RECT` **never receives** `event.CLICK_UP` — a rectangle cannot be a tap target | TESTED |
 | `widget.BUTTON` with `click_func` **does** fire | TESTED |
