@@ -151,8 +151,30 @@ real data page.
 | `DataWidget` keeps custom properties (`state`, `statusText`, `render`) with a correct `this` — same shape as `Page()`, undocumented for `DataWidget` | TESTED |
 | The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
 | The simulator renders a `data-widget` **outside** any workout | TESTED |
-| `event.CLICK_UP` on a full-screen `FILL_RECT` — **no reaction observed** | UNKNOWN |
 | A `TEXT` widget has **no** `addEventListener`: calling it throws and aborts `build()` | TESTED |
+| A `FILL_RECT` **never receives** `event.CLICK_UP` — a rectangle cannot be a tap target | TESTED |
+| `widget.BUTTON` with `click_func` **does** fire | TESTED |
+| `setProperty(prop.MORE, …)` on a `FILL_RECT` **does** repaint it | TESTED |
+| `setProperty` on a `TEXT` widget **never refreshes it** — neither `prop.TEXT`, nor `prop.MORE` with only `{text}`, nor `prop.MORE` with the full geometry | TESTED |
+
+### UI constraints this imposes
+
+Established by bisecting a minimal widget one variable at a time, after several
+misdiagnoses. Each step was rebuilt and observed in the simulator:
+
+1. Background `FILL_RECT` + static `TEXT` → renders.
+2. `CLICK_UP` on the background + text update → no reaction.
+3. `CLICK_UP` on the background + colour change only → no reaction ⇒ the rect gets no taps.
+4. `BUTTON` + full-geometry text update → button fires, text does not change.
+
+So **every tap target must be a `BUTTON`**, and **no text can be mutated in place**. This
+lands squarely on phase 1, where weight, reps, RPE and the rest countdown all have to update
+live. Candidate replacements are being probed: `deleteWidget` + `createWidget`, and
+pre-created texts toggled with `prop.VISIBLE`.
+
+A runtime error inside `build()` aborts the rest of it **silently** — the widgets already
+created stay on screen, so a half-built widget looks deliberate. Any unexplained missing
+element should be read as a crash, not a layout mistake.
 
 The tap did nothing. The probe listener added on the status text threw at runtime, which
 aborted `build()` after the widgets were already drawn — so the screen looked correct while
