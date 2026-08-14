@@ -100,11 +100,19 @@ export function createSideRouter({
             // 3. Ask Liftosaur Cloud Playground to compute official workout for (week, day)
             if (playgroundSimulator && programText) {
               try {
-                const playgroundRes = await playgroundSimulator({
+                let playgroundRes = await playgroundSimulator({
                   programText,
                   week: targetSession.week,
                   day: targetSession.dayInWeek,
                 });
+
+                // If week-based simulation returned empty or failed, retry with day only
+                if (!playgroundRes?.data?.workout) {
+                  playgroundRes = await playgroundSimulator({
+                    programText,
+                    day: targetSession.dayInWeek,
+                  });
+                }
 
                 if (playgroundRes?.data?.workout) {
                   const rawWorkoutText = playgroundRes.data.workout;

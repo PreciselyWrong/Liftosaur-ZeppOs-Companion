@@ -102,7 +102,7 @@ function addWidget(type, props) {
   return w;
 }
 
-let currentRequestedDayIndex = 0;
+let currentRequestedDayIndex = null;
 
 function requestProgramFromSideService(isManual = false, dayIndex = null) {
   if (!pageInstance || typeof pageInstance.request !== 'function') return;
@@ -117,7 +117,7 @@ function requestProgramFromSideService(isManual = false, dayIndex = null) {
     pageInstance
       .request(createMessage({
         type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
-        payload: { dayIndex: currentRequestedDayIndex },
+        payload: { dayIndex: dayIndex !== null ? currentRequestedDayIndex : null },
       }))
       .then((res) => {
         isSyncing = false;
@@ -125,6 +125,9 @@ function requestProgramFromSideService(isManual = false, dayIndex = null) {
           if (res.payload.configured && res.payload.workout) {
             console.log('[liftosaur] received workout:', res.payload.workout.name);
             session = createWorkoutSession({ workout: res.payload.workout });
+            if (res.payload.workout.currentDayIndex !== undefined && res.payload.workout.currentDayIndex !== null) {
+              currentRequestedDayIndex = res.payload.workout.currentDayIndex;
+            }
             renderUI();
           } else {
             console.log('[liftosaur] side service: no api key configured');
