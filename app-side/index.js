@@ -1,14 +1,28 @@
 import { BaseSideService } from '@zeppos/zml/base-side';
+import { settings } from '@zeppos/device/settings';
 import { createSideRouter } from './router.js';
 import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 
-// Side Service holds the secret locally on the smartphone, never passed to the watch
-const apiClient = createLiftosaurApiClient();
+function getEffectiveApiKey() {
+  try {
+    const raw = settings?.settingsStorage?.getItem('apiKey');
+    if (raw && typeof raw === 'string' && raw.trim().length > 0) {
+      return raw.trim();
+    }
+  } catch (e) {}
+  return null;
+}
+
+function getApiClient() {
+  const apiKey = getEffectiveApiKey();
+  return createLiftosaurApiClient({ apiKey });
+}
 
 const router = createSideRouter({
   programProvider: async () => {
+    const client = getApiClient();
     try {
-      return await apiClient.getCurrentProgram();
+      return await client.getCurrentProgram();
     } catch (err) {
       console.log('[liftosaur-side] api fetch error, using cached fixture:', err?.message || String(err));
       return {
@@ -26,8 +40,9 @@ const router = createSideRouter({
   },
 
   playgroundSimulator: async (journal) => {
+    const client = getApiClient();
     try {
-      return await apiClient.runPlaygroundSimulation(JSON.stringify(journal));
+      return await client.runPlaygroundSimulation(JSON.stringify(journal));
     } catch (err) {
       console.log('[liftosaur-side] playground simulation error:', err?.message || String(err));
       return null;
@@ -35,8 +50,9 @@ const router = createSideRouter({
   },
 
   historySubmitter: async (history) => {
+    const client = getApiClient();
     try {
-      return await apiClient.submitWorkoutHistory(history);
+      return await client.submitWorkoutHistory(history);
     } catch (err) {
       console.log('[liftosaur-side] history submit error:', err?.message || String(err));
       // Return local saved confirmation so the watch can close the session safely

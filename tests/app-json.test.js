@@ -50,8 +50,15 @@ test('app-side entry point exists on disk', () => {
   assert.ok(fs.existsSync(entry), `missing app-side entry ${entry}`);
 });
 
+test('setting entry point exists on disk', () => {
+  const setting = appJson.targets.common.module['setting'];
+  assert.ok(setting && typeof setting.path === 'string', 'missing setting declaration');
+  const entry = path.join(import.meta.dirname, '..', `${setting.path}.js`);
+  assert.ok(fs.existsSync(entry), `missing setting entry ${entry}`);
+});
 
 test('no secret-looking value is committed in app.json', () => {
+
   const raw = JSON.stringify(appJson);
   assert.ok(!/lftsk_/.test(raw), 'app.json contains a Liftosaur API key');
   assert.ok(!/Bearer\s/i.test(raw), 'app.json contains an Authorization value');
