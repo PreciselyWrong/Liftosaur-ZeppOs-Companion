@@ -18,16 +18,14 @@ your program from the API and never interprets it on its own.
   program's progression, so opening the phone app afterwards shows the same state.
 - A workout is still saved when your program was edited elsewhere during the session; only
   the progression is skipped, and the watch says so.
+- An interrupted workout is resumed exactly where it stopped — the session is now saved to
+  the watch, not held in memory. Your workout is written to Liftosaur once, when you finish
+  it, so nothing half-done ever lands in your history.
 
 ### Changed
 - The watch no longer chooses the next day for you. You choose it.
 - Weight steps follow your program's unit (2.5 kg or 5 lb).
 - A set without a prescribed rest timer no longer invents one.
-
-- Your workout now appears in Liftosaur while you train: the first set you log creates the
-  record and every set after it updates the same one. Discarding a session removes it.
-- An interrupted workout is resumed exactly where it stopped, including the record it was
-  writing — the session is now saved to the watch, not held in memory.
 
 ### Removed
 - The local Liftoscript reader that guessed weeks, days, exercises and weights from program

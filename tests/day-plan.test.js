@@ -6,7 +6,6 @@ import {
   buildProbeCommands,
   exerciseCountFromProbeError,
   buildWorkoutCommands,
-  buildProgressRecord,
 } from '../shared/day-plan.js';
 
 // Shape of `data.workout` returned by POST /api/v1/playground after a probe run.
@@ -113,59 +112,6 @@ test('omits an adjustment the user never made', () => {
   ]);
 
   assert.deepEqual(commands, ['change_reps(2, 1, 12)', 'complete_set(2, 1)']);
-});
-
-test('groups a live record by exercise even when the user jumped around', () => {
-  const plan = buildDayPlan(PROBE_RESPONSE);
-
-  // Superset order: exercise 1 set 1, exercise 2 set 1, exercise 1 set 2.
-  const text = buildProgressRecord({
-    plan,
-    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
-    completedSets: [
-      { exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' },
-      { exerciseIndex: 2, setIndex: 1, weight: 17.5, reps: 8, rpe: 8, unit: 'kg' },
-      { exerciseIndex: 1, setIndex: 2, weight: 60, reps: 10, rpe: 8, unit: 'kg' },
-    ],
-  });
-
-  assert.ok(text.includes('Lat Pulldown / 2x10 60kg @8'), 'both Lat Pulldown sets on one line');
-  assert.ok(text.includes('Incline Curl / 1x8 17.5kg @8'));
-  assert.ok(text.startsWith('2026-08-14T09:00:00.000Z /'));
-});
-
-test('a live record carries no duration, so Liftosaur reads it as ongoing', () => {
-  // Liftosaur derives the end of a workout from the duration:
-  //   endTime = durationSec != null ? startTime + durationSec * 1000 : undefined
-  // A record stating a duration is a finished workout. This one must not.
-  const plan = buildDayPlan(PROBE_RESPONSE);
-  const text = buildProgressRecord({
-    plan,
-    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
-    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' }],
-  });
-
-  assert.ok(!text.includes('duration:'), 'an ongoing session has no duration yet');
-});
-
-test('a live record carries the prescription, like any Liftosaur record', () => {
-  const plan = buildDayPlan(PROBE_RESPONSE);
-  const text = buildProgressRecord({
-    plan,
-    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 60, reps: 10, rpe: 8, unit: 'kg' }],
-  });
-
-  assert.ok(
-    text.includes('/ target: 3x10 60kg @8 120s, 1x10+ 60kg @9 120s'),
-    'the target keeps its rep counts, weight, RPE, AMRAP marker and rest timer'
-  );
-  assert.ok(!text.includes('warmup:'), 'warmups are still not obtainable');
-});
-
-test('there is no live record before the first set', () => {
-  const plan = buildDayPlan(PROBE_RESPONSE);
-  assert.equal(buildProgressRecord({ plan, completedSets: [] }), null);
-  assert.equal(buildProgressRecord({ plan: null, completedSets: [] }), null);
 });
 
 test('writes the unit the plan used', () => {

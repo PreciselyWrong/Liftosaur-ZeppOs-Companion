@@ -5,8 +5,6 @@ import {
   parseLiftohistoryRecord,
   parseSetGroups,
   expandSetGroups,
-  formatSetGroups,
-  serializeLiftohistoryRecord,
   rewriteRecordHeader,
 } from '../shared/liftohistory.js';
 
@@ -117,40 +115,6 @@ test('expands a group into individual sets', () => {
     restSeconds: 120,
     label: null,
   });
-});
-
-test('regroups identical consecutive sets when writing', () => {
-  const sets = expandSetGroups(parseSetGroups('3x8 100kg @8'));
-  sets.push({ reps: 6, weight: 100, unit: 'kg', rpe: 9, isAmrap: true, repsLeft: null });
-
-  assert.equal(formatSetGroups(sets), '3x8 100kg @8, 1x6+ 100kg @9');
-});
-
-test('serializes a record the API can read back', () => {
-  const text = serializeLiftohistoryRecord({
-    date: new Date('2026-03-01T10:00:00.000Z'),
-    programName: 'Busy Caveman',
-    dayName: 'Semaine 3 - Jeudi: PULL A',
-    week: 3,
-    dayInWeek: 3,
-    durationSeconds: 2380,
-    exercises: [
-      {
-        name: 'Lat Pulldown',
-        equipment: null,
-        sets: [
-          { reps: 9, weight: 60, unit: 'kg', rpe: 8, isAmrap: false, repsLeft: null },
-          { reps: 9, weight: 60, unit: 'kg', rpe: 8, isAmrap: false, repsLeft: null },
-        ],
-      },
-    ],
-  });
-
-  const reparsed = parseLiftohistoryRecord(text);
-  assert.equal(reparsed.programName, 'Busy Caveman');
-  assert.equal(reparsed.week, 3);
-  assert.equal(reparsed.durationSeconds, 2380);
-  assert.equal(reparsed.exercises[0].completedGroups[0].count, 2);
 });
 
 test('rewrites the header without touching the exercises block', () => {

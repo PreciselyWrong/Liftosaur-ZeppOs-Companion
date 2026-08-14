@@ -45,7 +45,6 @@ export function createSessionStore(adapter) {
           plan: parsed.plan,
           journal: parsed.journal,
           startedAt: parsed.startedAt ?? null,
-          historyId: parsed.historyId ?? null,
         };
       } catch (err) {
         console.log('[session-store] snapshot unreadable:', err?.message || String(err));
@@ -53,12 +52,10 @@ export function createSessionStore(adapter) {
       }
     },
 
-    save({ plan, journal, startedAt = null, historyId = null }) {
+    save({ plan, journal, startedAt = null }) {
       if (!plan || !Array.isArray(journal)) return false;
       try {
-        adapter.write(
-          JSON.stringify({ version: SNAPSHOT_VERSION, plan, journal, startedAt, historyId })
-        );
+        adapter.write(JSON.stringify({ version: SNAPSHOT_VERSION, plan, journal, startedAt }));
         return true;
       } catch (err) {
         console.log('[session-store] write failed:', err?.message || String(err));

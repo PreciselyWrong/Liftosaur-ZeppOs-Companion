@@ -4,7 +4,7 @@ Standalone [Liftosaur](https://www.liftosaur.com) workout tracking client for Am
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-133%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen.svg)
 
 ---
 
@@ -24,12 +24,12 @@ the watch offers next.
 
 - **Explicit selection**: program, week and day are chosen by you, from lists the API returns. Your most recent workout is shown so you can see where you left off.
 - **Real prescriptions**: exercises, sets, rep ranges, AMRAP markers, weights, RPE targets and rest timers all come from the Playground, in your program's unit.
-- **Faithful write-back**: the session is replayed to Liftosaur as playground commands, so the saved record is exactly what you did and the progression is computed by Liftosaur.
+- **Faithful write-back**: at finish, the session is replayed to Liftosaur as playground commands, so the saved record is exactly what you did. Progressions — including custom `progress:` scripts and `used: none` templates — are computed by Liftosaur, never re-implemented here.
 - **Never overwrites a remote edit**: the program text is fingerprinted when the plan is built and re-checked before writing. If the program changed meanwhile, the workout is still saved and the progression is skipped.
 - **Live heart rate** via `@zos/sensor`, with zone colouring.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.
 - **Display wake lock** during active workouts (`@zos/display`).
-- **Offline durability**: append-only local session journal; a lost `POST /history` response is resolved by searching before any retry.
+- **Crash-proof sessions**: the plan and the journal are stored on the watch after every set, so an app killed mid-workout resumes on the same set. A lost `POST /history` response is resolved by searching before any retry.
 - **Mobile settings app**: your Liftosaur API key (`lftsk_...`) is entered in the Zepp app and never leaves the phone.
 
 ---
@@ -68,7 +68,7 @@ Shared, platform-independent modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `shared/liftohistory.js` | Read and write the documented Liftohistory text format |
+| `shared/liftohistory.js` | Read the documented Liftohistory text format |
 | `shared/liftoscript-outline.js` | Read only the `#` week and `##` day headers of a program |
 | `shared/day-plan.js` | Turn `target:` sections into a plan, and a journal into playground commands |
 | `shared/workout-session.js` | The session state machine |

@@ -22,7 +22,6 @@ import {
   buildProbeCommands,
   exerciseCountFromProbeError,
   buildWorkoutCommands,
-  buildProgressRecord,
 } from '../shared/day-plan.js';
 import { parseLiftohistoryRecord, rewriteRecordHeader } from '../shared/liftohistory.js';
 
@@ -56,19 +55,6 @@ export function createProgramService({ client } = {}) {
 
   /** programId -> { id, name, text, version } */
   const programCache = new Map();
-
-  /** `programId:week:day` -> the plan last handed to the watch, for naming live records. */
-  const planCache = new Map();
-
-  /**
-   * startedAt -> { historyId }. The record created on the first completed set,
-   * updated on every set after it, and replaced by the authoritative one at
-   * finish. One session, one history record — never a second.
-   */
-  const liveRecords = new Map();
-
-  const planKeyOf = (programId, week, day) => `${programId}:${week}:${day}`;
-  const sessionKeyOf = (startedAt) => String(startedAt ?? '');
 
   async function loadProgram(programId, { force = false } = {}) {
     if (!force && programCache.has(programId)) {
@@ -229,71 +215,7 @@ export function createProgramService({ client } = {}) {
         outlineNameMatches: nameMatches,
       };
 
-      // Kept so a live record can name its exercises without asking again.
-      planCache.set(planKeyOf(program.id, week, day), result);
       return result;
-    },
-
-    /**
-     * Writes the workout as it happens.
-     *
-     * The first completed set creates the history record; every set after it
-     * updates the same one. The text states only what the user did — the
-     * authoritative version, with targets and progression, replaces it at
-     * finish. One session is always one record.
-     */
-    async syncProgress({
-      programId,
-      week,
-      day,
-      startedAt = null,
-      completedSets = [],
-      plan: sentPlan = null,
-      historyId = null,
-    } = {}) {
-      // The watch sends its own plan and record id because this service is not
-      // a long-lived process: Zepp OS may tear it down between requests, so an
-      // in-memory cache cannot be relied on to know either. The cache is only
-      // an optimisation for the common case where it survived.
-      const plan = planCache.get(planKeyOf(programId, week, day)) || sentPlan;
-      if (!plan || !Array.isArray(plan.exercises) || plan.exercises.length === 0) {
-        return { synced: false, reason: 'NO_PLAN', historyId };
-      }
-
-      // No duration: this record must read as ongoing, not finished.
-      const text = buildProgressRecord({ plan, completedSets, startedAt });
-      if (!text) {
-        return { synced: false, reason: 'NOTHING_DONE', historyId };
-      }
-
-      const knownId = historyId ?? liveRecords.get(sessionKeyOf(startedAt))?.historyId ?? null;
-
-      if (knownId !== null && knownId !== undefined) {
-        await client.updateHistoryRecord(knownId, text);
-        liveRecords.set(sessionKeyOf(startedAt), { historyId: knownId });
-        return { synced: true, historyId: knownId, created: false };
-      }
-
-      const created = await client.createHistoryRecord(text);
-      const newId = created?.id ?? null;
-      liveRecords.set(sessionKeyOf(startedAt), { historyId: newId });
-      return { synced: true, historyId: newId, created: true };
-    },
-
-    /**
-     * Removes the live record when the user discards the session, so an
-     * abandoned workout does not linger in the history.
-     */
-    async discardWorkout({ startedAt = null, historyId = null } = {}) {
-      const sessionKey = sessionKeyOf(startedAt);
-      const knownId = historyId ?? liveRecords.get(sessionKey)?.historyId ?? null;
-      if (knownId === null || knownId === undefined) {
-        return { discarded: false };
-      }
-
-      await client.deleteHistoryRecord(knownId);
-      liveRecords.delete(sessionKey);
-      return { discarded: true, historyId: knownId };
     },
 
     /**
@@ -312,7 +234,6 @@ export function createProgramService({ client } = {}) {
       completedSets = [],
       startedAt = null,
       durationSeconds = null,
-      historyId = null,
     } = {}) {
       const program = await loadProgram(programId);
 
@@ -350,15 +271,7 @@ export function createProgramService({ client } = {}) {
         durationSeconds,
       });
 
-      // A live record already holds this session, so it is updated rather than
-      // duplicated. The watch's id wins over the cache, which may be gone.
-      const sessionKey = sessionKeyOf(startedAt);
-      const liveId = historyId ?? liveRecords.get(sessionKey)?.historyId ?? null;
-      const created =
-        liveId !== null && liveId !== undefined
-          ? await replaceHistory(liveId, recordText, startedAt)
-          : await commitHistory(recordText, startedAt);
-      liveRecords.delete(sessionKey);
+      const created = await commitHistory(recordText, startedAt);
 
       let programUpdated = false;
       let conflict = false;
@@ -402,24 +315,6 @@ export function createProgramService({ client } = {}) {
       programCache.delete(programId);
     },
   };
-
-  /**
-   * Replaces the live record with the authoritative one. If the update fails,
-   * the session is not lost: the live record already holds the completed sets,
-   * so it is reported rather than duplicated by a fresh create.
-   */
-  async function replaceHistory(historyId, recordText, startedAt) {
-    try {
-      await client.updateHistoryRecord(historyId, recordText);
-      return { id: historyId, alreadyExisted: false };
-    } catch (err) {
-      const existing = await findExistingRecord(recordText, startedAt);
-      if (existing) {
-        return { id: existing.id, alreadyExisted: true };
-      }
-      throw err;
-    }
-  }
 
   async function commitHistory(recordText, startedAt) {
     try {

@@ -110,11 +110,6 @@ let session = createWorkoutSession({ plan: null });
 let isOverviewOpen = false;
 let overviewPage = 0;
 
-/** Live history sync state. */
-let liveHistoryId = null;
-let syncInFlight = false;
-let syncDirty = false;
-let syncFailed = false;
 let finishState = null; // { status, message }
 
 let liveHr = 'N/A';
@@ -282,9 +277,6 @@ function loadDayPlan(week, day) {
       finishState = null;
       isOverviewOpen = false;
       overviewPage = 0;
-      liveHistoryId = null;
-      syncFailed = false;
-      syncDirty = false;
       screen = SCREEN.SESSION;
       renderUI();
     })
@@ -304,7 +296,6 @@ function submitWorkout() {
     completedSets: session.getCompletedSets(),
     startedAt: view.startedAt,
     durationSeconds: view.elapsedSeconds,
-    historyId: liveHistoryId,
   })
     .then((res) => {
       const payload = res.payload || {};
@@ -336,7 +327,6 @@ function abandonWorkout() {
   send(MESSAGE_TYPES.ABANDON_WORKOUT, {
     dayName: view.dayName,
     startedAt: view.startedAt,
-    historyId: liveHistoryId,
     abandonedAt: Date.now(),
   }).catch((err) => console.log('[liftosaur] abandon notify failed:', err?.message));
 }
@@ -349,108 +339,16 @@ function persistSession() {
     plan: dayPlan,
     journal: session.getJournal(),
     startedAt: session.view().startedAt,
-    historyId: liveHistoryId,
   });
 }
 
-/** Persist first, render second, sync third — a tap never waits on the phone. */
-function persistAndRender(action, { sync = false } = {}) {
+/** Persist first, render second. The account is written once, at finish. */
+function persistAndRender(action) {
   if (action) {
     action();
     persistSession();
   }
-  // The sync is scheduled on a fresh tick rather than called here. `renderUI`
-  // deletes every widget, including the button whose click handler is running,
-  // and the runtime may abandon the rest of that handler — which is how the
-  // per-set sync ended up never being reached at all.
-  if (sync) scheduleSync();
   renderUI();
-}
-
-function scheduleSync() {
-  try {
-    setTimeout(syncProgress, 0);
-  } catch (err) {
-    console.log('[liftosaur] could not schedule sync:', err?.message || String(err));
-    syncProgress();
-  }
-}
-
-/**
- * Pushes the session to the history after every set. Writes are coalesced: a
- * set completed while a write is in flight marks the state dirty and one more
- * write follows, so a fast superset never queues a backlog.
- */
-function syncProgress() {
-  if (!dayPlan) return;
-  if (syncInFlight) {
-    syncDirty = true;
-    return;
-  }
-
-  const view = session.view();
-  if (view.totalCompletedSetsCount === 0) return;
-
-  syncInFlight = true;
-  renderUI();
-
-  send(MESSAGE_TYPES.SYNC_PROGRESS, {
-    programId: dayPlan.programId,
-    week: dayPlan.week,
-    day: dayPlan.dayInWeek,
-    startedAt: view.startedAt,
-    // No duration is sent: stating one would give the record an endTime and
-    // make Liftosaur read the session as finished. It is stated at finish only.
-    completedSets: session.getCompletedSets(),
-    // The Side Service is not a long-lived process, so the watch carries the
-    // two things it cannot be trusted to remember: what the day contains, and
-    // which history record this session already owns.
-    historyId: liveHistoryId,
-    plan: {
-      programName: dayPlan.programName,
-      dayName: dayPlan.dayName,
-      week: dayPlan.week,
-      dayInWeek: dayPlan.dayInWeek,
-      exercises: dayPlan.exercises.map((exercise) => ({
-        index: exercise.index,
-        name: exercise.name,
-        equipment: exercise.equipment,
-        sets: exercise.sets,
-      })),
-    },
-  })
-    .then((res) => {
-      syncInFlight = false;
-      const payload = res.payload || {};
-
-      // `synced: false` used to pass for success, which is exactly how this
-      // failed silently. Only "nothing done yet" is a normal negative answer.
-      syncFailed = payload.synced === false && payload.reason !== 'NOTHING_DONE';
-      if (syncFailed) {
-        console.log('[liftosaur] live sync refused:', payload.reason || 'unknown');
-      }
-
-      const historyId = payload.historyId;
-      if (historyId !== null && historyId !== undefined && historyId !== liveHistoryId) {
-        liveHistoryId = historyId;
-        persistSession();
-      }
-      renderUI();
-      drainSync();
-    })
-    .catch((err) => {
-      syncInFlight = false;
-      syncFailed = true;
-      console.log('[liftosaur] live sync failed:', err?.message || String(err));
-      renderUI();
-      drainSync();
-    });
-}
-
-function drainSync() {
-  if (!syncDirty) return;
-  syncDirty = false;
-  syncProgress();
 }
 
 /**
@@ -465,7 +363,6 @@ function restoreSession() {
   try {
     dayPlan = snapshot.plan;
     session = createWorkoutSession({ plan: snapshot.plan, initialJournal: snapshot.journal });
-    liveHistoryId = snapshot.historyId;
   } catch (err) {
     console.log('[liftosaur] could not resume session:', err?.message || String(err));
     sessionStore.clear();
@@ -480,8 +377,6 @@ function restoreSession() {
 
   console.log('[liftosaur] resumed session:', view.dayName, view.totalCompletedSetsCount, 'sets');
   screen = SCREEN.SESSION;
-  // Push whatever was done before the interruption.
-  syncProgress();
   return true;
 }
 
@@ -493,9 +388,8 @@ function formatSeconds(sec) {
   return `${isNeg ? '-' : ''}${m < 10 ? '0' : ''}${m}:${s < 10 ? '0' : ''}${s}`;
 }
 
-/** The elapsed clock, flagged when the live history sync is behind. */
 function elapsedLabel(view) {
-  return `▶ ${formatSeconds(view.elapsedSeconds)}${syncFailed ? ' ⚠' : ''}`;
+  return `▶ ${formatSeconds(view.elapsedSeconds)}`;
 }
 
 function formatDots(dots) {
@@ -1092,25 +986,17 @@ function renderOverviewScreen(view) {
 
   const actionY = px(336);
 
-  // Finishing is blocked only while a write is actually in flight — a second
-  // at most. It stays available when a sync has failed, because finishing is
-  // itself the authoritative write and therefore the way out of a failed sync,
-  // not something to be trapped behind it.
-  const isSyncing = syncInFlight;
-
   addWidget(widget.BUTTON, {
     x: px(64),
     y: actionY,
     w: px(170),
     h: px(54),
     radius: px(27),
-    normal_color: isSyncing ? THEME.card : syncFailed ? THEME.orange : THEME.primary,
+    normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
-    color: isSyncing ? THEME.textDisabled : THEME.textPrimary,
-    text: isSyncing ? 'Saving…' : syncFailed ? 'Finish ⚠' : 'Finish ✓',
-    text_size: px(19),
+    text: 'Finish',
+    text_size: px(20),
     click_func: () => {
-      if (isSyncing) return;
       isOverviewOpen = false;
       persistAndRender(() => session.finishWorkout());
       submitWorkout();
@@ -1275,7 +1161,7 @@ function renderActiveSetScreen(view) {
     text_size: px(24),
     click_func: () => {
       hasVibratedThisRest = false;
-      persistAndRender(() => session.completeSet(), { sync: true });
+      persistAndRender(() => session.completeSet());
       if (session.view().state === SESSION_STATES.FINISHED) {
         submitWorkout();
       }
@@ -1578,10 +1464,7 @@ function tick() {
   if (second === lastRenderedSecond) return;
   lastRenderedSecond = second;
 
-  let patched = updateLiveText('elapsed', {
-    text: elapsedLabel(view),
-    color: syncFailed ? THEME.orange : THEME.primaryLight,
-  });
+  let patched = updateLiveText('elapsed', { text: elapsedLabel(view) });
   patched = updateLiveText('hr', { text: `♥ ${liveHr}`, color: heartRateColor(liveHr) }) && patched;
 
   if (view.rest) {

@@ -24,13 +24,6 @@ test('stores the plan alongside the journal so a session can be replayed', () =>
   assert.equal(restored.startedAt, 1000);
 });
 
-test('carries the live history id so a resumed session keeps updating one record', () => {
-  const store = createSessionStore(createMemoryStorageAdapter());
-  store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000, historyId: 42 });
-
-  assert.equal(store.load().historyId, 42);
-});
-
 test('reports whether there is a session to resume', () => {
   const store = createSessionStore(createMemoryStorageAdapter());
   assert.equal(store.hasSession(), false);
