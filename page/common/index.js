@@ -9,21 +9,33 @@ import {
 } from '../../shared/workout-session.js';
 import { createSessionStore } from '../../shared/session-storage.js';
 
-// ── Liftosaur Theme Palette ──────────────────────────────────────────────────
+// ── Official Liftosaur Color Palette ────────────────────────────────────────
 
 const THEME = {
-  bg: 0x0a0a0a,
-  surface: 0x1e1e1e,
-  buttonBg: 0x2a2a2a,
-  buttonPress: 0x3d3d3d,
-  primary: 0x2196f3,       // Liftosaur Accent Blue
-  primaryPress: 0x1976d2,
-  success: 0x4caf50,       // Liftosaur Complete Green
-  successPress: 0x388e3c,
-  amber: 0xffb74d,         // Set count highlight
-  textWhite: 0xffffff,
-  textMuted: 0x9e9e9e,
-  textDim: 0x616161,
+  // Brand & Accents
+  primary: 0x8356f6,          // Violet principal / bouton primaire (#8356F6)
+  primaryLight: 0xa48bfa,     // Violet clair / actif (#A48BFA)
+  primaryPale: 0xccc1f9,      // Violet très clair (#CCC1F9)
+  primaryDark: 0x393248,      // Violet sombre (#393248)
+  primaryDeep: 0x2c1065,      // Violet très sombre (#2C1065)
+  blue: 0x45b3cb,             // Bleu / liens (#45B3CB)
+  success: 0x2bdc9b,          // Vert / succès (#2BDC9B)
+  error: 0xff8066,            // Rouge / erreur (#FF8066)
+  yellow: 0xffd820,           // Jaune (#FFD820)
+  orange: 0xffb544,           // Orange (#FFB544)
+
+  // Backgrounds & Surfaces
+  bg: 0x000000,               // Background principal (#000000)
+  bgSubtle: 0x0c0819,         // Background subtil (#0C0819)
+  bgNeutral: 0x252034,        // Background neutre / menus (#252034)
+  card: 0x332d42,             // Cards / sets / input bg (#332D42)
+  cardActive: 0x453d58,       // Card sélectionnée / set actif (#453D58)
+
+  // Typography
+  textPrimary: 0xffffff,      // Texte principal (#FFFFFF)
+  textSecondary: 0xa4b0bc,    // Texte secondaire (#A4B0BC)
+  textMuted: 0x4f5c6b,        // Texte secondaire discret (#4F5C6B)
+  textDisabled: 0x607284,     // Texte disabled (#607284)
 };
 
 // ── Mock Workout (Multi-Exercise Day) ────────────────────────────────────────
@@ -140,7 +152,7 @@ function renderUI() {
     y: px(15),
     w: W,
     h: px(35),
-    color: THEME.textMuted,
+    color: THEME.textSecondary,
     text_size: px(22),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -160,8 +172,8 @@ function renderUI() {
       w: px(45),
       h: px(45),
       radius: px(22),
-      normal_color: THEME.surface,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '<',
       text_size: px(24),
       click_func: () => {
@@ -175,7 +187,7 @@ function renderUI() {
     y: px(50),
     w: px(350),
     h: px(45),
-    color: THEME.primary,
+    color: THEME.primaryLight,
     text_size: px(26),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -190,8 +202,8 @@ function renderUI() {
       w: px(45),
       h: px(45),
       radius: px(22),
-      normal_color: THEME.surface,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '>',
       text_size: px(24),
       click_func: () => {
@@ -207,7 +219,7 @@ function renderUI() {
       y: px(140),
       w: W,
       h: px(60),
-      color: THEME.textWhite,
+      color: THEME.textPrimary,
       text_size: px(36),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -220,7 +232,7 @@ function renderUI() {
       y: px(205),
       w: W,
       h: px(40),
-      color: THEME.textMuted,
+      color: THEME.textSecondary,
       text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -235,7 +247,7 @@ function renderUI() {
       h: px(85),
       radius: px(42),
       normal_color: THEME.primary,
-      press_color: THEME.primaryPress,
+      press_color: THEME.primaryDeep,
       text: 'START WORKOUT',
       text_size: px(28),
       click_func: () => {
@@ -251,7 +263,7 @@ function renderUI() {
       y: px(100),
       w: W,
       h: px(40),
-      color: THEME.amber,
+      color: THEME.orange,
       text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -266,8 +278,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: THEME.buttonBg,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '-2.5',
       text_size: px(24),
       click_func: () => {
@@ -280,7 +292,7 @@ function renderUI() {
       y: px(145),
       w: px(220),
       h: px(60),
-      color: THEME.textWhite,
+      color: THEME.textPrimary,
       text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -294,8 +306,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: THEME.buttonBg,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '+2.5',
       text_size: px(24),
       click_func: () => {
@@ -310,8 +322,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: THEME.buttonBg,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '-1',
       text_size: px(26),
       click_func: () => {
@@ -324,7 +336,7 @@ function renderUI() {
       y: px(215),
       w: px(220),
       h: px(60),
-      color: THEME.textWhite,
+      color: THEME.textPrimary,
       text_size: px(34),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -338,8 +350,8 @@ function renderUI() {
       w: px(75),
       h: px(60),
       radius: px(12),
-      normal_color: THEME.buttonBg,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: '+1',
       text_size: px(26),
       click_func: () => {
@@ -347,15 +359,15 @@ function renderUI() {
       },
     });
 
-    // Complete Set Button (Liftosaur Green)
+    // Complete Set Button (Liftosaur Primary Purple #8356F6)
     addWidget(widget.BUTTON, {
       x: px(90),
       y: px(315),
       w: px(300),
       h: px(85),
       radius: px(42),
-      normal_color: THEME.success,
-      press_color: THEME.successPress,
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
       text: 'COMPLETE SET',
       text_size: px(28),
       click_func: () => {
@@ -375,7 +387,7 @@ function renderUI() {
       y: px(95),
       w: W,
       h: px(35),
-      color: THEME.primary,
+      color: THEME.blue,
       text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -388,7 +400,7 @@ function renderUI() {
       y: px(140),
       w: W,
       h: px(80),
-      color: THEME.textWhite,
+      color: THEME.textPrimary,
       text_size: px(56),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -401,7 +413,7 @@ function renderUI() {
       y: px(235),
       w: W,
       h: px(40),
-      color: THEME.textMuted,
+      color: THEME.textSecondary,
       text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -415,8 +427,8 @@ function renderUI() {
       w: px(300),
       h: px(80),
       radius: px(40),
-      normal_color: THEME.buttonBg,
-      press_color: THEME.buttonPress,
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
       text: isTransition ? 'NEXT EXERCISE' : 'SKIP REST',
       text_size: px(28),
       click_func: () => {
@@ -444,7 +456,7 @@ function renderUI() {
       y: px(195),
       w: W,
       h: px(45),
-      color: THEME.textMuted,
+      color: THEME.textSecondary,
       text_size: px(26),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
@@ -459,7 +471,7 @@ function renderUI() {
       h: px(80),
       radius: px(40),
       normal_color: THEME.primary,
-      press_color: THEME.primaryPress,
+      press_color: THEME.primaryDeep,
       text: 'RESET',
       text_size: px(28),
       click_func: () => {
