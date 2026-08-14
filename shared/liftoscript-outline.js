@@ -105,10 +105,31 @@ export function findOutlineDay(outline, weekNumber, dayNumber) {
   return { week, day };
 }
 
+function parseRange(spec) {
+  const result = [];
+  const parts = String(spec || '').split(',');
+  for (const part of parts) {
+    const trimmed = part.trim();
+    if (trimmed.includes('-')) {
+      const [startStr, endStr] = trimmed.split('-');
+      const start = parseInt(startStr, 10);
+      const end = parseInt(endStr, 10);
+      if (Number.isFinite(start) && Number.isFinite(end)) {
+        for (let i = start; i <= end; i++) result.push(i);
+      }
+    } else {
+      const val = parseInt(trimmed, 10);
+      if (Number.isFinite(val)) result.push(val);
+    }
+  }
+  return result;
+}
+
 /**
  * Extracts exercise declarations for one day from the Liftoscript source text.
  * Reads `warmup:` and `superset:` tags. Exercise names have Liftoscript template
- * brackets (e.g. `[1,2]`) stripped.
+ * brackets (e.g. `[1,2-6]`) and label prefixes (e.g. `calibration: `) stripped.
+ * Handles template week inheritance for days defined across week ranges.
  *
  * @param {string} programText Verbatim Liftoscript source.
  * @param {number} weekNumber  1-based week index.
@@ -119,9 +140,8 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
   const lines = String(programText || '').split('\n');
   let currentWeek = 0;
   let currentDay = 0;
-  let inTargetDay = false;
   let scriptDepth = 0;
-  const exercises = [];
+  const allEntries = [];
 
   for (const rawLine of lines) {
     const line = rawLine.trim();
@@ -143,7 +163,6 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     if (weekMatch) {
       currentWeek += 1;
       currentDay = 0;
-      inTargetDay = false;
       continue;
     }
 
@@ -151,13 +170,17 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     if (dayMatch) {
       if (currentWeek === 0) currentWeek = 1;
       currentDay += 1;
-      inTargetDay = currentWeek === weekNumber && currentDay === dayNumber;
       continue;
     }
 
-    if (inTargetDay) {
+    if (currentDay > 0) {
       const cleanLine = line.replace(/\/\/.*$/, '').trim();
       if (!cleanLine) continue;
+
+      // Skip template-only declarations (e.g. used: none / used: 0)
+      if (/\bused\s*:\s*(none|0|false)\b/i.test(cleanLine)) {
+        continue;
+      }
 
       const parts = cleanLine
         .split(/\s*\/\s*/)
@@ -165,7 +188,36 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
         .filter((p) => p.length > 0);
       if (parts.length === 0) continue;
 
-      const rawNameAndEquipment = parts[0];
+      let rawNameAndEquipment = parts[0];
+
+      // Strip label prefix e.g. "calibration: " or "rfmar: "
+      const colonMatch = rawNameAndEquipment.match(/^[a-zA-Z0-9_-]+\s*:\s*(.+)$/);
+      if (colonMatch) {
+        rawNameAndEquipment = colonMatch[1].trim();
+      }
+
+      // Check for template bracket e.g. "[1,2-6]" or "[2-6]"
+      let itemIndex = null;
+      let appliesToWeeks = [currentWeek];
+      const bracketMatch = rawNameAndEquipment.match(/\[([^\]]*)\]/);
+      if (bracketMatch) {
+        const inside = bracketMatch[1].trim();
+        const tokens = inside.split(',').map((t) => t.trim());
+        if (tokens.length >= 2) {
+          itemIndex = parseInt(tokens[0], 10);
+          appliesToWeeks = parseRange(tokens[1]);
+        } else if (tokens.length === 1) {
+          if (tokens[0].includes('-')) {
+            appliesToWeeks = parseRange(tokens[0]);
+          } else {
+            const num = parseInt(tokens[0], 10);
+            if (Number.isFinite(num)) {
+              itemIndex = num;
+            }
+          }
+        }
+      }
+
       const cleaned = rawNameAndEquipment.replace(/\[[^\]]*\]/g, '').trim();
       const commaIdx = cleaned.indexOf(',');
       const name = (commaIdx === -1 ? cleaned : cleaned.slice(0, commaIdx)).trim();
@@ -189,7 +241,11 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
         }
       }
 
-      exercises.push({
+      allEntries.push({
+        week: currentWeek,
+        day: currentDay,
+        itemIndex: itemIndex ?? allEntries.length + 1,
+        appliesToWeeks,
         name,
         equipment,
         warmupText,
@@ -198,5 +254,30 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     }
   }
 
-  return exercises;
+  // 1. Direct entries in target week and day:
+  const directMatches = allEntries.filter(
+    (e) => e.week === weekNumber && e.day === dayNumber
+  );
+  if (directMatches.length > 0) {
+    return directMatches.map(({ name, equipment, warmupText, supersetTag }) => ({
+      name,
+      equipment,
+      warmupText,
+      supersetTag,
+    }));
+  }
+
+  // 2. Template entries matching day and week range:
+  const templateMatches = allEntries.filter(
+    (e) => e.day === dayNumber && e.appliesToWeeks.includes(weekNumber)
+  );
+
+  return templateMatches
+    .sort((a, b) => a.itemIndex - b.itemIndex)
+    .map(({ name, equipment, warmupText, supersetTag }) => ({
+      name,
+      equipment,
+      warmupText,
+      supersetTag,
+    }));
 }

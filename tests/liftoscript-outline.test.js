@@ -170,7 +170,13 @@ Belt Squat / 3x12 @8 / 50kg 120s
   assert.equal(day2[0].warmupText, null);
   assert.equal(day2[0].supersetTag, null);
 
-  assert.deepEqual(parseProgramDayExercises(sample, 2, 1), []);
+  // Week 2 Day 1 inherits Decline Bench Press because of [1,2]
+  const week2Day1 = parseProgramDayExercises(sample, 2, 1);
+  assert.equal(week2Day1.length, 1);
+  assert.equal(week2Day1[0].name, 'Decline Bench Press');
+
+  // Week 3 Day 1 has no matching direct or template entries
+  assert.deepEqual(parseProgramDayExercises(sample, 3, 1), []);
 });
 
 test('parseProgramDayExercises strips inline comments and handles slash spacing', () => {
