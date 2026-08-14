@@ -85,9 +85,14 @@ export function createSideRouter({
               }
             }
 
-            // 2. Parse resolved workout text (or fallback to full program text)
-            const inputToParse = resolvedWorkoutText || programData;
+            // 2. Parse resolved workout text (or fallback to full program data)
+            const programName = programData.data?.name || programData.name || programData.program?.name || 'My Program';
+            const inputToParse = resolvedWorkoutText
+              ? { text: resolvedWorkoutText, name: programName, routineName: programName }
+              : programData;
+
             const parsedWorkout = parseLiftoscriptWorkout(inputToParse, requestedDayIndex);
+
 
             return createMessage({
               type: MESSAGE_TYPES.WORKOUT_DATA,
