@@ -54,6 +54,18 @@ availability are all unverified. The documented device list covers six Amazfit m
 - Gate: one real device confirmed and recorded.
 - Status: OPEN.
 
+## P0-6 — No text widget can be updated in place
+
+`setProperty` never refreshes a `TEXT` widget in a `data-widget`, and a `FILL_RECT` receives
+no taps. Phase 1 needs live weight, reps, RPE and a rest countdown, so the whole screen
+composition depends on finding a working update mechanism.
+
+- Mitigation: probe `deleteWidget` + `createWidget`, and pre-created texts toggled with
+  `prop.VISIBLE`. Whichever works becomes a documented UI primitive, used everywhere.
+- Gate: a value visibly changes on tap in the simulator, and the rest countdown updates
+  once per second without leaking widgets.
+- Status: OPEN, being probed.
+
 ## P1 — Session loss on crash or restart
 
 - Mitigation: persist every critical event before rendering; replay on start; offer
