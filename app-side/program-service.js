@@ -279,13 +279,19 @@ export function createProgramService({ client, referenceData = null } = {}) {
         throw new ProgramServiceError('FINISH_FAILED', 'Playground returned no workout record');
       }
 
+      const resolvedStartedAt =
+        startedAt ?? (completedSets.length > 0 ? completedSets[0].completedAt : null);
+      const resolvedDuration =
+        durationSeconds ??
+        (resolvedStartedAt ? Math.max(0, Math.round((Date.now() - resolvedStartedAt) / 1000)) : null);
+
       const recordText = rewriteRecordHeader(response.workout, {
-        date: startedAt ? new Date(startedAt) : null,
-        durationSeconds,
+        date: resolvedStartedAt ? new Date(resolvedStartedAt) : null,
+        durationSeconds: resolvedDuration,
         programName: program.name,
       });
 
-      const created = await commitHistory(recordText, startedAt);
+      const created = await commitHistory(recordText, resolvedStartedAt);
 
       let programUpdated = false;
       let conflict = false;
