@@ -11,7 +11,7 @@ import {
   validateEnvelope,
 } from '../shared/protocol.js';
 
-test('createMessage builds valid v1 envelope', () => {
+test('createMessage builds valid v2 envelope', () => {
   const msg = createMessage({
     type: MESSAGE_TYPES.PING,
     payload: { pingTime: 12345 },
@@ -31,9 +31,9 @@ test('validateEnvelope accepts valid message and rejects invalid version or miss
 
   assert.equal(validateEnvelope(null).valid, false);
   assert.equal(validateEnvelope({}).valid, false);
-  assert.equal(validateEnvelope({ protocolVersion: 2, messageId: '1', type: 'PING' }).valid, false);
-  assert.equal(validateEnvelope({ protocolVersion: 1, messageId: '', type: 'PING' }).valid, false);
-  assert.equal(validateEnvelope({ protocolVersion: 1, messageId: '1', type: 'UNKNOWN_TYPE' }).valid, false);
+  assert.equal(validateEnvelope({ protocolVersion: 1, messageId: '1', type: 'PING' }).valid, false);
+  assert.equal(validateEnvelope({ protocolVersion: 2, messageId: '', type: 'PING' }).valid, false);
+  assert.equal(validateEnvelope({ protocolVersion: 2, messageId: '1', type: 'UNKNOWN_TYPE' }).valid, false);
 });
 
 test('parseMessage parses JSON and validates envelope', () => {

@@ -1,25 +1,44 @@
 /**
- * Pure protocol implementation for Device ↔ Side Service communication.
- * No framework / Zepp OS dependencies: runnable in Node, Device, and Side App.
+ * Device <-> Side Service protocol.
+ *
+ * Version 2 replaces the single "give me the current workout" call of version 1
+ * with an explicit selection flow: the watch asks for programs, then for a
+ * program's weeks and days, then for one chosen day. Nothing is inferred on
+ * either side, and a version 1 message is rejected rather than guessed at.
  */
 
-export const PROTOCOL_VERSION = 1;
+export const PROTOCOL_VERSION = 2;
 
 export const MESSAGE_TYPES = {
   PING: 'PING',
   PONG: 'PONG',
   ERROR: 'ERROR',
-  GET_CURRENT_WORKOUT: 'GET_CURRENT_WORKOUT',
-  WORKOUT_DATA: 'WORKOUT_DATA',
-  SYNC_JOURNAL: 'SYNC_JOURNAL',
-  SYNC_JOURNAL_RESPONSE: 'SYNC_JOURNAL_RESPONSE',
-  SUBMIT_WORKOUT_HISTORY: 'SUBMIT_WORKOUT_HISTORY',
-  SUBMIT_WORKOUT_HISTORY_RESPONSE: 'SUBMIT_WORKOUT_HISTORY_RESPONSE',
+
+  LIST_PROGRAMS: 'LIST_PROGRAMS',
+  PROGRAMS_DATA: 'PROGRAMS_DATA',
+
+  GET_PROGRAM_OUTLINE: 'GET_PROGRAM_OUTLINE',
+  PROGRAM_OUTLINE_DATA: 'PROGRAM_OUTLINE_DATA',
+
+  GET_DAY_PLAN: 'GET_DAY_PLAN',
+  DAY_PLAN_DATA: 'DAY_PLAN_DATA',
+
+  SYNC_PROGRESS: 'SYNC_PROGRESS',
+  SYNC_PROGRESS_RESULT: 'SYNC_PROGRESS_RESULT',
+
+  FINISH_WORKOUT: 'FINISH_WORKOUT',
+  FINISH_WORKOUT_RESULT: 'FINISH_WORKOUT_RESULT',
+
   ABANDON_WORKOUT: 'ABANDON_WORKOUT',
   ABANDON_WORKOUT_RESPONSE: 'ABANDON_WORKOUT_RESPONSE',
 };
 
-
+export const ERROR_CODES = {
+  INVALID_ENVELOPE: 'INVALID_ENVELOPE',
+  UNSUPPORTED_TYPE: 'UNSUPPORTED_TYPE',
+  NOT_CONFIGURED: 'NOT_CONFIGURED',
+  API_FAILED: 'API_FAILED',
+};
 
 function generateId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
@@ -85,9 +104,15 @@ export function createError(incomingMessage, code, message) {
     type: MESSAGE_TYPES.ERROR,
     replyToId: incomingMessage?.messageId || null,
     sessionId: incomingMessage?.sessionId || null,
-    payload: {
-      code,
-      message,
-    },
+    payload: { code, message },
+  });
+}
+
+export function createReply(incomingMessage, type, payload = {}) {
+  return createMessage({
+    type,
+    replyToId: incomingMessage?.messageId || null,
+    sessionId: incomingMessage?.sessionId || null,
+    payload,
   });
 }

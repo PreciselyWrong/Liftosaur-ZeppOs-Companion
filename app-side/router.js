@@ -1,249 +1,119 @@
-import {
-  MESSAGE_TYPES,
-  validateEnvelope,
-  createPong,
-  createError,
-  createMessage,
-} from '../shared/protocol.js';
-import {
-  parseLiftoscriptWorkout,
-  resolveNextProgramSession,
-} from '../shared/workout-parser.js';
+/**
+ * Side Service message router.
+ *
+ * Pure transport: it validates envelopes and forwards to the program service.
+ * It holds no workout knowledge of its own, so there is nowhere for a local
+ * guess about programs, days, weights or progressions to hide.
+ */
 
-export function createSideRouter({
-  programProvider = null,
-  historyProvider = null,
-  playgroundSimulator = null,
-  historySubmitter = null,
-  workoutAbandoner = null,
-} = {}) {
-  const submittedHistoryCache = new Map();
+import { MESSAGE_TYPES, ERROR_CODES, validateEnvelope, createPong, createError, createReply } from '../shared/protocol.js';
+
+export function createSideRouter({ programService = null, workoutAbandoner = null } = {}) {
+  /** Guards against a retried FINISH_WORKOUT committing the same session twice. */
+  const finishedSessions = new Map();
+
+  function notConfigured(message) {
+    return createError(message, ERROR_CODES.NOT_CONFIGURED, 'No Liftosaur API key configured on the phone');
+  }
+
+  function apiFailure(message, err) {
+    const code = err?.code || ERROR_CODES.API_FAILED;
+    const text = err?.apiMessage || err?.message || 'Liftosaur API error';
+    return createError(message, code, text);
+  }
 
   return {
     async handle(rawMessage) {
       const validation = validateEnvelope(rawMessage);
       if (!validation.valid) {
-        return createError(
-          rawMessage,
-          'INVALID_ENVELOPE',
-          validation.reason || 'Envelope validation failed'
-        );
+        return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, validation.reason);
+      }
+
+      if (rawMessage.type === MESSAGE_TYPES.PING) {
+        return createPong(rawMessage, { serverTime: Date.now(), echo: rawMessage.payload });
+      }
+
+      if (rawMessage.type === MESSAGE_TYPES.ABANDON_WORKOUT) {
+        try {
+          const payload = rawMessage.payload || {};
+          if (workoutAbandoner) await workoutAbandoner(payload);
+          // Drop the live record too, so a discarded session leaves nothing behind.
+          const result = programService
+            ? await programService.discardWorkout(payload)
+            : { discarded: false };
+          return createReply(rawMessage, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE, {
+            abandoned: true,
+            ...result,
+          });
+        } catch (err) {
+          return apiFailure(rawMessage, err);
+        }
+      }
+
+      if (!programService) {
+        return notConfigured(rawMessage);
       }
 
       switch (rawMessage.type) {
-        case MESSAGE_TYPES.PING:
-          return createPong(rawMessage, {
-            serverTime: Date.now(),
-            echo: rawMessage.payload,
-          });
-
-        case MESSAGE_TYPES.GET_CURRENT_WORKOUT: {
+        case MESSAGE_TYPES.LIST_PROGRAMS:
           try {
-            if (!programProvider) {
-              return createMessage({
-                type: MESSAGE_TYPES.WORKOUT_DATA,
-                replyToId: rawMessage.messageId,
-                sessionId: rawMessage.sessionId,
-                payload: {
-                  configured: false,
-                  workout: null,
-                },
-              });
-            }
-
-            const requestedDayIndex = rawMessage.payload?.dayIndex ?? null;
-
-            // 1. Fetch current program and recent workout history in parallel
-            const [programData, historyData] = await Promise.all([
-              programProvider(),
-              historyProvider ? historyProvider().catch(() => null) : Promise.resolve(null),
-            ]);
-
-            if (!programData) {
-              return createMessage({
-                type: MESSAGE_TYPES.WORKOUT_DATA,
-                replyToId: rawMessage.messageId,
-                sessionId: rawMessage.sessionId,
-                payload: {
-                  configured: false,
-                  workout: null,
-                },
-              });
-            }
-
-            const programText =
-              programData.data?.text ||
-              programData.text ||
-              programData.program?.text ||
-              '';
-            const programName =
-              programData.data?.name ||
-              programData.name ||
-              programData.program?.name ||
-              'Liftosaur';
-
-            let finalWorkout = null;
-
-            // 1. Direct authoritative workout generation from Liftosaur Cloud Playground
-            if (playgroundSimulator && programText) {
-              try {
-                const playgroundPayload = { programText };
-                if (requestedDayIndex !== null && requestedDayIndex !== undefined && requestedDayIndex >= 0) {
-                  playgroundPayload.day = requestedDayIndex + 1;
-                }
-
-                const playgroundRes = await playgroundSimulator(playgroundPayload);
-                if (playgroundRes?.data?.workout) {
-                  const rawWorkoutText = playgroundRes.data.workout;
-                  const parsedPlayground = parseLiftoscriptWorkout({
-                    text: rawWorkoutText,
-                    name: programName,
-                    routineName: programName,
-                  });
-
-                  if (parsedPlayground && parsedPlayground.exercises.length > 0) {
-                    finalWorkout = {
-                      ...parsedPlayground,
-                      id: 'workout-' + Date.now(),
-                      name: parsedPlayground.name || programName,
-                      routineName: programName,
-                      currentDayIndex: requestedDayIndex ?? 0,
-                    };
-                  }
-                }
-              } catch (simErr) {
-                console.log('[liftosaur-router] playground API failed, falling back to local text parse:', simErr?.message || String(simErr));
-              }
-            }
-
-            // 2. Fallback only if playground is offline or returned empty
-            if (!finalWorkout) {
-              const fallbackSession = parseLiftoscriptWorkout({
-                text: programText,
-                name: programName,
-                routineName: programName,
-              }, requestedDayIndex);
-
-              finalWorkout = {
-                id: 'workout-' + Date.now(),
-                name: fallbackSession.name || programName,
-                routineName: programName,
-                exercises: fallbackSession.exercises,
-                availableDays: fallbackSession.availableDays,
-                currentDayIndex: fallbackSession.currentDayIndex || 0,
-                totalDays: fallbackSession.totalDays || 1,
-              };
-            }
-
-            return createMessage({
-              type: MESSAGE_TYPES.WORKOUT_DATA,
-              replyToId: rawMessage.messageId,
-              sessionId: rawMessage.sessionId,
-              payload: {
-                configured: true,
-                workout: finalWorkout,
-              },
-            });
+            const programs = await programService.listPrograms();
+            return createReply(rawMessage, MESSAGE_TYPES.PROGRAMS_DATA, { programs });
           } catch (err) {
-            return createError(
-              rawMessage,
-              'WORKOUT_FETCH_FAILED',
-              err.message || 'Liftosaur API error'
-            );
+            return apiFailure(rawMessage, err);
           }
-        }
 
-        case MESSAGE_TYPES.SYNC_JOURNAL: {
+        case MESSAGE_TYPES.GET_PROGRAM_OUTLINE:
           try {
-            const journal = rawMessage.payload?.journal || [];
-            let simulationResult = null;
-
-            if (playgroundSimulator) {
-              simulationResult = await playgroundSimulator({ journal });
+            const { programId } = rawMessage.payload || {};
+            if (!programId) {
+              return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, 'programId is required');
             }
-
-            return createMessage({
-              type: MESSAGE_TYPES.SYNC_JOURNAL_RESPONSE,
-              replyToId: rawMessage.messageId,
-              sessionId: rawMessage.sessionId,
-              payload: {
-                synced: true,
-                syncedCount: journal.length,
-                updatedPrescription: simulationResult?.updatedPrescription ?? null,
-              },
-            });
+            const outline = await programService.getProgramOutline(programId);
+            return createReply(rawMessage, MESSAGE_TYPES.PROGRAM_OUTLINE_DATA, outline);
           } catch (err) {
-            return createError(
-              rawMessage,
-              'SYNC_FAILED',
-              err.message || 'Journal synchronization failed'
-            );
+            return apiFailure(rawMessage, err);
           }
-        }
 
-        case MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY: {
+        case MESSAGE_TYPES.GET_DAY_PLAN:
           try {
-            const history = rawMessage.payload || {};
-            const deduplicationKey = String(history.startedAt || history.workoutId || rawMessage.sessionId);
-
-            if (submittedHistoryCache.has(deduplicationKey)) {
-              return createMessage({
-                type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE,
-                replyToId: rawMessage.messageId,
-                sessionId: rawMessage.sessionId,
-                payload: submittedHistoryCache.get(deduplicationKey),
-              });
+            const { programId, week, day } = rawMessage.payload || {};
+            if (!programId || !Number.isFinite(week) || !Number.isFinite(day)) {
+              return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, 'programId, week and day are required');
             }
-
-            let result = { id: 'local-hist-' + Date.now(), status: 'saved' };
-            if (historySubmitter) {
-              result = await historySubmitter(history);
-            }
-
-            submittedHistoryCache.set(deduplicationKey, result);
-
-            return createMessage({
-              type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE,
-              replyToId: rawMessage.messageId,
-              sessionId: rawMessage.sessionId,
-              payload: result,
-            });
+            const plan = await programService.getDayPlan(programId, week, day);
+            return createReply(rawMessage, MESSAGE_TYPES.DAY_PLAN_DATA, plan);
           } catch (err) {
-            return createError(
-              rawMessage,
-              'HISTORY_SUBMIT_FAILED',
-              err.message || 'Failed to submit workout history'
-            );
+            return apiFailure(rawMessage, err);
           }
-        }
 
-        case MESSAGE_TYPES.ABANDON_WORKOUT: {
+        case MESSAGE_TYPES.SYNC_PROGRESS:
+          try {
+            const result = await programService.syncProgress(rawMessage.payload || {});
+            return createReply(rawMessage, MESSAGE_TYPES.SYNC_PROGRESS_RESULT, result);
+          } catch (err) {
+            return apiFailure(rawMessage, err);
+          }
+
+        case MESSAGE_TYPES.FINISH_WORKOUT:
           try {
             const payload = rawMessage.payload || {};
-            if (workoutAbandoner) {
-              await workoutAbandoner(payload);
+            const key = String(payload.startedAt || rawMessage.sessionId || '');
+            if (key && finishedSessions.has(key)) {
+              return createReply(rawMessage, MESSAGE_TYPES.FINISH_WORKOUT_RESULT, finishedSessions.get(key));
             }
-            return createMessage({
-              type: MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE,
-              replyToId: rawMessage.messageId,
-              sessionId: rawMessage.sessionId,
-              payload: {
-                abandoned: true,
-              },
-            });
+
+            const result = await programService.finishWorkout(payload);
+            if (key) finishedSessions.set(key, result);
+            return createReply(rawMessage, MESSAGE_TYPES.FINISH_WORKOUT_RESULT, result);
           } catch (err) {
-            return createError(
-              rawMessage,
-              'ABANDON_FAILED',
-              err.message || 'Failed to abandon workout'
-            );
+            return apiFailure(rawMessage, err);
           }
-        }
 
         default:
           return createError(
             rawMessage,
-            'UNSUPPORTED_TYPE',
+            ERROR_CODES.UNSUPPORTED_TYPE,
             `Message type '${rawMessage.type}' is not supported`
           );
       }

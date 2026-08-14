@@ -1,168 +1,173 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createMessage, MESSAGE_TYPES } from '../shared/protocol.js';
 import { createSideRouter } from '../app-side/router.js';
+import { MESSAGE_TYPES, ERROR_CODES, createMessage } from '../shared/protocol.js';
 
-test('router handles PING and responds with PONG', async () => {
-  const router = createSideRouter();
-  const ping = createMessage({
-    type: MESSAGE_TYPES.PING,
-    messageId: 'msg-1',
-    payload: { timestamp: 1000 },
-  });
+function fakeService(overrides = {}) {
+  return {
+    listPrograms: async () => [{ id: 'p1', name: 'Test', isCurrent: true }],
+    getProgramOutline: async (programId) => ({ programId, weeks: [], totalWeeks: 0 }),
+    getDayPlan: async (programId, week, day) => ({ programId, week, dayInWeek: day, exercises: [] }),
+    finishWorkout: async () => ({ status: 'SAVED', historyId: 1, programUpdated: true }),
+    syncProgress: async () => ({ synced: true, historyId: 7, created: true }),
+    discardWorkout: async () => ({ discarded: true, historyId: 7 }),
+    ...overrides,
+  };
+}
 
-  const response = await router.handle(ping);
+test('rejects an envelope from an older protocol', async () => {
+  const router = createSideRouter({ programService: fakeService() });
+  const res = await router.handle({ protocolVersion: 1, messageId: 'x', type: 'PING' });
 
-  assert.equal(response.type, MESSAGE_TYPES.PONG);
-  assert.equal(response.replyToId, 'msg-1');
-  assert.equal(typeof response.payload.serverTime, 'number');
+  assert.equal(res.type, MESSAGE_TYPES.ERROR);
+  assert.equal(res.payload.code, ERROR_CODES.INVALID_ENVELOPE);
 });
 
-test('router handles invalid envelope with structured ERROR', async () => {
-  const router = createSideRouter();
-  const invalid = { protocolVersion: 999 };
+test('answers a ping without needing an API key', async () => {
+  const router = createSideRouter({ programService: null });
+  const res = await router.handle(createMessage({ type: MESSAGE_TYPES.PING }));
 
-  const response = await router.handle(invalid);
-
-  assert.equal(response.type, MESSAGE_TYPES.ERROR);
-  assert.equal(response.payload.code, 'INVALID_ENVELOPE');
+  assert.equal(res.type, MESSAGE_TYPES.PONG);
 });
 
-test('router handles GET_CURRENT_WORKOUT when unconfigured and returns configured false', async () => {
+test('says so plainly when no API key is configured', async () => {
+  const router = createSideRouter({ programService: null });
+  const res = await router.handle(createMessage({ type: MESSAGE_TYPES.LIST_PROGRAMS }));
+
+  assert.equal(res.type, MESSAGE_TYPES.ERROR);
+  assert.equal(res.payload.code, ERROR_CODES.NOT_CONFIGURED);
+});
+
+test('returns the program list', async () => {
+  const router = createSideRouter({ programService: fakeService() });
+  const res = await router.handle(createMessage({ type: MESSAGE_TYPES.LIST_PROGRAMS }));
+
+  assert.equal(res.type, MESSAGE_TYPES.PROGRAMS_DATA);
+  assert.equal(res.payload.programs.length, 1);
+});
+
+test('requires a programId for an outline', async () => {
+  const router = createSideRouter({ programService: fakeService() });
+  const res = await router.handle(createMessage({ type: MESSAGE_TYPES.GET_PROGRAM_OUTLINE }));
+
+  assert.equal(res.type, MESSAGE_TYPES.ERROR);
+  assert.match(res.payload.message, /programId/);
+});
+
+test('requires a program, a week and a day for a plan', async () => {
+  const router = createSideRouter({ programService: fakeService() });
+
+  const missing = await router.handle(
+    createMessage({ type: MESSAGE_TYPES.GET_DAY_PLAN, payload: { programId: 'p1', week: 1 } })
+  );
+  assert.equal(missing.type, MESSAGE_TYPES.ERROR);
+
+  const ok = await router.handle(
+    createMessage({ type: MESSAGE_TYPES.GET_DAY_PLAN, payload: { programId: 'p1', week: 2, day: 3 } })
+  );
+  assert.equal(ok.type, MESSAGE_TYPES.DAY_PLAN_DATA);
+  assert.equal(ok.payload.week, 2);
+  assert.equal(ok.payload.dayInWeek, 3);
+});
+
+test('surfaces the API error code to the watch', async () => {
   const router = createSideRouter({
-    programProvider: async () => null,
-  });
-
-  const request = createMessage({
-    type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
-    messageId: 'req-workout-unconf',
-  });
-
-  const response = await router.handle(request);
-  assert.equal(response.type, MESSAGE_TYPES.WORKOUT_DATA);
-  assert.equal(response.payload.configured, false);
-  assert.equal(response.payload.workout, null);
-});
-
-test('router handles SYNC_JOURNAL and reconciles workout', async () => {
-
-  const router = createSideRouter({
-    playgroundSimulator: async () => ({
-      success: true,
-      updatedPrescription: [{ targetWeight: 62.5, targetReps: 5 }],
+    programService: fakeService({
+      getDayPlan: async () => {
+        const err = new Error('Asked for week 1 day 1, playground answered week 1 day 2');
+        err.code = 'DAY_MISMATCH';
+        throw err;
+      },
     }),
   });
 
-  const request = createMessage({
-    type: MESSAGE_TYPES.SYNC_JOURNAL,
-    messageId: 'sync-1',
-    payload: {
-      journal: [{ type: 'COMPLETE_SET', timestamp: 1000 }],
-    },
-  });
+  const res = await router.handle(
+    createMessage({ type: MESSAGE_TYPES.GET_DAY_PLAN, payload: { programId: 'p1', week: 1, day: 1 } })
+  );
 
-  const response = await router.handle(request);
-  assert.equal(response.type, MESSAGE_TYPES.SYNC_JOURNAL_RESPONSE);
-  assert.equal(response.replyToId, 'sync-1');
-  assert.equal(response.payload.synced, true);
+  assert.equal(res.type, MESSAGE_TYPES.ERROR);
+  assert.equal(res.payload.code, 'DAY_MISMATCH');
 });
 
-test('router handles SUBMIT_WORKOUT_HISTORY idempotently', async () => {
-  let submittedCount = 0;
+test('a retried finish returns the first result instead of committing twice', async () => {
+  let calls = 0;
   const router = createSideRouter({
-    historySubmitter: async (history) => {
-      submittedCount++;
-      return { id: 'hist-1', status: 'saved' };
-    },
+    programService: fakeService({
+      finishWorkout: async () => {
+        calls += 1;
+        return { status: 'SAVED', historyId: calls };
+      },
+    }),
   });
 
-  const request = createMessage({
-    type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY,
-    messageId: 'submit-1',
-    payload: {
-      startedAt: 10000,
-      completedAt: 20000,
-      totalVolume: 1500,
-    },
-  });
+  const payload = { programId: 'p1', week: 1, day: 1, startedAt: 1755000000000, completedSets: [] };
 
-  const response = await router.handle(request);
-  assert.equal(response.type, MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE);
-  assert.equal(response.payload.status, 'saved');
-  assert.equal(submittedCount, 1);
+  const first = await router.handle(createMessage({ type: MESSAGE_TYPES.FINISH_WORKOUT, payload }));
+  const second = await router.handle(createMessage({ type: MESSAGE_TYPES.FINISH_WORKOUT, payload }));
+
+  assert.equal(calls, 1);
+  assert.equal(first.payload.historyId, 1);
+  assert.deepEqual(second.payload, first.payload);
 });
 
-test('router queries playground with programText directly', async () => {
-  let playgroundParamsReceived = null;
-
-  const mockProgram = {
-    data: {
-      name: 'PPL Program',
-      text: `
-        # Week 1
-        ## Push
-        Bench Press / 3x5 / 185lb
-      `,
-    },
-  };
-
+test('forwards a progress sync', async () => {
+  let received = null;
   const router = createSideRouter({
-    programProvider: async () => mockProgram,
-    playgroundSimulator: async (params) => {
-      playgroundParamsReceived = params;
-      return {
-        data: {
-          workout: '2026-08-14T10:00:00Z / program: "PPL Program" / dayName: "Pull" / exercises: {\n  Deadlift / 3x5 225lb / target: 3x5 225lb 180s\n}',
-        },
-      };
-    },
+    programService: fakeService({
+      syncProgress: async (payload) => {
+        received = payload;
+        return { synced: true, historyId: 7, created: true };
+      },
+    }),
   });
 
-  const request = createMessage({
-    type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
-    messageId: 'req-next-workout',
-  });
+  const res = await router.handle(
+    createMessage({
+      type: MESSAGE_TYPES.SYNC_PROGRESS,
+      payload: { programId: 'p1', week: 1, day: 1, startedAt: 1000, completedSets: [] },
+    })
+  );
 
-  const response = await router.handle(request);
-
-  assert.equal(response.type, MESSAGE_TYPES.WORKOUT_DATA);
-  assert.equal(response.payload.configured, true);
-  assert.equal(response.payload.workout.name, 'Pull');
-  assert.equal(response.payload.workout.exercises[0].name, 'Deadlift');
-  assert.equal(response.payload.workout.exercises[0].sets[0].targetWeight, 225);
-
-  // Verify playground was queried directly with programText
-  assert.equal(playgroundParamsReceived.programText, mockProgram.data.text);
+  assert.equal(res.type, MESSAGE_TYPES.SYNC_PROGRESS_RESULT);
+  assert.equal(res.payload.historyId, 7);
+  assert.equal(received.startedAt, 1000);
 });
 
-test('router handles ABANDON_WORKOUT and invokes workoutAbandoner', async () => {
-  let abandonedPayload = null;
+test('abandoning also deletes the live record', async () => {
+  let abandoned = null;
+  let discarded = null;
   const router = createSideRouter({
+    programService: fakeService({
+      discardWorkout: async (payload) => {
+        discarded = payload;
+        return { discarded: true, historyId: 7 };
+      },
+    }),
     workoutAbandoner: async (payload) => {
-      abandonedPayload = payload;
-      return { status: 'abandoned' };
+      abandoned = payload;
     },
   });
 
-  const request = createMessage({
-    type: MESSAGE_TYPES.ABANDON_WORKOUT,
-    messageId: 'abandon-1',
-    sessionId: 'Squat Day',
-    payload: {
-      workoutName: 'Squat Day',
-      routineName: 'Liftosaur',
-      abandonedAt: 123456789,
-    },
-  });
+  const res = await router.handle(
+    createMessage({
+      type: MESSAGE_TYPES.ABANDON_WORKOUT,
+      payload: { dayName: 'Day 1', startedAt: 1000 },
+    })
+  );
 
-  const response = await router.handle(request);
-  assert.equal(response.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
-  assert.equal(response.replyToId, 'abandon-1');
-  assert.equal(response.payload.abandoned, true);
-  assert.equal(abandonedPayload.workoutName, 'Squat Day');
+  assert.equal(res.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
+  assert.equal(res.payload.discarded, true);
+  assert.equal(abandoned.dayName, 'Day 1');
+  assert.equal(discarded.startedAt, 1000);
 });
 
+test('abandoning still answers when no API key is configured', async () => {
+  const router = createSideRouter({ programService: null });
+  const res = await router.handle(
+    createMessage({ type: MESSAGE_TYPES.ABANDON_WORKOUT, payload: { startedAt: 1000 } })
+  );
 
-
-
+  assert.equal(res.type, MESSAGE_TYPES.ABANDON_WORKOUT_RESPONSE);
+  assert.equal(res.payload.discarded, false);
+});

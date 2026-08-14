@@ -4,27 +4,75 @@
 
 | Component | Runs on | Owns | Never owns |
 | --- | --- | --- | --- |
-| System Workout ("Strength Training") | Watch | Sport and health metrics, HR sensor, workout session lifecycle | Liftosaur session state |
-| Workout Extension | Watch | The single-screen Liftosaur UI and its touch state machine | Sport metrics, network |
+| Standalone app (mini program) | Watch | The Liftosaur UI, its touch state machine and the HR sensor via `@zos/sensor` | Liftoscript evaluation, network |
 | Device App storage | Watch | Durable local event journal, current session state | API key, HTTP |
-| Side Service | Phone | API key, HTTPS to Liftosaur, retries, reconciliation | UI, session truth |
-| Liftosaur Cloud | Remote | Programs, history, Liftoscript evaluation, progression | Anything local |
+| Side Service | Phone | API key, HTTPS to Liftosaur, retries, conflict detection | UI, session truth, workout content |
+| Liftosaur Cloud | Remote | Programs, weeks and days, prescriptions, history, Liftoscript evaluation, progression | Anything local |
 
-Single-ownership rule: each datum has exactly one owner. HR and calories come from the
-System Workout only — this project never starts a second workout or heart-rate sensor.
+Single-ownership rule: each datum has exactly one owner. The app is the sole owner of the
+heart-rate sensor and never starts a second one.
+
+## Who decides what
+
+The watch decides nothing about the content of a workout. It asks, the API answers:
+
+| Question | Answered by |
+| --- | --- |
+| Which programs exist? | `GET /programs` |
+| Which weeks and days does a program have? | The program's `#` / `##` headers, verified against the playground's `week` / `dayInWeek` echo |
+| Which day am I doing? | **The user**, by tapping it |
+| Which exercises, sets, reps, weights, RPE, rest? | `POST /playground`, `target:` sections |
+| What does this session change in my program? | `POST /playground` with `finish_workout()` |
+| Where is the workout stored? | `POST /history` |
+
+There is no local Liftoscript evaluation, no next-day heuristic and no name-based filtering
+of days or exercises. [`shared/liftoscript-outline.js`](../../shared/liftoscript-outline.js)
+reads two grammar tokens — `# week` and `## day` — and nothing else.
+
+## Selection flow
+
+The launch path fetches the active program's outline immediately, so the home screen can
+offer its next day behind a single button. The full picker sits one tap away.
+
+```
+LIST_PROGRAMS ──▶ GET_PROGRAM_OUTLINE (active program) ──▶ home: start next day
+        │                                                        │
+        └──▶ user taps a program ──────────────────────────────┐ │
+        ▼                                                      ▼ │
+GET_PROGRAM_OUTLINE ──▶ user taps a week ──▶ user taps a day ◀───┘
+        ▼
+GET_DAY_PLAN  (probe: playground reports the exercise count, then its targets)
+        ▼
+READY → ACTIVE_SET → REST → … → FINISHED
+        ▼
+FINISH_WORKOUT  (playground replay + finish_workout, then POST /history, then PUT /programs)
+```
+
+Each picker features one entry — the active program, the week of the most recent
+`GET /history` record, the day after the one it names — large and first, with the rest of
+the list one page below. [`shared/selection.js`](../../shared/selection.js) computes those
+indices from account data only. A featured entry is still a button: it suggests, it never
+selects. When the history points nowhere the list is shown flat.
+
+## Rendering the clock
+
+A full re-render tears down and rebuilds every widget, which takes long enough on the watch
+that a once-a-second redraw drops ticks — the countdown then jumps two seconds at a time.
+The elapsed, heart-rate and rest-timer texts are therefore registered as live widgets and
+patched in place with `setProperty(prop.MORE, …)`, re-sending their complete property set
+so geometry is not lost. The tick samples every 250 ms and writes only when the displayed
+second changes; a state change still triggers a full render, and a refused in-place update
+falls back to one.
 
 ## Data flow
 
 ```
-Strength Training (System Workout)
-        │  SPORT_DATA / getSportData (read-only)
+Watch UI  ──tap──▶  event journal (persist first)
+        │                  │
+        │                  ▼
+        │            UI update
         ▼
-Workout Extension  ──tap──▶  event journal (persist first)
-        │                          │
-        │                          ▼
-        │                    UI update
-        ▼
-Device ↔ Side Service protocol v1 (BLE/ZML)
+Device ↔ Side Service protocol v2 (BLE/ZML)
         ▼
 Side Service ──HTTPS──▶ Liftosaur Cloud (LiftosaurApiClient)
 ```
@@ -35,11 +83,13 @@ wait on BLE or HTTP.
 ## Session model
 
 The session is an append-only event journal. Replaying the journal reconstructs the session
-exactly. Completed sets are determined by the journal alone; Playground recomputes only
-future sets and, at finish time, the progression.
+exactly. Completed sets are determined by the journal alone; at finish time the journal is
+translated into playground commands (`change_weight`, `change_reps`, `complete_set`,
+`change_rpe`) and Liftosaur computes the record and the progression from them.
 
-State machine: `READY → ACTIVE_SET → REST → ACTIVE_SET → … → FINISHING → SYNCING → DONE`.
-Invalid transitions are rejected, not coerced.
+State machine: `NO_PLAN → READY → ACTIVE_SET → REST → ACTIVE_SET → … → FINISHED`.
+Invalid transitions are rejected, not coerced. A set with no prescribed rest timer skips
+`REST` entirely rather than inventing a default.
 
 Rest is absolute-time based: `restStartedAt`, `restDuration`, `restEndsAt`. Remaining time
 is always derived from the clock, never from a tick counter, so pause, screen-off, and
@@ -55,10 +105,42 @@ The watch is usable in all three. Only synchronisation degrades.
 
 ## Finalisation
 
-Finishing is a non-atomic, persisted transaction with distinct steps: post history,
-then write program progression. Either step can end in `UNKNOWN_COMMIT_STATE`, which
-triggers a verification read before any retry. A finished-but-unsynced session is kept and
-offered as `RETRY`; it is never deleted automatically.
+Finishing is a non-atomic, persisted transaction with distinct steps: replay the session
+through the playground, post the record it returns to the history, then write the program
+progression the same run produced.
+
+History goes first because it is append-only and therefore always safe. The program write
+is skipped whenever the remote source changed since the plan was fetched, so a program
+edited in the Liftosaur app during a workout is never overwritten. A lost `POST /history`
+response ends in `UNKNOWN_COMMIT_STATE`, which triggers a verification read before any
+retry. A finished-but-unsynced session is kept and offered as `RETRY`; it is never deleted
+automatically.
+
+## Live history sync
+
+The workout is written to the history as it happens. The first completed set creates the
+record, each set after it updates the same one, and the finish replaces its text with the
+authoritative playground output — one session, one record. Discarding deletes it.
+
+The live text states only what the user did: no `target:`, no warmups, no progression.
+Those are the playground's to compute and they arrive with the final replacement, so an
+intermediate write can never become authoritative.
+
+Session durability rests on the same data: the plan and the journal are stored together via
+`@zos/storage` on every critical event, along with the id of the live record. An app killed
+mid-workout comes back to the same set, and keeps writing to the same history record.
+
+## Known API limits
+
+Warmup sets and superset grouping are absent from the **playground** output — verified, see
+[liftosaur-api.md](liftosaur-api.md). They are not absent from the API: both are named
+fields in the Liftoscript source that `GET /programs/:id` returns, and `warmup:` is part of
+the Liftohistory grammar. Reading them back means parsing the day's block in the program
+text, and resolving a percentage warmup additionally requires reproducing
+`Weight_calculatePlates` from `GET /exercise-data` and `GET /gyms/:gymId/equipment`.
+
+Until that lands, the watch shows working sets in program order. Exercises can be run in any
+order from the overview list.
 
 ## Key handling
 
@@ -67,5 +149,7 @@ It is never sent over BLE, never stored on the watch, and is redacted from every
 
 ## Status
 
-Design only. No component is implemented. Every watch-side assumption depends on the
-open questions in [zepp-capabilities.md](zepp-capabilities.md).
+Implemented and unit-tested against recorded API shapes. The API contract in
+[liftosaur-api.md](liftosaur-api.md) is confirmed against a live account. Watch-side
+assumptions still depend on the open questions in
+[zepp-capabilities.md](zepp-capabilities.md).

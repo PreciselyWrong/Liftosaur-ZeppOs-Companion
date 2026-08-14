@@ -1,42 +1,84 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
-import { EVENT_TYPES } from '../shared/workout-session.js';
+import { createSessionStore, createMemoryStorageAdapter } from '../shared/session-storage.js';
 
-test('store saves and loads journal entries', () => {
-  const adapter = createMemoryStorageAdapter();
-  const store = createSessionStore(adapter);
+const PLAN = {
+  programId: 'p1',
+  dayName: 'Semaine 1 - Mardi',
+  week: 1,
+  dayInWeek: 1,
+  unit: 'kg',
+  exercises: [{ index: 1, id: 'ex-1', name: 'Squat', sets: [{ index: 1, targetReps: 5 }] }],
+};
 
-  assert.equal(store.hasActiveSession(), false);
+const JOURNAL = [{ type: 'START_WORKOUT', timestamp: 1000 }];
 
-  const event1 = { type: EVENT_TYPES.START_WORKOUT, timestamp: 1000 };
-  const event2 = { type: EVENT_TYPES.COMPLETE_SET, timestamp: 2000 };
+test('stores the plan alongside the journal so a session can be replayed', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000 });
 
-  store.appendEvent(event1);
-  store.appendEvent(event2);
-
-  assert.equal(store.hasActiveSession(), true);
-  const loaded = store.loadJournal();
-  assert.deepEqual(loaded, [event1, event2]);
+  const restored = store.load();
+  assert.deepEqual(restored.plan, PLAN);
+  assert.deepEqual(restored.journal, JOURNAL);
+  assert.equal(restored.startedAt, 1000);
 });
 
-test('store clears active session', () => {
-  const adapter = createMemoryStorageAdapter();
-  const store = createSessionStore(adapter);
+test('carries the live history id so a resumed session keeps updating one record', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000, historyId: 42 });
 
-  store.appendEvent({ type: EVENT_TYPES.START_WORKOUT, timestamp: 1000 });
-  assert.equal(store.hasActiveSession(), true);
-
-  store.clearSession();
-  assert.equal(store.hasActiveSession(), false);
-  assert.deepEqual(store.loadJournal(), []);
+  assert.equal(store.load().historyId, 42);
 });
 
-test('store recovers gracefully from corrupted raw data', () => {
+test('reports whether there is a session to resume', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  assert.equal(store.hasSession(), false);
+
+  store.save({ plan: PLAN, journal: JOURNAL });
+  assert.equal(store.hasSession(), true);
+
+  store.clear();
+  assert.equal(store.hasSession(), false);
+  assert.equal(store.load(), null);
+});
+
+test('refuses to save a journal with no plan to replay it against', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+
+  assert.equal(store.save({ plan: null, journal: JOURNAL }), false);
+  assert.equal(store.save({ plan: PLAN, journal: null }), false);
+  assert.equal(store.load(), null);
+});
+
+test('treats a corrupted or foreign snapshot as no session', () => {
   const adapter = createMemoryStorageAdapter();
-  adapter.write('corrupted json data {');
   const store = createSessionStore(adapter);
 
-  assert.deepEqual(store.loadJournal(), []);
+  adapter.write('{not json');
+  assert.equal(store.load(), null);
+
+  adapter.write(JSON.stringify({ version: 99, plan: PLAN, journal: JOURNAL }));
+  assert.equal(store.load(), null);
+
+  adapter.write(JSON.stringify({ version: 1, journal: JOURNAL }));
+  assert.equal(store.load(), null);
+});
+
+test('survives an adapter that throws', () => {
+  const store = createSessionStore({
+    read: () => {
+      throw new Error('storage unavailable');
+    },
+    write: () => {
+      throw new Error('storage unavailable');
+    },
+    remove: () => {
+      throw new Error('storage unavailable');
+    },
+  });
+
+  assert.equal(store.load(), null);
+  assert.equal(store.save({ plan: PLAN, journal: JOURNAL }), false);
+  store.clear();
 });
