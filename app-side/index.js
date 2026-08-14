@@ -1,6 +1,8 @@
 import { BaseSideService } from '@zeppos/zml/base-side';
 import { createSideRouter } from './router.js';
 import { createLiftosaurApiClient } from './liftosaur-api-client.js';
+import { formatWorkoutHistoryToLiftoscript } from '../shared/history-formatter.js';
+
 
 let sideServiceInstance = null;
 
@@ -97,12 +99,15 @@ const router = createSideRouter({
   historySubmitter: async (history) => {
     const client = getApiClient();
     try {
-      return await client.submitWorkoutHistory(history);
+      const liftoscriptText = formatWorkoutHistoryToLiftoscript(history);
+      console.log('[liftosaur-side] submitting history to Liftosaur Cloud API');
+      return await client.submitWorkoutHistory({ text: liftoscriptText });
     } catch (err) {
       console.log('[liftosaur-side] history submit error:', err?.message || String(err));
       return { id: 'offline-saved-' + Date.now(), status: 'queued_offline' };
     }
   },
+
 });
 
 AppSideService(
