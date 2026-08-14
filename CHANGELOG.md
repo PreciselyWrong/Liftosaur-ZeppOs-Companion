@@ -1,5 +1,10 @@
 # Changelog
 
+## [2.0.5] - 14 août 2026
+
+### Corrections
+- Formatage ISO de la date de séance et fiabilisation de la transmission de la durée dans l'historique.
+
 ## [2.0.4] - 14 août 2026
 
 ### Améliorations
