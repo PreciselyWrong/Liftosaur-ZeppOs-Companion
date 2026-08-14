@@ -247,7 +247,7 @@ export function createProgramService({ client, referenceData = null } = {}) {
       startedAt = null,
       durationSeconds = null,
     } = {}) {
-      const program = await loadProgram(programId);
+      let program = await loadProgram(programId);
 
       // The record is produced by replaying the session against the exact
       // program text the plan was built from. If that text is gone — the Side
@@ -264,6 +264,7 @@ export function createProgramService({ client, referenceData = null } = {}) {
             message: 'The program changed on Liftosaur since this workout was planned',
           };
         }
+        program = fresh;
       }
 
       const commands = buildWorkoutCommands(completedSets, { finish: true });

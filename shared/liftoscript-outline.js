@@ -156,8 +156,11 @@ export function parseProgramDayExercises(programText, weekNumber, dayNumber) {
     }
 
     if (inTargetDay) {
-      const parts = line
-        .split(' / ')
+      const cleanLine = line.replace(/\/\/.*$/, '').trim();
+      if (!cleanLine) continue;
+
+      const parts = cleanLine
+        .split(/\s*\/\s*/)
         .map((p) => p.trim())
         .filter((p) => p.length > 0);
       if (parts.length === 0) continue;

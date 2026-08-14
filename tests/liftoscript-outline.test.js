@@ -172,3 +172,21 @@ Belt Squat / 3x12 @8 / 50kg 120s
 
   assert.deepEqual(parseProgramDayExercises(sample, 2, 1), []);
 });
+
+test('parseProgramDayExercises strips inline comments and handles slash spacing', () => {
+  const sample = `## Day 1
+Incline Bench Press/3x8/warmup: 1x5 50%/superset: B // important exercise
+Biceps Curl, Dumbbell  /  3x10  /  superset: B  // curl note
+// Whole line comment
+`;
+
+  const exercises = parseProgramDayExercises(sample, 1, 1);
+  assert.equal(exercises.length, 2);
+  assert.equal(exercises[0].name, 'Incline Bench Press');
+  assert.equal(exercises[0].warmupText, '1x5 50%');
+  assert.equal(exercises[0].supersetTag, 'B');
+
+  assert.equal(exercises[1].name, 'Biceps Curl');
+  assert.equal(exercises[1].equipment, 'Dumbbell');
+  assert.equal(exercises[1].supersetTag, 'B');
+});
