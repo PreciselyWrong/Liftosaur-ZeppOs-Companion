@@ -28,51 +28,53 @@ AppSettingsPage({
               backgroundColor: '#FFFFFF',
               borderRadius: '12px',
               padding: '16px',
-              marginBottom: '16px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              marginBottom: '14px',
             },
           },
           [
-            Text({
-              style: {
-                fontSize: '20px',
-                fontWeight: 'bold',
-                color: '#111827',
-                marginBottom: '4px',
+            Text(
+              {
+                style: {
+                  fontSize: '18px',
+                  fontWeight: 'bold',
+                  color: '#111827',
+                  marginBottom: '4px',
+                },
               },
-              value: 'Liftosaur Cloud Sync',
-            }),
-            Text({
-              style: {
-                fontSize: '13px',
-                color: '#6B7280',
-                marginBottom: '12px',
+              'Liftosaur Cloud Sync'
+            ),
+            Text(
+              {
+                style: {
+                  fontSize: '13px',
+                  color: '#6B7280',
+                  marginBottom: '12px',
+                },
               },
-              value: 'Sync your workouts with Liftosaur Cloud',
-            }),
+              'Sync workouts with your Liftosaur account'
+            ),
             View(
               {
                 style: {
-                  display: 'flex',
-                  flexDirection: 'row',
-                  alignItems: 'center',
-                  padding: '8px 12px',
+                  padding: '10px 12px',
                   backgroundColor: hasKey ? '#ECFDF5' : '#FFFBEB',
                   borderRadius: '8px',
                   border: `1px solid ${hasKey ? '#A7F3D0' : '#FDE68A'}`,
                 },
               },
               [
-                Text({
-                  style: {
-                    fontSize: '13px',
-                    fontWeight: '600',
-                    color: hasKey ? '#065F46' : '#92400E',
+                Text(
+                  {
+                    style: {
+                      fontSize: '13px',
+                      fontWeight: '600',
+                      color: hasKey ? '#065F46' : '#92400E',
+                    },
                   },
-                  value: hasKey
-                    ? `✓ Connected (${maskedKey})`
-                    : '⚠ Not connected (API Key required)',
-                }),
+                  hasKey
+                    ? `✓ Status: Connected (${maskedKey})`
+                    : '⚠ Status: Not connected (API Key required)'
+                ),
               ]
             ),
           ]
@@ -85,47 +87,49 @@ AppSettingsPage({
               backgroundColor: '#FFFFFF',
               borderRadius: '12px',
               padding: '16px',
-              marginBottom: '16px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
+              marginBottom: '14px',
             },
           },
           [
-            Text({
-              style: {
-                fontSize: '12px',
-                fontWeight: '700',
-                letterSpacing: '0.5px',
-                color: '#8356F6',
-                textTransform: 'uppercase',
-                marginBottom: '6px',
+            Text(
+              {
+                style: {
+                  fontSize: '12px',
+                  fontWeight: 'bold',
+                  color: '#8356F6',
+                  textTransform: 'uppercase',
+                  marginBottom: '6px',
+                },
               },
-              value: 'API KEY CONFIGURATION',
-            }),
-            Text({
-              style: {
-                fontSize: '13px',
-                color: '#4B5563',
-                marginBottom: '8px',
+              'API KEY'
+            ),
+            Text(
+              {
+                style: {
+                  fontSize: '13px',
+                  color: '#4B5563',
+                  marginBottom: '10px',
+                },
               },
-              value: 'Tap the box below to paste or edit your personal key:',
-            }),
+              'Tap the box below to edit or paste your API key:'
+            ),
             TextInput({
-              label: 'API Key Field (Tap to edit)',
+              label: 'API Key (Tap to edit)',
               labelStyle: {
                 color: '#111827',
                 fontSize: '15px',
-                fontWeight: '600',
+                fontWeight: 'bold',
               },
-              placeholder: 'lftsk_...',
+              placeholder: 'Paste lftsk_... here',
               value: this.state.apiKey,
               settingsKey: 'apiKey',
               subStyle: {
                 color: '#6B7280',
-                fontSize: '12px',
+                fontSize: '13px',
               },
               description: hasKey
-                ? 'Tap here to change or replace your key'
-                : 'Tap here to open keyboard and paste your key',
+                ? 'Tap here to replace or edit your key'
+                : 'Tap here to enter your key',
               onChange: (val) => {
                 const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
                 this.state.apiKey = clean;
@@ -133,15 +137,15 @@ AppSettingsPage({
               },
             }),
             Button({
-              label: 'Save & Synchronize',
+              label: 'Save Key',
               style: {
-                marginTop: '16px',
+                marginTop: '14px',
                 backgroundColor: '#8356F6',
                 color: '#FFFFFF',
                 borderRadius: '8px',
                 fontSize: '15px',
                 fontWeight: 'bold',
-                padding: '12px',
+                padding: '10px',
               },
               onClick: () => {
                 if (this.state.apiKey) {
@@ -151,9 +155,9 @@ AppSettingsPage({
             }),
             hasKey
               ? Button({
-                  label: 'Clear / Disconnect Key',
+                  label: 'Disconnect / Clear Key',
                   style: {
-                    marginTop: '10px',
+                    marginTop: '8px',
                     backgroundColor: '#FEF2F2',
                     color: '#DC2626',
                     borderRadius: '8px',
@@ -177,31 +181,30 @@ AppSettingsPage({
               backgroundColor: '#FFFFFF',
               borderRadius: '12px',
               padding: '16px',
-              boxShadow: '0 1px 3px rgba(0,0,0,0.08)',
             },
           },
           [
-            Text({
-              style: {
-                fontSize: '14px',
-                fontWeight: 'bold',
-                color: '#111827',
-                marginBottom: '8px',
+            Text(
+              {
+                style: {
+                  fontSize: '14px',
+                  fontWeight: 'bold',
+                  color: '#111827',
+                  marginBottom: '8px',
+                },
               },
-              value: 'How to get your API Key',
-            }),
-            Text({
-              style: {
-                fontSize: '13px',
-                color: '#4B5563',
-                lineHeight: '20px',
+              'How to find your API Key'
+            ),
+            Text(
+              {
+                style: {
+                  fontSize: '13px',
+                  color: '#4B5563',
+                  lineHeight: '19px',
+                },
               },
-              value:
-                '1. Open liftosaur.com (or the Liftosaur App)\n' +
-                '2. Go to Settings > API Keys\n' +
-                '3. Create or copy your personal key\n' +
-                '4. Tap the field above, paste the key, and save',
-            }),
+              '1. Open liftosaur.com or the Liftosaur app\n2. Go to Settings > API Keys\n3. Copy your personal API key\n4. Tap the API Key box above to paste it'
+            ),
           ]
         ),
       ]
