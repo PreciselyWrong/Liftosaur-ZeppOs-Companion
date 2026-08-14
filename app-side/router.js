@@ -5,10 +5,14 @@ import {
   createError,
   createMessage,
 } from '../shared/protocol.js';
-import { parseLiftoscriptWorkout } from '../shared/workout-parser.js';
+import {
+  parseLiftoscriptWorkout,
+  resolveNextProgramSession,
+} from '../shared/workout-parser.js';
 
 export function createSideRouter({
   programProvider = null,
+  historyProvider = null,
   playgroundSimulator = null,
   historySubmitter = null,
 } = {}) {
@@ -47,7 +51,12 @@ export function createSideRouter({
             }
 
             const requestedDayIndex = rawMessage.payload?.dayIndex ?? null;
-            const programData = await programProvider();
+
+            // 1. Fetch current program and recent workout history in parallel
+            const [programData, historyData] = await Promise.all([
+              programProvider(),
+              historyProvider ? historyProvider().catch(() => null) : Promise.resolve(null),
+            ]);
 
             if (!programData) {
               return createMessage({
@@ -61,38 +70,82 @@ export function createSideRouter({
               });
             }
 
-            // Extract program text from API response
             const programText =
               programData.data?.text ||
               programData.text ||
               programData.program?.text ||
               '';
+            const programName =
+              programData.data?.name ||
+              programData.name ||
+              programData.program?.name ||
+              'My Program';
 
-            let resolvedWorkoutText = null;
+            const historyRecords =
+              historyData?.data?.records ||
+              historyData?.records ||
+              (Array.isArray(historyData) ? historyData : []);
 
-            // 1. Ask Liftosaur Cloud Playground to compute the official next workout
+            // 2. Resolve program structure and current week/day
+            const targetSession = resolveNextProgramSession({
+              programText,
+              programName,
+              routineName: programName,
+              historyRecords,
+              requestedDayIndex,
+            });
+
+            let finalWorkout = null;
+
+            // 3. Ask Liftosaur Cloud Playground to compute official workout for (week, day)
             if (playgroundSimulator && programText) {
               try {
                 const playgroundRes = await playgroundSimulator({
                   programText,
-                  day: requestedDayIndex !== null ? requestedDayIndex + 1 : null,
+                  week: targetSession.week,
+                  day: targetSession.dayInWeek,
                 });
+
                 if (playgroundRes?.data?.workout) {
-                  resolvedWorkoutText = playgroundRes.data.workout;
+                  const rawWorkoutText = playgroundRes.data.workout;
+                  const parsedPlayground = parseLiftoscriptWorkout({
+                    text: rawWorkoutText,
+                    name: targetSession.dayName,
+                    routineName: programName,
+                  });
+
+                  if (parsedPlayground && parsedPlayground.exercises.length > 0) {
+                    finalWorkout = {
+                      ...parsedPlayground,
+                      name: parsedPlayground.name || targetSession.fullName || targetSession.dayName,
+                      routineName: programName,
+                      availableDays: targetSession.availableDays,
+                      currentDayIndex: targetSession.dayIndex,
+                      totalDays: targetSession.totalDays,
+                      week: targetSession.week,
+                      dayInWeek: targetSession.dayInWeek,
+                    };
+                  }
                 }
               } catch (simErr) {
                 console.log('[liftosaur-router] playground resolution fallback to local parser:', simErr?.message || String(simErr));
               }
             }
 
-            // 2. Parse resolved workout text (or fallback to full program data)
-            const programName = programData.data?.name || programData.name || programData.program?.name || 'My Program';
-            const inputToParse = resolvedWorkoutText
-              ? { text: resolvedWorkoutText, name: programName, routineName: programName }
-              : programData;
-
-            const parsedWorkout = parseLiftoscriptWorkout(inputToParse, requestedDayIndex);
-
+            // 4. Fallback to local parser if playground was offline or empty
+            if (!finalWorkout) {
+              finalWorkout = {
+                id: 'workout-' + Date.now(),
+                name: targetSession.fullName || targetSession.dayName,
+                routineName: programName,
+                exercises: targetSession.exercises,
+                availableDays: targetSession.availableDays,
+                currentDayIndex: targetSession.dayIndex,
+                totalDays: targetSession.totalDays,
+                week: targetSession.week,
+                dayInWeek: targetSession.dayInWeek,
+              };
+            }
 
             return createMessage({
               type: MESSAGE_TYPES.WORKOUT_DATA,
@@ -100,10 +153,9 @@ export function createSideRouter({
               sessionId: rawMessage.sessionId,
               payload: {
                 configured: true,
-                workout: parsedWorkout,
+                workout: finalWorkout,
               },
             });
-
           } catch (err) {
             return createError(
               rawMessage,
