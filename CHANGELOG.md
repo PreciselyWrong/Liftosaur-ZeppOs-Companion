@@ -1,5 +1,16 @@
 # Changelog
 
+## [2.0.1] - 14 août 2026
+
+### Nouveautés
+- Le chrono de repos affiche le nom de l'exercice suivant, sa série et son poids cible pour préparer votre matériel.
+- Boutons pour mettre le chrono en pause, ajouter ou retirer 10 secondes selon votre forme.
+- Bouton pour réduire le chrono et afficher l'écran de la série suivante.
+- Rappel par vibration à 30 secondes, 60 secondes et 120 secondes de dépassement du repos.
+
+### Corrections
+- Les séries d'échauffement affichent désormais correctement leur charge et lancent leur minuteur de repos.
+
 ## [2.0.0] - 14 August 2026
 
 Breaking rewrite. Liftosaur Cloud is now the only source of workout data. The watch reads

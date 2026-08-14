@@ -116,7 +116,8 @@ let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
 let vibrator = null;
-let hasVibratedThisRest = false;
+let lastVibratedOvertimeStep = -1;
+let isRestMinimized = false;
 let clockTimer = null;
 let lastRenderedSecond = null;
 let lastRenderedState = null;
@@ -410,6 +411,26 @@ function formatTargetReps(set) {
   if (!set || set.targetReps === null) return '-';
   const range = set.targetRepsMax ? `${set.targetReps}-${set.targetRepsMax}` : `${set.targetReps}`;
   return set.isAmrap ? `${range}+` : range;
+}
+
+function formatNextTargetSummary(rest) {
+  if (!rest || !rest.nextExerciseName) return 'Last set completed';
+  const reps = rest.nextTargetRepsMax
+    ? `${rest.nextTargetReps}-${rest.nextTargetRepsMax}`
+    : rest.nextTargetReps !== null
+      ? `${rest.nextTargetReps}`
+      : '-';
+  const weight =
+    rest.nextTargetWeight !== null
+      ? formatWeight(rest.nextTargetWeight, rest.nextUnit)
+      : rest.nextTargetWeightPercent
+        ? `${rest.nextTargetWeightPercent}%`
+        : '-';
+  const percentText =
+    rest.nextTargetWeight !== null && rest.nextTargetWeightPercent
+      ? ` (${rest.nextTargetWeightPercent}%)`
+      : '';
+  return `${reps} reps · ${weight}${percentText}`;
 }
 
 function heartRateColor(hrVal) {
@@ -1076,10 +1097,61 @@ function renderOverviewScreen(view) {
 
 function renderActiveSetScreen(view) {
   const set = view.currentSet;
-  renderTopBar(view, () => {
-    isOverviewOpen = true;
-    renderUI();
-  });
+  const isResting = view.state === SESSION_STATES.REST && view.rest;
+
+  if (isResting) {
+    const bannerColor = view.rest.isOvertime
+      ? THEME.error
+      : (view.rest.isPaused ? THEME.yellow : THEME.primaryPale);
+
+    addWidget(widget.BUTTON, {
+      x: px(82),
+      y: px(42),
+      w: px(44),
+      h: px(40),
+      radius: px(20),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '≡',
+      text_size: px(22),
+      click_func: () => {
+        isOverviewOpen = true;
+        renderUI();
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(134),
+      y: px(42),
+      w: px(264),
+      h: px(40),
+      radius: px(20),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      click_func: () => {
+        isRestMinimized = false;
+        renderUI();
+      },
+    });
+
+    addLiveText('restBannerText', {
+      x: px(134),
+      y: px(42),
+      w: px(264),
+      h: px(40),
+      color: bannerColor,
+      text_size: px(18),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
+    });
+  } else {
+    renderTopBar(view, () => {
+      isOverviewOpen = true;
+      renderUI();
+    });
+  }
 
   addWidget(widget.TEXT, {
     x: px(62),
@@ -1179,13 +1251,18 @@ function renderActiveSetScreen(view) {
     normal_color: THEME.success,
     press_color: 0x1c9c6d,
     color: 0x00281c,
-    text: 'Done',
+    text: isResting ? 'Start set' : 'Done',
     text_size: px(24),
     click_func: () => {
-      hasVibratedThisRest = false;
-      persistAndRender(() => session.completeSet());
-      if (session.view().state === SESSION_STATES.FINISHED) {
-        submitWorkout();
+      lastVibratedOvertimeStep = -1;
+      if (isResting) {
+        isRestMinimized = false;
+        persistAndRender(() => session.nextSet());
+      } else {
+        persistAndRender(() => session.completeSet());
+        if (session.view().state === SESSION_STATES.FINISHED) {
+          submitWorkout();
+        }
       }
     },
   });
@@ -1252,64 +1329,189 @@ function renderRestScreen(view) {
     renderUI();
   });
 
+  const restColor = rest.isOvertime
+    ? THEME.error
+    : (rest.isPaused ? THEME.yellow : THEME.primaryPale);
+  const labelColor = rest.isOvertime
+    ? THEME.error
+    : (rest.isPaused ? THEME.yellow : THEME.textSecondary);
+  const labelText = rest.isPaused
+    ? 'Paused'
+    : (rest.isOvertime ? 'Overtime' : 'Rest');
+
   addLiveText('restLabel', {
     x: px(62),
-    y: px(110),
+    y: px(90),
     w: px(356),
-    h: px(30),
-    color: rest.isOvertime ? THEME.error : THEME.textSecondary,
+    h: px(28),
+    color: labelColor,
     text_size: px(20),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: rest.isOvertime ? 'Overtime' : 'Rest',
+    text: labelText,
   });
 
   addLiveText('restValue', {
     x: px(62),
-    y: px(150),
+    y: px(118),
     w: px(356),
-    h: px(90),
-    color: rest.isOvertime ? THEME.error : THEME.primaryPale,
-    text_size: px(72),
+    h: px(64),
+    color: restColor,
+    text_size: px(62),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: formatSeconds(rest.remaining),
   });
 
-  let nextSummary = 'Last set done';
-  if (rest.nextExerciseName) {
-    const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
-    const kind = rest.nextIsWarmup ? 'Warmup' : 'Set';
-    nextSummary = `Next: ${truncate(rest.nextExerciseName, 20)}${ssText}\n${kind} ${(rest.nextSetIndex ?? 0) + 1}/${rest.nextTotalSets}`;
-  }
-
-  addWidget(widget.TEXT, {
-    x: px(62),
-    y: px(250),
-    w: px(356),
-    h: px(60),
-    color: THEME.textSecondary,
-    text_size: px(17),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.WRAP,
-    text: nextSummary,
+  // Quick timer controls: -10s, Pause/Resume, +10s
+  addWidget(widget.BUTTON, {
+    x: px(64),
+    y: px(186),
+    w: px(94),
+    h: px(44),
+    radius: px(22),
+    normal_color: THEME.card,
+    press_color: THEME.cardActive,
+    text: '-10s',
+    text_size: px(18),
+    click_func: () => {
+      persistAndRender(() => session.adjustRest(-10));
+    },
   });
 
   addWidget(widget.BUTTON, {
-    x: px(120),
-    y: px(340),
-    w: px(240),
-    h: px(70),
-    radius: px(35),
+    x: px(172),
+    y: px(186),
+    w: px(136),
+    h: px(44),
+    radius: px(22),
+    normal_color: rest.isPaused ? THEME.yellow : THEME.card,
+    press_color: THEME.cardActive,
+    color: rest.isPaused ? 0x000000 : THEME.textPrimary,
+    text: rest.isPaused ? 'Resume' : 'Pause',
+    text_size: px(18),
+    click_func: () => {
+      persistAndRender(() => session.toggleRestPause());
+    },
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(322),
+    y: px(186),
+    w: px(94),
+    h: px(44),
+    radius: px(22),
+    normal_color: THEME.card,
+    press_color: THEME.cardActive,
+    text: '+10s',
+    text_size: px(18),
+    click_func: () => {
+      persistAndRender(() => session.adjustRest(10));
+    },
+  });
+
+  // Next Set Preview Card
+  if (rest.nextExerciseName) {
+    const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
+    const kind = rest.nextIsWarmup ? 'Warmup' : 'Set';
+    const setProg = rest.nextIsWarmup
+      ? `${kind} ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}`
+      : `${kind} ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}`;
+
+    addWidget(widget.FILL_RECT, {
+      x: px(52),
+      y: px(238),
+      w: px(376),
+      h: px(116),
+      radius: px(18),
+      color: THEME.card,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(60),
+      y: px(244),
+      w: px(360),
+      h: px(26),
+      color: THEME.textPrimary,
+      text_size: px(17),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `Next: ${truncate(rest.nextExerciseName, 22)}${ssText}`,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(60),
+      y: px(270),
+      w: px(360),
+      h: px(22),
+      color: THEME.primaryLight,
+      text_size: px(15),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: setProg,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(60),
+      y: px(294),
+      w: px(360),
+      h: px(32),
+      color: THEME.yellow,
+      text_size: px(21),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: formatNextTargetSummary(rest),
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(60),
+      y: px(326),
+      w: px(360),
+      h: px(20),
+      color: THEME.textDisabled,
+      text_size: px(13),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: 'Tap "Prepare" to view & adjust set',
+    });
+  }
+
+  // Action buttons
+  addWidget(widget.BUTTON, {
+    x: px(64),
+    y: px(364),
+    w: px(146),
+    h: px(58),
+    radius: px(29),
+    normal_color: THEME.cardActive,
+    press_color: THEME.card,
+    text: 'Prepare',
+    text_size: px(20),
+    click_func: () => {
+      isRestMinimized = true;
+      renderUI();
+    },
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(224),
+    y: px(364),
+    w: px(192),
+    h: px(58),
+    radius: px(29),
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
-    text: 'Next set',
-    text_size: px(24),
+    text: 'Start set',
+    text_size: px(21),
     click_func: () => {
-      hasVibratedThisRest = false;
+      lastVibratedOvertimeStep = -1;
+      isRestMinimized = false;
       persistAndRender(() => session.nextSet());
     },
   });
@@ -1461,7 +1663,10 @@ function renderUI() {
   if (view.state === SESSION_STATES.READY) return renderReadyScreen(view);
   if (isOverviewOpen && view.state !== SESSION_STATES.FINISHED) return renderOverviewScreen(view);
   if (view.state === SESSION_STATES.ACTIVE_SET) return renderActiveSetScreen(view);
-  if (view.state === SESSION_STATES.REST) return renderRestScreen(view);
+  if (view.state === SESSION_STATES.REST) {
+    if (isRestMinimized) return renderActiveSetScreen(view);
+    return renderRestScreen(view);
+  }
   return renderFinishedScreen(view);
 }
 
@@ -1482,9 +1687,21 @@ function tick() {
   }
   if (view.state !== SESSION_STATES.ACTIVE_SET && view.state !== SESSION_STATES.REST) return;
 
-  if (view.rest && view.rest.remaining <= 0 && !hasVibratedThisRest) {
-    hasVibratedThisRest = true;
-    triggerVibration();
+  if (view.rest && !view.rest.isPaused && view.rest.remaining <= 0) {
+    const overtime = -view.rest.remaining;
+    if (overtime >= 0 && lastVibratedOvertimeStep < 0) {
+      lastVibratedOvertimeStep = 0;
+      triggerVibration();
+    } else if (overtime >= 30 && lastVibratedOvertimeStep < 30) {
+      lastVibratedOvertimeStep = 30;
+      triggerVibration();
+    } else if (overtime >= 60 && lastVibratedOvertimeStep < 60) {
+      lastVibratedOvertimeStep = 60;
+      triggerVibration();
+    } else if (overtime >= 120 && overtime >= lastVibratedOvertimeStep + 60) {
+      lastVibratedOvertimeStep = Math.floor(overtime / 60) * 60;
+      triggerVibration();
+    }
   }
 
   const second = view.rest ? view.rest.remaining : view.elapsedSeconds;
@@ -1495,14 +1712,27 @@ function tick() {
   patched = updateLiveText('hr', { text: `♥ ${liveHr}`, color: heartRateColor(liveHr) }) && patched;
 
   if (view.rest) {
-    const restColor = view.rest.isOvertime ? THEME.error : THEME.primaryPale;
-    const labelColor = view.rest.isOvertime ? THEME.error : THEME.textSecondary;
+    const restColor = view.rest.isOvertime
+      ? THEME.error
+      : (view.rest.isPaused ? THEME.yellow : THEME.primaryPale);
+    const labelColor = view.rest.isOvertime
+      ? THEME.error
+      : (view.rest.isPaused ? THEME.yellow : THEME.textSecondary);
+    const labelText = view.rest.isPaused
+      ? 'Paused'
+      : (view.rest.isOvertime ? 'Overtime' : 'Rest');
+
     patched =
       updateLiveText('restValue', { text: formatSeconds(view.rest.remaining), color: restColor }) && patched;
     patched =
       updateLiveText('restLabel', {
-        text: view.rest.isOvertime ? 'Overtime' : 'Rest',
+        text: labelText,
         color: labelColor,
+      }) && patched;
+    patched =
+      updateLiveText('restBannerText', {
+        text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
+        color: restColor,
       }) && patched;
   }
 
