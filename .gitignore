@@ -2,7 +2,7 @@
 # which drops the secret patterns and the agent-file exclusions below.
 # After running zeus dev, restore it: git checkout -- .gitignore
 
-# Secrets et configuration locale
+# Secrets and local configuration
 .env
 .env.*
 !.env.example
@@ -24,7 +24,7 @@ npm-debug.log*
 yarn-error.log*
 pnpm-debug.log*
 
-# Build Zepp OS
+# Zepp OS Build Output
 dist/
 build/
 out/
@@ -32,14 +32,14 @@ out/
 *.zab
 *.zpk
 
-# Logs et fichiers temporaires
+# Logs and temporary files
 logs/
 *.log
 tmp/
 temp/
 .cache/
 
-# Outils IDE et OS
+# IDE and OS files
 .vscode/
 .idea/
 *.swp
@@ -52,7 +52,7 @@ Desktop.ini
 ehthumbs.db
 .DS_Store
 
-# Sorties locales d'agents
+# Local agent files
 .claude/settings.local.json
 AGENTS.md
 TODO.md
