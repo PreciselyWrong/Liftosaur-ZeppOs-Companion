@@ -538,3 +538,88 @@ test('tri-set (3-exercise superset) cycles A1 -> B1 -> C1 -> A2 -> B2 -> C2', ()
 
   assert.equal(session.view().state, SESSION_STATES.FINISHED);
 });
+
+test('rest timer pause, resume, toggle, and adjustment (+/- 10s)', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1000 }); // Rest for 120s, ends at 121,000
+
+  // 10s elapsed
+  assert.equal(session.view(11_000).rest.remaining, 110);
+  assert.equal(session.view(11_000).rest.isPaused, false);
+
+  // Pause at t=11_000 (110s remaining)
+  session.pauseRest({ timestamp: 11_000 });
+  assert.equal(session.view(11_000).rest.isPaused, true);
+  assert.equal(session.view(11_000).rest.remaining, 110);
+
+  // 50s pass in wall time, still remaining 110s because paused
+  assert.equal(session.view(61_000).rest.remaining, 110);
+  assert.equal(session.view(61_000).rest.isPaused, true);
+
+  // Adjust rest while paused: +10s -> 120s
+  session.adjustRest(10, { timestamp: 61_000 });
+  assert.equal(session.view(61_000).rest.remaining, 120);
+
+  // Adjust rest while paused: -20s -> 100s
+  session.adjustRest(-20, { timestamp: 61_000 });
+  assert.equal(session.view(61_000).rest.remaining, 100);
+
+  // Resume at t=70_000 with 100s remaining -> ends at 170_000
+  session.resumeRest({ timestamp: 70_000 });
+  assert.equal(session.view(70_000).rest.isPaused, false);
+  assert.equal(session.view(70_000).rest.remaining, 100);
+
+  // 10s later (t=80_000) -> 90s remaining
+  assert.equal(session.view(80_000).rest.remaining, 90);
+
+  // Adjust while running: +10s -> 100s remaining (ends at 180_000)
+  session.adjustRest(10, { timestamp: 80_000 });
+  assert.equal(session.view(80_000).rest.remaining, 100);
+
+  // Toggle pause/resume
+  session.toggleRestPause({ timestamp: 80_000 });
+  assert.equal(session.view(80_000).rest.isPaused, true);
+  session.toggleRestPause({ timestamp: 90_000 });
+  assert.equal(session.view(90_000).rest.isPaused, false);
+  assert.equal(session.view(90_000).rest.remaining, 100);
+});
+
+test('rest view includes next target weight, reps, unit and warmups', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Squat',
+        warmupSets: [
+          { index: 1, targetReps: 5, targetWeight: 40, targetWeightPercent: 40, restSeconds: 60 },
+        ],
+        sets: [
+          { index: 1, targetReps: 5, targetWeight: 100, restSeconds: 180 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  // Currently on Warmup 1
+  const v1 = session.view(0);
+  assert.equal(v1.currentSet.isWarmup, true);
+  assert.equal(v1.currentSet.weight, 40);
+
+  // Complete Warmup 1 -> resting before Work Set 1
+  session.completeSet({ timestamp: 1000 });
+  const vRest = session.view(1000);
+  assert.equal(vRest.state, SESSION_STATES.REST);
+  assert.equal(vRest.rest.nextExerciseName, 'Squat');
+  assert.equal(vRest.rest.nextIsWarmup, false);
+  assert.equal(vRest.rest.nextWorkSetIndex, 1);
+  assert.equal(vRest.rest.nextTargetWeight, 100);
+  assert.equal(vRest.rest.nextTargetReps, 5);
+  assert.equal(vRest.rest.nextUnit, 'kg');
+});
+

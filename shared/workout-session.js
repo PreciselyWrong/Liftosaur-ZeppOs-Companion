@@ -25,6 +25,9 @@ export const EVENT_TYPES = {
   ADJUST_RPE: 'ADJUST_RPE',
   COMPLETE_SET: 'COMPLETE_SET',
   NEXT_SET: 'NEXT_SET',
+  PAUSE_REST: 'PAUSE_REST',
+  RESUME_REST: 'RESUME_REST',
+  ADJUST_REST: 'ADJUST_REST',
   SELECT_EXERCISE: 'SELECT_EXERCISE',
   FINISH_WORKOUT: 'FINISH_WORKOUT',
   CANCEL_WORKOUT: 'CANCEL_WORKOUT',
@@ -285,11 +288,46 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
             startedAt: event.timestamp,
             duration: restDuration,
             endsAt: event.timestamp + restDuration * 1000,
+            isPaused: false,
+            pausedRemaining: null,
             ...next,
           };
         } else {
           restInfo = null;
           advanceToNextSet();
+        }
+        break;
+      }
+
+      case EVENT_TYPES.PAUSE_REST: {
+        if (state === SESSION_STATES.REST && restInfo && !restInfo.isPaused) {
+          const remaining = Math.max(0, Math.ceil((restInfo.endsAt - event.timestamp) / 1000));
+          restInfo.isPaused = true;
+          restInfo.pausedRemaining = remaining;
+        }
+        break;
+      }
+
+      case EVENT_TYPES.RESUME_REST: {
+        if (state === SESSION_STATES.REST && restInfo && restInfo.isPaused) {
+          const remaining = restInfo.pausedRemaining ?? restInfo.duration;
+          restInfo.isPaused = false;
+          restInfo.endsAt = event.timestamp + remaining * 1000;
+          restInfo.startedAt = event.timestamp - (restInfo.duration - remaining) * 1000;
+          restInfo.pausedRemaining = null;
+        }
+        break;
+      }
+
+      case EVENT_TYPES.ADJUST_REST: {
+        if (state === SESSION_STATES.REST && restInfo) {
+          const delta = event.payload?.delta || 0;
+          if (restInfo.isPaused) {
+            restInfo.pausedRemaining = Math.max(0, (restInfo.pausedRemaining ?? 0) + delta);
+          } else {
+            restInfo.endsAt = restInfo.endsAt + delta * 1000;
+            restInfo.duration = Math.max(0, restInfo.duration + delta);
+          }
         }
         break;
       }
@@ -332,9 +370,19 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       return {
         isTransitionToNextExercise: false,
         nextExerciseName: null,
+        nextEquipment: null,
         nextSetIndex: null,
         nextTotalSets: null,
         nextIsWarmup: false,
+        nextWarmupIndex: null,
+        nextTotalWarmups: 0,
+        nextWorkSetIndex: null,
+        nextTotalWorkSets: 0,
+        nextTargetWeight: null,
+        nextTargetReps: null,
+        nextTargetRepsMax: null,
+        nextTargetWeightPercent: null,
+        nextUnit: unit,
         nextSupersetGroup: null,
       };
     }
@@ -347,9 +395,19 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     return {
       isTransitionToNextExercise: nextIdx !== currentExerciseIndex,
       nextExerciseName: nextEx.name,
+      nextEquipment: nextEx.equipment ?? null,
       nextSetIndex: nextSetIdx,
       nextTotalSets: nextEx.sets.length,
       nextIsWarmup: Boolean(nextTarget?.isWarmup),
+      nextWarmupIndex: nextTarget?.warmupIndex ?? null,
+      nextTotalWarmups: nextTarget?.totalWarmups ?? nextEx.warmupSetsCount ?? 0,
+      nextWorkSetIndex: nextTarget?.workSetIndex ?? null,
+      nextTotalWorkSets: nextTarget?.totalWorkSets ?? nextEx.workSetsCount ?? 0,
+      nextTargetWeight: nextTarget?.targetWeight ?? null,
+      nextTargetReps: nextTarget?.targetReps ?? null,
+      nextTargetRepsMax: nextTarget?.targetRepsMax ?? null,
+      nextTargetWeightPercent: nextTarget?.targetWeightPercent ?? null,
+      nextUnit: nextTarget?.unit || unit,
       nextSupersetGroup: nextEx.supersetGroup ?? null,
     };
   }
@@ -394,18 +452,32 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
       let rest = null;
       if (restInfo) {
-        const remaining = Math.ceil((restInfo.endsAt - now) / 1000);
+        const remaining = restInfo.isPaused
+          ? (restInfo.pausedRemaining ?? 0)
+          : Math.ceil((restInfo.endsAt - now) / 1000);
         rest = {
           duration: restInfo.duration,
           remaining,
-          isOvertime: remaining <= 0,
+          isPaused: Boolean(restInfo.isPaused),
+          pausedRemaining: restInfo.pausedRemaining ?? null,
+          isOvertime: !restInfo.isPaused && remaining <= 0,
           startedAt: restInfo.startedAt,
           endsAt: restInfo.endsAt,
           isTransitionToNextExercise: Boolean(restInfo.isTransitionToNextExercise),
           nextExerciseName: restInfo.nextExerciseName ?? null,
+          nextEquipment: restInfo.nextEquipment ?? null,
           nextSetIndex: restInfo.nextSetIndex ?? null,
           nextTotalSets: restInfo.nextTotalSets ?? null,
           nextIsWarmup: Boolean(restInfo.nextIsWarmup),
+          nextWarmupIndex: restInfo.nextWarmupIndex ?? null,
+          nextTotalWarmups: restInfo.nextTotalWarmups ?? 0,
+          nextWorkSetIndex: restInfo.nextWorkSetIndex ?? null,
+          nextTotalWorkSets: restInfo.nextTotalWorkSets ?? 0,
+          nextTargetWeight: restInfo.nextTargetWeight ?? null,
+          nextTargetReps: restInfo.nextTargetReps ?? null,
+          nextTargetRepsMax: restInfo.nextTargetRepsMax ?? null,
+          nextTargetWeightPercent: restInfo.nextTargetWeightPercent ?? null,
+          nextUnit: restInfo.nextUnit ?? unit,
           nextSupersetGroup: restInfo.nextSupersetGroup ?? null,
         };
       }
@@ -531,6 +603,30 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     completeSet({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
       applyEvent({ type: EVENT_TYPES.COMPLETE_SET, timestamp });
+    },
+
+    pauseRest({ timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.REST) return;
+      applyEvent({ type: EVENT_TYPES.PAUSE_REST, timestamp });
+    },
+
+    resumeRest({ timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.REST) return;
+      applyEvent({ type: EVENT_TYPES.RESUME_REST, timestamp });
+    },
+
+    toggleRestPause({ timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.REST || !restInfo) return;
+      if (restInfo.isPaused) {
+        applyEvent({ type: EVENT_TYPES.RESUME_REST, timestamp });
+      } else {
+        applyEvent({ type: EVENT_TYPES.PAUSE_REST, timestamp });
+      }
+    },
+
+    adjustRest(deltaSeconds, { timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.REST) return;
+      applyEvent({ type: EVENT_TYPES.ADJUST_REST, payload: { delta: deltaSeconds }, timestamp });
     },
 
     nextSet({ timestamp = Date.now() } = {}) {

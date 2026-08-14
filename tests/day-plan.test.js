@@ -173,3 +173,24 @@ test('applyProgramMetadata leaves plan untouched when alignment fails', () => {
   assert.equal(plan.exercises[0].supersetGroup, null);
   assert.deepEqual(plan.exercises[0].warmupSets, []);
 });
+
+test('applyProgramMetadata falls back to step rounding when referenceData fails and defaults rest to 60s', () => {
+  const plan = buildDayPlan(PROBE_RESPONSE);
+  // Lat Pulldown first work set is 60kg. Warmup 50% -> 30kg.
+  const declared = [
+    { name: 'Lat Pulldown', equipment: null, warmupText: '1x8 50%', supersetTag: null },
+    { name: 'Incline Curl', equipment: null, warmupText: '1x5 10kg', supersetTag: null },
+  ];
+
+  // referenceData returns resolved: false
+  const unresolvingRef = {
+    resolveWeight: () => ({ value: null, resolved: false }),
+  };
+
+  applyProgramMetadata(plan, declared, { referenceData: unresolvingRef });
+
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
+  assert.equal(plan.exercises[0].warmupSets[0].restSeconds, 60);
+  assert.equal(plan.exercises[1].warmupSets[0].restSeconds, 60);
+});
+

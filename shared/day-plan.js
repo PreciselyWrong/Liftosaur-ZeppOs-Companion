@@ -108,13 +108,20 @@ export function applyProgramMetadata(plan, programExercises, { referenceData = n
             if (referenceData && typeof referenceData.resolveWeight === 'function') {
               const resolved = referenceData.resolveWeight(ex.name, ex.equipment, rawTarget, plan.unit);
               targetWeight = resolved.resolved ? resolved.value : null;
-            } else {
-              targetWeight = null;
+            }
+            if (targetWeight === null) {
+              const step = plan.unit === 'lb' ? 5 : 2.5;
+              targetWeight = Math.round(rawTarget / step) * step;
             }
           }
         } else {
           targetWeight = wSet.weight;
         }
+
+        const warmupRest =
+          Number.isFinite(wSet.restSeconds) && wSet.restSeconds > 0
+            ? wSet.restSeconds
+            : 60;
 
         ex.warmupSets.push({
           index: wIdx + 1,
@@ -125,7 +132,7 @@ export function applyProgramMetadata(plan, programExercises, { referenceData = n
           targetWeightPercent: wSet.percent ?? null,
           targetRpe: wSet.rpe,
           unit: wSet.unit || plan.unit,
-          restSeconds: wSet.restSeconds,
+          restSeconds: warmupRest,
           isAmrap: wSet.isAmrap,
           askWeight: wSet.askWeight,
         });
