@@ -19,10 +19,10 @@ const THEME = {
   primaryDark: 0x393248,      // Violet sombre (#393248)
   primaryDeep: 0x2c1065,      // Violet très sombre (#2C1065)
   blue: 0x45b3cb,             // Bleu / liens (#45B3CB)
-  success: 0x2bdc9b,          // Vert / succès (#2BDC9B)
+  success: 0x2bdc9b,          // Vert / succès / completed dot (#2BDC9B)
   error: 0xff8066,            // Rouge / erreur / overtime (#FF8066)
   yellow: 0xffd820,           // Jaune (#FFD820)
-  orange: 0xffb544,           // Orange (#FFB544)
+  orange: 0xffb544,           // Orange / active dot (#FFB544)
 
   bg: 0x000000,               // Background principal (#000000)
   bgSubtle: 0x0c0819,         // Background subtil (#0C0819)
@@ -33,15 +33,38 @@ const THEME = {
   textPrimary: 0xffffff,      // Texte principal (#FFFFFF)
   textSecondary: 0xa4b0bc,    // Texte secondaire (#A4B0BC)
   textMuted: 0x4f5c6b,        // Texte secondaire discret (#4F5C6B)
-  textDisabled: 0x607284,     // Texte disabled (#607284)
+  textDisabled: 0x607284,     // Texte disabled / pending dot (#607284)
 };
 
-// ── Long Workout Mock with Alternating Superset & RPE ────────────────────────
+// ── Liftosaur Workout Routine Mock ──────────────────────────────────────────
 
 const WORKOUT_MOCK = {
-  id: 'workout-push-hypertrophy',
-  name: 'Upper Body Superset Focus',
+  id: 'week-1-workout-a',
+  name: 'Week 1 - Workout A',
+  routineName: 'Basic Beginner Routine',
   exercises: [
+    {
+      id: 'bench-press',
+      name: 'Bench Press, Barbell',
+      supersetGroup: null,
+      supersetTag: null,
+      sets: [
+        { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
+        { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
+        { targetReps: 5, targetWeight: 60, targetRpe: 8.5, restSeconds: 60 },
+      ],
+    },
+    {
+      id: 'overhead-squat',
+      name: 'Overhead Squat, Barbell',
+      supersetGroup: null,
+      supersetTag: null,
+      sets: [
+        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
+        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
+        { targetReps: 5, targetWeight: 40, targetRpe: 8, restSeconds: 90 },
+      ],
+    },
     {
       id: 'incline-db-bench',
       name: 'Incline DB Bench',
@@ -50,7 +73,6 @@ const WORKOUT_MOCK = {
       sets: [
         { targetReps: 10, targetWeight: 30, targetRpe: 8, restSeconds: 30 },
         { targetReps: 10, targetWeight: 30, targetRpe: 8.5, restSeconds: 30 },
-        { targetReps: 10, targetWeight: 30, targetRpe: 9, restSeconds: 30 },
       ],
     },
     {
@@ -61,18 +83,6 @@ const WORKOUT_MOCK = {
       sets: [
         { targetReps: 12, targetWeight: 26, targetRpe: 8, restSeconds: 60 },
         { targetReps: 12, targetWeight: 26, targetRpe: 8.5, restSeconds: 60 },
-        { targetReps: 12, targetWeight: 26, targetRpe: 9, restSeconds: 60 },
-      ],
-    },
-    {
-      id: 'standing-military-press',
-      name: 'Military Overhead Press',
-      supersetGroup: null,
-      supersetTag: null,
-      sets: [
-        { targetReps: 8, targetWeight: 45, targetRpe: 8, restSeconds: 90 },
-        { targetReps: 8, targetWeight: 45, targetRpe: 8.5, restSeconds: 90 },
-        { targetReps: 8, targetWeight: 45, targetRpe: 9, restSeconds: 90 },
       ],
     },
   ],
@@ -101,12 +111,13 @@ let session = createWorkoutSession({
   initialJournal: sessionStore.loadJournal(),
 });
 
+let isOverviewListOpen = false;
 let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
 let vibrator = null;
 let hasVibratedThisRest = false;
-let restTimerId = null;
+let clockTimerId = null;
 let activeWidgets = [];
 
 const W = px(480);
@@ -144,6 +155,12 @@ function formatSeconds(sec) {
   return isNeg ? `-${formatted}` : formatted;
 }
 
+function formatDots(dots) {
+  return dots
+    .map((d) => (d === 'completed' ? '●' : d === 'active' ? '●' : '○'))
+    .join(' ');
+}
+
 function triggerVibration() {
   try {
     if (!vibrator) {
@@ -155,7 +172,7 @@ function triggerVibration() {
   }
 }
 
-// ── UI Rendering (Centered for 480x480 Round Display) ────────────────────────
+// ── UI Rendering (Liftosaur Watch Architecture) ─────────────────────────────
 
 function renderUI() {
   clearWidgets();
@@ -166,256 +183,396 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Top Bar: Heart Rate & Workout Title (Comfortably inside top safe zone at y=42)
-  const shortTitle = view.workoutName.length > 20 ? view.workoutName.slice(0, 18) + '…' : view.workoutName;
-  addWidget(widget.TEXT, {
-    x: 0,
-    y: px(42),
-    w: W,
-    h: px(28),
-    color: THEME.textSecondary,
-    text_size: px(20),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: `HR ${liveHr} • ${shortTitle}`,
-  });
-
-  // Superset Tag Pill (y=74)
-  if (view.supersetTag) {
-    addWidget(widget.TEXT, {
-      x: 0,
-      y: px(74),
-      w: W,
-      h: px(26),
-      color: THEME.blue,
-      text_size: px(19),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: `[${view.supersetTag}]`,
-    });
-  }
-
-  // Exercise Navigation Line [<] [ Exercise Name (X/Y) ] [>] (y=104)
-  const exNum = view.currentExerciseIndex + 1;
-  const hasPrevEx = view.currentExerciseIndex > 0;
-  const hasNextEx = view.currentExerciseIndex + 1 < view.totalExercises;
-
-  if (hasPrevEx) {
+  // ── 1. OVERVIEW EXERCISE LIST VIEW ──
+  if (isOverviewListOpen && view.state !== SESSION_STATES.READY && view.state !== SESSION_STATES.FINISHED) {
+    // Top Bar: [< Back] [ ▶ Elapsed ] [ HR ]
     addWidget(widget.BUTTON, {
-      x: px(80),
-      y: px(104),
-      w: px(36),
-      h: px(36),
-      radius: px(18),
+      x: px(50),
+      y: px(35),
+      w: px(40),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
-      text_size: px(20),
+      text_size: px(22),
       click_func: () => {
-        persistAndRender(() => session.prevExercise());
+        isOverviewListOpen = false;
+        renderUI();
       },
     });
-  }
 
-  addWidget(widget.TEXT, {
-    x: px(120),
-    y: px(104),
-    w: px(240),
-    h: px(36),
-    color: THEME.primaryLight,
-    text_size: px(22),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: `${view.exerciseName} (${exNum}/${view.totalExercises})`,
-  });
-
-  if (hasNextEx) {
-    addWidget(widget.BUTTON, {
-      x: px(364),
-      y: px(104),
-      w: px(36),
-      h: px(36),
-      radius: px(18),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      text: '>',
-      text_size: px(20),
-      click_func: () => {
-        persistAndRender(() => session.nextExercise());
-      },
-    });
-  }
-
-  if (view.state === SESSION_STATES.READY) {
-    // ── READY SCREEN (Centered) ──
     addWidget(widget.TEXT, {
-      x: 0,
-      y: px(170),
-      w: W,
-      h: px(50),
-      color: THEME.textPrimary,
-      text_size: px(34),
+      x: px(100),
+      y: px(35),
+      w: px(280),
+      h: px(40),
+      color: THEME.primaryLight,
+      text_size: px(20),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: 'Ready to Start',
+      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+    });
+
+    // Exercise Cards List
+    let cardY = px(85);
+    view.overviewExercises.forEach((ex, idx) => {
+      const isCurrent = idx === view.currentExerciseIndex;
+      const cardBg = isCurrent ? THEME.cardActive : THEME.card;
+
+      addWidget(widget.BUTTON, {
+        x: px(60),
+        y: cardY,
+        w: px(360),
+        h: px(78),
+        radius: px(16),
+        normal_color: cardBg,
+        press_color: THEME.primaryDark,
+        text: '',
+        click_func: () => {
+          session.selectExercise(idx);
+          isOverviewListOpen = false;
+          persistAndRender();
+        },
+      });
+
+      // Name & Dots
+      addWidget(widget.TEXT, {
+        x: px(75),
+        y: cardY + px(8),
+        w: px(330),
+        h: px(30),
+        color: isCurrent ? THEME.primaryPale : THEME.textPrimary,
+        text_size: px(20),
+        align_h: align.LEFT,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: `${ex.name.length > 20 ? ex.name.slice(0, 18) + '…' : ex.name}  ${formatDots(ex.setsDots)}`,
+      });
+
+      // Prescription
+      addWidget(widget.TEXT, {
+        x: px(75),
+        y: cardY + px(38),
+        w: px(330),
+        h: px(28),
+        color: THEME.textSecondary,
+        text_size: px(18),
+        align_h: align.LEFT,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: ex.supersetTag ? `[${ex.supersetTag}] ${ex.prescriptionSummary}` : ex.prescriptionSummary,
+      });
+
+      cardY += px(88);
+    });
+    return;
+  }
+
+  // ── 2. READY SCREEN (Liftosaur Watch "New Workout") ──
+  if (view.state === SESSION_STATES.READY) {
+    // Header
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(45),
+      w: W,
+      h: px(30),
+      color: THEME.textSecondary,
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `New Workout • HR ${liveHr}`,
+    });
+
+    // Workout Preview Card (#332D42)
+    addWidget(widget.FILL_RECT, {
+      x: px(65),
+      y: px(95),
+      w: px(350),
+      h: px(185),
+      radius: px(20),
+      color: THEME.card,
     });
 
     addWidget(widget.TEXT, {
-      x: 0,
-      y: px(230),
-      w: W,
-      h: px(35),
+      x: px(85),
+      y: px(110),
+      w: px(310),
+      h: px(36),
+      color: THEME.textPrimary,
+      text_size: px(26),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: view.workoutName,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(148),
+      w: px(310),
+      h: px(28),
+      color: THEME.primaryLight,
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: view.routineName,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(185),
+      w: px(310),
+      h: px(26),
       color: THEME.textSecondary,
-      text_size: px(22),
+      text_size: px(19),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: `${view.totalExercises} exercises • Swipe to switch`,
     });
 
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(220),
+      w: px(310),
+      h: px(40),
+      color: THEME.textDisabled,
+      text_size: px(18),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `First: ${view.exerciseName}`,
+    });
+
+    // Start Button (Liftosaur Purple #8356F6)
     addWidget(widget.BUTTON, {
       x: px(90),
-      y: px(310),
+      y: px(305),
       w: px(300),
       h: px(76),
       radius: px(38),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
-      text: 'START WORKOUT',
-      text_size: px(26),
+      text: 'Start',
+      text_size: px(28),
       click_func: () => {
         persistAndRender(() => session.startWorkout());
       },
     });
-  } else if (view.state === SESSION_STATES.ACTIVE_SET) {
-    // ── ACTIVE SET SCREEN (Centered) ──
-    const setNum = view.currentSetIndex + 1;
-    const rpeLabel = view.currentSet.rpe ? ` • @ RPE ${view.currentSet.rpe}` : '';
+    return;
+  }
 
+  // ── 3. ACTIVE SET SCREEN (Liftosaur Watch Set Detail) ──
+  if (view.state === SESSION_STATES.ACTIVE_SET) {
+    const setNum = view.currentSetIndex + 1;
+    const dotsString = formatDots(view.exerciseSetsDots);
+
+    // Top Bar: [< List] [ ▶ Time • HR ]
+    addWidget(widget.BUTTON, {
+      x: px(60),
+      y: px(38),
+      w: px(38),
+      h: px(38),
+      radius: px(19),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '<',
+      text_size: px(20),
+      click_func: () => {
+        isOverviewListOpen = true;
+        renderUI();
+      },
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(110),
+      y: px(38),
+      w: px(260),
+      h: px(38),
+      color: THEME.primaryLight,
+      text_size: px(19),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+    });
+
+    // Exercise Name
+    const shortEx = view.exerciseName.length > 22 ? view.exerciseName.slice(0, 20) + '…' : view.exerciseName;
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(148),
+      y: px(76),
       w: W,
-      h: px(30),
-      color: THEME.orange,
-      text_size: px(22),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: `SET ${setNum} OF ${view.totalSets}${rpeLabel}`,
-    });
-
-    // Weight Controls: [-2.5] [ 30 kg ] [+2.5] (y=188)
-    addWidget(widget.BUTTON, {
-      x: px(65),
-      y: px(186),
-      w: px(70),
-      h: px(50),
-      radius: px(12),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      text: '-2.5',
-      text_size: px(22),
-      click_func: () => {
-        persistAndRender(() => session.adjustWeight(-2.5));
-      },
-    });
-
-    addWidget(widget.TEXT, {
-      x: px(140),
-      y: px(186),
-      w: px(200),
-      h: px(50),
+      h: px(32),
       color: THEME.textPrimary,
-      text_size: px(32),
+      text_size: px(23),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.currentSet.weight} kg`,
+      text: view.supersetTag ? `[${view.supersetTag}] ${shortEx}` : shortEx,
     });
 
-    addWidget(widget.BUTTON, {
-      x: px(345),
-      y: px(186),
-      w: px(70),
-      h: px(50),
-      radius: px(12),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      text: '+2.5',
-      text_size: px(22),
-      click_func: () => {
-        persistAndRender(() => session.adjustWeight(2.5));
-      },
+    // Set X/Y with Status Dots
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(108),
+      w: W,
+      h: px(28),
+      color: THEME.orange,
+      text_size: px(20),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `Set ${setNum}/${view.totalSets}   ${dotsString}`,
     });
 
-    // Reps Controls: [-1] [ 10 reps ] [+1] (y=246)
+    // ── Input Cards (Side-by-side Reps × Weight) ──
+    // Reps Control: [-1] [ 10 reps ] [+1]
     addWidget(widget.BUTTON, {
-      x: px(65),
-      y: px(246),
-      w: px(70),
-      h: px(50),
+      x: px(60),
+      y: px(142),
+      w: px(65),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '-1',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.adjustReps(-1));
       },
     });
 
     addWidget(widget.TEXT, {
-      x: px(140),
-      y: px(246),
-      w: px(200),
-      h: px(50),
+      x: px(130),
+      y: px(142),
+      w: px(220),
+      h: px(52),
       color: THEME.textPrimary,
       text_size: px(32),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.currentSet.reps} reps`,
+      text: `${view.currentSet.reps}  ×  ${view.currentSet.weight} kg`,
     });
 
     addWidget(widget.BUTTON, {
-      x: px(345),
-      y: px(246),
-      w: px(70),
-      h: px(50),
+      x: px(355),
+      y: px(142),
+      w: px(65),
+      h: px(52),
       radius: px(12),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '+1',
-      text_size: px(24),
+      text_size: px(22),
       click_func: () => {
         persistAndRender(() => session.adjustReps(1));
       },
     });
 
-    // Complete Set Button (y=325 to y=398)
+    // Weight Adjust Buttons: [-2.5 kg] [+2.5 kg]
     addWidget(widget.BUTTON, {
-      x: px(85),
-      y: px(325),
-      w: px(310),
+      x: px(60),
+      y: px(202),
+      w: px(170),
+      h: px(46),
+      radius: px(12),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '-2.5 kg',
+      text_size: px(20),
+      click_func: () => {
+        persistAndRender(() => session.adjustWeight(-2.5));
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(250),
+      y: px(202),
+      w: px(170),
+      h: px(46),
+      radius: px(12),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '+2.5 kg',
+      text_size: px(20),
+      click_func: () => {
+        persistAndRender(() => session.adjustWeight(2.5));
+      },
+    });
+
+    // Target prescription line
+    const rpeText = view.currentSet.rpe ? ` @ ${view.currentSet.rpe}` : '';
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(256),
+      w: W,
+      h: px(26),
+      color: THEME.textSecondary,
+      text_size: px(18),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `Target: ${view.currentSet.targetReps} × ${view.currentSet.targetWeight} kg${rpeText}`,
+    });
+
+    // Action Row: [<] [  ✓ Complete Set  ] [>]
+    addWidget(widget.BUTTON, {
+      x: px(60),
+      y: px(292),
+      w: px(60),
+      h: px(74),
+      radius: px(37),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '<',
+      text_size: px(26),
+      click_func: () => {
+        persistAndRender(() => session.prevExercise());
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(130),
+      y: px(292),
+      w: px(220),
       h: px(74),
       radius: px(37),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
-      text: 'COMPLETE SET',
-      text_size: px(26),
+      text: '✓  COMPLETE',
+      text_size: px(24),
       click_func: () => {
         hasVibratedThisRest = false;
         persistAndRender(() => session.completeSet());
         startRestTimer();
       },
     });
-  } else if (view.state === SESSION_STATES.REST) {
-    // ── REST SCREEN (Centered with Overtime Support) ──
+
+    addWidget(widget.BUTTON, {
+      x: px(360),
+      y: px(292),
+      w: px(60),
+      h: px(74),
+      radius: px(37),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      text: '>',
+      text_size: px(26),
+      click_func: () => {
+        persistAndRender(() => session.nextExercise());
+      },
+    });
+    return;
+  }
+
+  // ── 4. REST TIMER SCREEN (Liftosaur Watch Rest) ──
+  if (view.state === SESSION_STATES.REST) {
     const isOvertime = Boolean(view.rest?.isOvertime);
     const remaining = view.rest ? view.rest.remaining : 0;
     const isTransition = view.rest?.isTransitionToNextExercise;
@@ -429,7 +586,20 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(145),
+      y: px(45),
+      w: W,
+      h: px(28),
+      color: THEME.textSecondary,
+      text_size: px(19),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
+    });
+
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(125),
       w: W,
       h: px(30),
       color: headerColor,
@@ -442,11 +612,11 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(185),
+      y: px(165),
       w: W,
       h: px(70),
       color: timerColor,
-      text_size: px(52),
+      text_size: px(56),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -455,7 +625,7 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(265),
+      y: px(248),
       w: W,
       h: px(35),
       color: THEME.textSecondary,
@@ -468,10 +638,10 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(85),
-      y: px(325),
+      y: px(305),
       w: px(310),
-      h: px(72),
-      radius: px(36),
+      h: px(74),
+      radius: px(37),
       normal_color: isOvertime ? THEME.primary : THEME.card,
       press_color: isOvertime ? THEME.primaryDeep : THEME.cardActive,
       text: isOvertime ? (isTransition ? 'NEXT EXERCISE' : 'START NEXT SET') : (isTransition ? 'NEXT EXERCISE' : 'SKIP REST'),
@@ -481,43 +651,123 @@ function renderUI() {
         persistAndRender(() => session.nextSet());
       },
     });
-  } else if (view.state === SESSION_STATES.FINISHED) {
-    // ── FINISHED SCREEN (Centered) ──
-    addWidget(widget.TEXT, {
-      x: 0,
-      y: px(160),
-      w: W,
-      h: px(45),
-      color: THEME.success,
-      text_size: px(34),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'WORKOUT DONE!',
-    });
+    return;
+  }
 
+  // ── 5. FINISHED SUMMARY SCREEN (Liftosaur Watch Summary) ──
+  if (view.state === SESSION_STATES.FINISHED) {
+    // Header
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(220),
+      y: px(45),
       w: W,
-      h: px(38),
-      color: THEME.textSecondary,
+      h: px(32),
+      color: THEME.primaryLight,
       text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.allCompletedSets.length} sets completed`,
+      text: 'Summary',
     });
 
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(82),
+      w: W,
+      h: px(28),
+      color: THEME.textPrimary,
+      text_size: px(22),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: view.workoutName,
+    });
+
+    addWidget(widget.TEXT, {
+      x: 0,
+      y: px(112),
+      w: W,
+      h: px(24),
+      color: THEME.textSecondary,
+      text_size: px(18),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: view.routineName,
+    });
+
+    // Metrics Card
+    addWidget(widget.FILL_RECT, {
+      x: px(65),
+      y: px(145),
+      w: px(350),
+      h: px(145),
+      radius: px(16),
+      color: THEME.card,
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(155),
+      w: px(310),
+      h: px(24),
+      color: THEME.textSecondary,
+      text_size: px(17),
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: '⏱ TIME',
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(178),
+      w: px(310),
+      h: px(36),
+      color: THEME.textPrimary,
+      text_size: px(28),
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: formatSeconds(view.elapsedSeconds),
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(218),
+      w: px(310),
+      h: px(24),
+      color: THEME.textSecondary,
+      text_size: px(17),
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: '🏋️ VOLUME',
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(85),
+      y: px(240),
+      w: px(310),
+      h: px(36),
+      color: THEME.textPrimary,
+      text_size: px(28),
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `${view.totalVolume} kg  (${view.totalCompletedSetsCount} sets)`,
+    });
+
+    // Done Button
     addWidget(widget.BUTTON, {
       x: px(110),
       y: px(310),
       w: px(260),
-      h: px(74),
-      radius: px(37),
+      h: px(72),
+      radius: px(36),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
-      text: 'RESET',
+      text: 'Done',
       text_size: px(26),
       click_func: () => {
         sessionStore.clearSession();
@@ -552,6 +802,16 @@ function stopRestTimer() {
   }
 }
 
+function startGlobalClock() {
+  if (clockTimerId) clearInterval(clockTimerId);
+  clockTimerId = setInterval(() => {
+    const view = session.view(Date.now());
+    if (view.state === SESSION_STATES.ACTIVE_SET || isOverviewListOpen) {
+      renderUI();
+    }
+  }, 1000);
+}
+
 // ── Page Declaration ──────────────────────────────────────────────────────────
 
 Page(
@@ -563,7 +823,7 @@ Page(
     build() {
       console.log('[liftosaur] page build');
 
-      // Register horizontal swipe / slide gestures to switch exercises
+      // Register horizontal swipe gestures to switch exercises
       try {
         onGesture({
           callback: (event) => {
@@ -603,6 +863,7 @@ Page(
       }
 
       renderUI();
+      startGlobalClock();
       if (session.view().state === SESSION_STATES.REST) {
         startRestTimer();
       }
@@ -614,6 +875,10 @@ Page(
         offGesture();
       } catch (e) {}
       stopRestTimer();
+      if (clockTimerId) {
+        clearInterval(clockTimerId);
+        clockTimerId = null;
+      }
       if (hrSensor && hrCallback) {
         try {
           hrSensor.offCurrentChange?.(hrCallback);
