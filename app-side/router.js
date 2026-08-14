@@ -80,79 +80,58 @@ export function createSideRouter({
               programData.data?.name ||
               programData.name ||
               programData.program?.name ||
-              'My Program';
-
-            const historyRecords =
-              historyData?.data?.records ||
-              historyData?.records ||
-              (Array.isArray(historyData) ? historyData : []);
-
-            // 2. Resolve program structure and current week/day
-            const targetSession = resolveNextProgramSession({
-              programText,
-              programName,
-              routineName: programName,
-              historyRecords,
-              requestedDayIndex,
-            });
+              'Liftosaur';
 
             let finalWorkout = null;
 
-            // 3. Ask Liftosaur Cloud Playground to compute official workout for (week, day)
+            // 1. Direct authoritative workout generation from Liftosaur Cloud Playground
             if (playgroundSimulator && programText) {
               try {
-                let playgroundRes = await playgroundSimulator({
-                  programText,
-                  week: targetSession.week,
-                  day: targetSession.dayInWeek,
-                });
-
-                // If week-based simulation returned empty or failed, retry with day only
-                if (!playgroundRes?.data?.workout) {
-                  playgroundRes = await playgroundSimulator({
-                    programText,
-                    day: targetSession.dayInWeek,
-                  });
+                const playgroundPayload = { programText };
+                if (requestedDayIndex !== null && requestedDayIndex !== undefined && requestedDayIndex >= 0) {
+                  playgroundPayload.day = requestedDayIndex + 1;
                 }
 
+                const playgroundRes = await playgroundSimulator(playgroundPayload);
                 if (playgroundRes?.data?.workout) {
                   const rawWorkoutText = playgroundRes.data.workout;
                   const parsedPlayground = parseLiftoscriptWorkout({
                     text: rawWorkoutText,
-                    name: targetSession.dayName,
+                    name: programName,
                     routineName: programName,
                   });
 
                   if (parsedPlayground && parsedPlayground.exercises.length > 0) {
                     finalWorkout = {
                       ...parsedPlayground,
-                      name: parsedPlayground.name || targetSession.fullName || targetSession.dayName,
+                      id: 'workout-' + Date.now(),
+                      name: parsedPlayground.name || programName,
                       routineName: programName,
-                      availableDays: targetSession.availableDays,
-                      currentDayIndex: targetSession.dayIndex,
-                      totalDays: targetSession.totalDays,
-                      week: targetSession.week,
-                      dayInWeek: targetSession.dayInWeek,
+                      currentDayIndex: requestedDayIndex ?? 0,
                     };
                   }
                 }
               } catch (simErr) {
-                console.log('[liftosaur-router] playground resolution fallback to local parser:', simErr?.message || String(simErr));
+                console.log('[liftosaur-router] playground API failed, falling back to local text parse:', simErr?.message || String(simErr));
               }
             }
 
-            // 4. Fallback to local parser if playground was offline or empty
+            // 2. Fallback only if playground is offline or returned empty
             if (!finalWorkout) {
+              const fallbackSession = parseLiftoscriptWorkout({
+                text: programText,
+                name: programName,
+                routineName: programName,
+              }, requestedDayIndex);
+
               finalWorkout = {
                 id: 'workout-' + Date.now(),
-                name: targetSession.fullName || targetSession.dayName,
+                name: fallbackSession.name || programName,
                 routineName: programName,
-                exercises: targetSession.exercises,
-                availableDays: targetSession.availableDays,
-                currentDayIndex: targetSession.dayIndex,
-                totalDays: targetSession.totalDays,
-                week: targetSession.week,
-                dayInWeek: targetSession.dayInWeek,
+                exercises: fallbackSession.exercises,
+                availableDays: fallbackSession.availableDays,
+                currentDayIndex: fallbackSession.currentDayIndex || 0,
+                totalDays: fallbackSession.totalDays || 1,
               };
             }
 
