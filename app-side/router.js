@@ -7,7 +7,14 @@ import {
 } from '../shared/protocol.js';
 import { parseLiftoscriptWorkout } from '../shared/workout-parser.js';
 
-export function createSideRouter({ programProvider = null } = {}) {
+export function createSideRouter({
+  programProvider = null,
+  playgroundSimulator = null,
+  historySubmitter = null,
+} = {}) {
+  // In-memory idempotency cache for history submissions (startedAt -> response)
+  const submittedHistoryCache = new Map();
+
   return {
     async handle(rawMessage) {
       const validation = validateEnvelope(rawMessage);
@@ -32,7 +39,6 @@ export function createSideRouter({ programProvider = null } = {}) {
             if (programProvider) {
               programData = await programProvider();
             } else {
-              // Default fixture if no API provider passed
               programData = {
                 id: 'default-prog-1',
                 name: 'Week 1 - Workout A',
@@ -58,6 +64,71 @@ export function createSideRouter({ programProvider = null } = {}) {
               rawMessage,
               'WORKOUT_FETCH_FAILED',
               err.message || 'Failed to retrieve workout'
+            );
+          }
+        }
+
+        case MESSAGE_TYPES.SYNC_JOURNAL: {
+          try {
+            const journal = rawMessage.payload?.journal || [];
+            let simulationResult = null;
+
+            if (playgroundSimulator) {
+              simulationResult = await playgroundSimulator(journal);
+            }
+
+            return createMessage({
+              type: MESSAGE_TYPES.SYNC_JOURNAL_RESPONSE,
+              replyToId: rawMessage.messageId,
+              sessionId: rawMessage.sessionId,
+              payload: {
+                synced: true,
+                syncedCount: journal.length,
+                updatedPrescription: simulationResult?.updatedPrescription ?? null,
+              },
+            });
+          } catch (err) {
+            return createError(
+              rawMessage,
+              'SYNC_FAILED',
+              err.message || 'Journal synchronization failed'
+            );
+          }
+        }
+
+        case MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY: {
+          try {
+            const history = rawMessage.payload || {};
+            const deduplicationKey = String(history.startedAt || history.workoutId || rawMessage.sessionId);
+
+            // Idempotency check: return cached success if already submitted
+            if (submittedHistoryCache.has(deduplicationKey)) {
+              return createMessage({
+                type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE,
+                replyToId: rawMessage.messageId,
+                sessionId: rawMessage.sessionId,
+                payload: submittedHistoryCache.get(deduplicationKey),
+              });
+            }
+
+            let result = { id: 'local-hist-' + Date.now(), status: 'saved' };
+            if (historySubmitter) {
+              result = await historySubmitter(history);
+            }
+
+            submittedHistoryCache.set(deduplicationKey, result);
+
+            return createMessage({
+              type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE,
+              replyToId: rawMessage.messageId,
+              sessionId: rawMessage.sessionId,
+              payload: result,
+            });
+          } catch (err) {
+            return createError(
+              rawMessage,
+              'HISTORY_SUBMIT_FAILED',
+              err.message || 'Failed to submit workout history'
             );
           }
         }

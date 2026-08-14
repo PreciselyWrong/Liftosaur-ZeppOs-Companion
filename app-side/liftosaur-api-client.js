@@ -95,5 +95,17 @@ export function createLiftosaurApiClient({
         body: { script: scriptText },
       });
     },
+
+    async submitWorkoutHistory(workoutHistory) {
+      return request('/history', {
+        method: 'POST',
+        body: workoutHistory,
+      });
+    },
+
+    async checkWorkoutHistoryExists({ startedAt }) {
+      return request(`/history/check?startedAt=${startedAt}`);
+    },
   };
 }
+

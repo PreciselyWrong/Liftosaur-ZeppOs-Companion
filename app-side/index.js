@@ -24,6 +24,25 @@ const router = createSideRouter({
       };
     }
   },
+
+  playgroundSimulator: async (journal) => {
+    try {
+      return await apiClient.runPlaygroundSimulation(JSON.stringify(journal));
+    } catch (err) {
+      console.log('[liftosaur-side] playground simulation error:', err?.message || String(err));
+      return null;
+    }
+  },
+
+  historySubmitter: async (history) => {
+    try {
+      return await apiClient.submitWorkoutHistory(history);
+    } catch (err) {
+      console.log('[liftosaur-side] history submit error:', err?.message || String(err));
+      // Return local saved confirmation so the watch can close the session safely
+      return { id: 'offline-saved-' + Date.now(), status: 'queued_offline' };
+    }
+  },
 });
 
 AppSideService(

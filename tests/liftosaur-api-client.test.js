@@ -67,3 +67,44 @@ test('client throws structured redacted error on HTTP failure without leaking se
     }
   );
 });
+
+test('client submits workout history and supports idempotent verification', async () => {
+  const recordedHistory = [];
+  const mockFetcher = async (url, options) => {
+    if (options.method === 'POST' && url.endsWith('/history')) {
+      const payload = JSON.parse(options.body);
+      recordedHistory.push(payload);
+      return {
+        ok: true,
+        status: 201,
+        json: async () => ({ id: 'hist-1', status: 'saved', startedAt: payload.startedAt }),
+      };
+    } else if (options.method === 'GET' && url.includes('/history/check')) {
+      return {
+        ok: true,
+        status: 200,
+        json: async () => ({ exists: recordedHistory.length > 0 }),
+      };
+    }
+    return { ok: false, status: 404 };
+  };
+
+  const client = createLiftosaurApiClient({
+    apiKey: 'lftsk_test_token',
+    fetcher: mockFetcher,
+  });
+
+  const entry = {
+    workoutId: 'w-1',
+    startedAt: 10000,
+    completedAt: 15000,
+    exercises: [{ name: 'Bench Press', sets: [{ weight: 60, reps: 5 }] }],
+  };
+
+  const result = await client.submitWorkoutHistory(entry);
+  assert.equal(result.id, 'hist-1');
+  assert.equal(result.status, 'saved');
+
+  const check = await client.checkWorkoutHistoryExists({ startedAt: 10000 });
+  assert.equal(check.exists, true);
+});

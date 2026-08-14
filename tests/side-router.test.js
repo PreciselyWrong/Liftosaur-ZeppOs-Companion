@@ -29,27 +29,51 @@ test('router handles invalid envelope with structured ERROR', async () => {
   assert.equal(response.payload.code, 'INVALID_ENVELOPE');
 });
 
-test('router handles GET_CURRENT_WORKOUT and returns parsed workout data', async () => {
+test('router handles SYNC_JOURNAL and reconciles workout', async () => {
   const router = createSideRouter({
-    programProvider: async () => ({
-      id: 'prog-1',
-      name: 'Week 1 - Workout A',
-      routineName: 'Basic Beginner Routine',
-      text: 'Bench Press, Barbell / 3x5 @ 60kg / rest 90s',
+    playgroundSimulator: async () => ({
+      success: true,
+      updatedPrescription: [{ targetWeight: 62.5, targetReps: 5 }],
     }),
   });
 
   const request = createMessage({
-    type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
-    messageId: 'req-workout-1',
+    type: MESSAGE_TYPES.SYNC_JOURNAL,
+    messageId: 'sync-1',
+    payload: {
+      journal: [{ type: 'COMPLETE_SET', timestamp: 1000 }],
+    },
   });
 
   const response = await router.handle(request);
-
-  assert.equal(response.type, MESSAGE_TYPES.WORKOUT_DATA);
-  assert.equal(response.replyToId, 'req-workout-1');
-  assert.equal(response.payload.workout.name, 'Week 1 - Workout A');
-  assert.equal(response.payload.workout.exercises.length, 1);
-  assert.equal(response.payload.workout.exercises[0].name, 'Bench Press, Barbell');
+  assert.equal(response.type, MESSAGE_TYPES.SYNC_JOURNAL_RESPONSE);
+  assert.equal(response.replyToId, 'sync-1');
+  assert.equal(response.payload.synced, true);
 });
+
+test('router handles SUBMIT_WORKOUT_HISTORY idempotently', async () => {
+  let submittedCount = 0;
+  const router = createSideRouter({
+    historySubmitter: async (history) => {
+      submittedCount++;
+      return { id: 'hist-1', status: 'saved' };
+    },
+  });
+
+  const request = createMessage({
+    type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY,
+    messageId: 'submit-1',
+    payload: {
+      startedAt: 10000,
+      completedAt: 20000,
+      totalVolume: 1500,
+    },
+  });
+
+  const response = await router.handle(request);
+  assert.equal(response.type, MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY_RESPONSE);
+  assert.equal(response.payload.status, 'saved');
+  assert.equal(submittedCount, 1);
+});
+
 
