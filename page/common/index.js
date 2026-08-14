@@ -1,7 +1,7 @@
 import { createWidget, deleteWidget, widget, align, text_style } from '@zos/ui';
 import { px } from '@zos/utils';
 import { HeartRate, Vibrator } from '@zos/sensor';
-import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT, GESTURE_UP, GESTURE_DOWN } from '@zos/interaction';
+import { onGesture, offGesture, GESTURE_LEFT, GESTURE_RIGHT } from '@zos/interaction';
 import { BasePage } from '@zeppos/zml/base-page';
 
 import {
@@ -112,7 +112,6 @@ let session = createWorkoutSession({
 });
 
 let isOverviewListOpen = false;
-let overviewScrollOffset = 0;
 let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
@@ -185,12 +184,12 @@ function renderUI() {
   // Background
   addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // ── 1. OVERVIEW EXERCISE LIST VIEW (Compact & Fully Clickable) ──
+  // ── 1. OVERVIEW EXERCISE LIST VIEW ──
   if (isOverviewListOpen && view.state !== SESSION_STATES.READY && view.state !== SESSION_STATES.FINISHED) {
     // Top Bar (Safe Zone): [< Back] [ ▶ Elapsed • HR ]
     addWidget(widget.BUTTON, {
-      x: px(75),
-      y: px(40),
+      x: px(85),
+      y: px(45),
       w: px(40),
       h: px(40),
       radius: px(20),
@@ -205,9 +204,9 @@ function renderUI() {
     });
 
     addWidget(widget.TEXT, {
-      x: px(125),
-      y: px(40),
-      w: px(250),
+      x: px(130),
+      y: px(45),
+      w: px(240),
       h: px(40),
       color: THEME.primaryLight,
       text_size: px(20),
@@ -217,10 +216,9 @@ function renderUI() {
       text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
     });
 
-    // 4 Compact cards fitting strictly within circular bounds (y: 88 to y: 388)
     const cardH = px(68);
     const cardGap = px(8);
-    let cardY = px(88);
+    let cardY = px(95);
 
     view.overviewExercises.forEach((ex, idx) => {
       const isCurrent = idx === view.currentExerciseIndex;
@@ -229,7 +227,6 @@ function renderUI() {
       const dots = formatDots(ex.setsDots);
       const sub = ex.supersetTag ? `[${ex.supersetTag}] ${ex.prescriptionSummary}` : ex.prescriptionSummary;
 
-      // Single combined clickable button with full touch target
       addWidget(widget.BUTTON, {
         x: px(65),
         y: cardY,
@@ -346,15 +343,15 @@ function renderUI() {
     return;
   }
 
-  // ── 3. ACTIVE SET SCREEN (Interactive Set Dots & Low-Profile Button) ──
+  // ── 3. ACTIVE SET SCREEN (Ultra-Polished Circular UI) ──
   if (view.state === SESSION_STATES.ACTIVE_SET) {
     const setNum = view.currentSetIndex + 1;
     const dotsString = formatDots(view.exerciseSetsDots);
 
-    // Top Bar (y=48): [< Back] [ ▶ 00:29 • HR 67 ]
+    // Top Bar (Cleanly centered & inset from circular bezel): [< Back] [ ▶ 00:29 • HR 67 ]
     addWidget(widget.BUTTON, {
-      x: px(72),
-      y: px(46),
+      x: px(82),
+      y: px(48),
       w: px(40),
       h: px(40),
       radius: px(20),
@@ -369,9 +366,9 @@ function renderUI() {
     });
 
     addWidget(widget.TEXT, {
-      x: px(120),
-      y: px(46),
-      w: px(250),
+      x: px(126),
+      y: px(48),
+      w: px(240),
       h: px(40),
       color: THEME.primaryLight,
       text_size: px(20),
@@ -381,58 +378,78 @@ function renderUI() {
       text: `▶ ${formatSeconds(view.elapsedSeconds)} • HR ${liveHr}`,
     });
 
-    // Exercise Name (y=92)
+    // Superset pill (if present)
+    let titleY = px(92);
+    if (view.supersetTag) {
+      addWidget(widget.TEXT, {
+        x: 0,
+        y: px(88),
+        w: W,
+        h: px(24),
+        color: THEME.blue,
+        text_size: px(18),
+        align_h: align.CENTER_H,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: `[${view.supersetTag}]`,
+      });
+      titleY = px(112);
+    }
+
+    // Exercise Name
     const shortEx = view.exerciseName.length > 22 ? view.exerciseName.slice(0, 20) + '…' : view.exerciseName;
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(92),
+      y: titleY,
       w: W,
-      h: px(32),
+      h: px(30),
       color: THEME.textPrimary,
-      text_size: px(24),
+      text_size: px(23),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: view.supersetTag ? `[${view.supersetTag}] ${shortEx}` : shortEx,
+      text: shortEx,
     });
 
-    // Interactive Set X/Y + Dots Button (Tap to cycle/switch set) (y=128)
+    // Set Status Line with Interactive Dots (y=144)
+    const setStatusY = view.supersetTag ? px(142) : px(126);
     addWidget(widget.BUTTON, {
-      x: px(100),
-      y: px(128),
-      w: px(280),
-      h: px(36),
-      radius: px(18),
+      x: px(90),
+      y: setStatusY,
+      w: px(300),
+      h: px(34),
+      radius: px(17),
       normal_color: THEME.bg,
       press_color: THEME.card,
       text: `Set ${setNum}/${view.totalSets}   ${dotsString}`,
       text_size: px(21),
       color: THEME.orange,
       click_func: () => {
-        // Cycle to next set in exercise on tap of dots
-        const nextSetIdx = (view.currentSetIndex + 1) % view.totalSets;
         persistAndRender(() => {
           session.selectExercise(view.currentExerciseIndex);
         });
       },
     });
 
-    // ── Input Cards (y=168, h=88) ──
+    // ── Input Boxes (Reps & Weight) ──
+    const boxesY = view.supersetTag ? px(178) : px(165);
+    const boxH = px(84);
+
     // Left Box: REPS
     addWidget(widget.FILL_RECT, {
       x: px(65),
-      y: px(168),
+      y: boxesY,
       w: px(160),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       color: THEME.card,
     });
 
     addWidget(widget.BUTTON, {
       x: px(65),
-      y: px(168),
+      y: boxesY,
       w: px(45),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -445,9 +462,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(108),
-      y: px(172),
+      y: boxesY + px(4),
       w: px(74),
-      h: px(48),
+      h: px(46),
       color: THEME.textPrimary,
       text_size: px(34),
       align_h: align.CENTER_H,
@@ -458,9 +475,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(108),
-      y: px(220),
+      y: boxesY + px(50),
       w: px(74),
-      h: px(26),
+      h: px(24),
       color: THEME.textSecondary,
       text_size: px(16),
       align_h: align.CENTER_H,
@@ -471,9 +488,9 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(180),
-      y: px(168),
+      y: boxesY,
       w: px(45),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -487,7 +504,7 @@ function renderUI() {
     // Middle '×'
     addWidget(widget.TEXT, {
       x: px(226),
-      y: px(190),
+      y: boxesY + px(20),
       w: px(28),
       h: px(44),
       color: THEME.textSecondary,
@@ -501,18 +518,18 @@ function renderUI() {
     // Right Box: WEIGHT
     addWidget(widget.FILL_RECT, {
       x: px(255),
-      y: px(168),
+      y: boxesY,
       w: px(160),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       color: THEME.card,
     });
 
     addWidget(widget.BUTTON, {
       x: px(255),
-      y: px(168),
+      y: boxesY,
       w: px(45),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -525,9 +542,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(298),
-      y: px(172),
+      y: boxesY + px(4),
       w: px(74),
-      h: px(48),
+      h: px(46),
       color: THEME.textPrimary,
       text_size: px(32),
       align_h: align.CENTER_H,
@@ -538,9 +555,9 @@ function renderUI() {
 
     addWidget(widget.TEXT, {
       x: px(298),
-      y: px(220),
+      y: boxesY + px(50),
       w: px(74),
-      h: px(26),
+      h: px(24),
       color: THEME.textSecondary,
       text_size: px(16),
       align_h: align.CENTER_H,
@@ -551,9 +568,9 @@ function renderUI() {
 
     addWidget(widget.BUTTON, {
       x: px(370),
-      y: px(168),
+      y: boxesY,
       w: px(45),
-      h: px(88),
+      h: boxH,
       radius: px(16),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
@@ -564,28 +581,32 @@ function renderUI() {
       },
     });
 
-    // Target prescription line (y=268)
+    // Target prescription line
+    const targetY = boxesY + boxH + px(10);
     const rpeText = view.currentSet.rpe ? ` @ ${view.currentSet.rpe}` : '';
     addWidget(widget.TEXT, {
       x: 0,
-      y: px(268),
+      y: targetY,
       w: W,
-      h: px(28),
+      h: px(26),
       color: THEME.textSecondary,
-      text_size: px(19),
+      text_size: px(18),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: `Target: ${view.currentSet.targetReps} × ${view.currentSet.targetWeight} kg${rpeText}`,
     });
 
-    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Lower at y=340 to y=412, ✓ button w: 140) ──
+    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Unified y=350, h=68, perfectly placed) ──
+    const actionY = px(348);
+    const actionH = px(68);
+
     addWidget(widget.BUTTON, {
       x: px(82),
-      y: px(340),
-      w: px(58),
-      h: px(72),
-      radius: px(29),
+      y: actionY,
+      w: px(60),
+      h: actionH,
+      radius: px(30),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '<',
@@ -595,13 +616,12 @@ function renderUI() {
       },
     });
 
-    // Compact Checkmark Button (w: 140, centered at x: 170)
     addWidget(widget.BUTTON, {
-      x: px(170),
-      y: px(340),
-      w: px(140),
-      h: px(72),
-      radius: px(36),
+      x: px(162),
+      y: actionY,
+      w: px(156),
+      h: actionH,
+      radius: px(34),
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: '✓',
@@ -613,11 +633,11 @@ function renderUI() {
     });
 
     addWidget(widget.BUTTON, {
-      x: px(340),
-      y: px(340),
-      w: px(58),
-      h: px(72),
-      radius: px(29),
+      x: px(338),
+      y: actionY,
+      w: px(60),
+      h: actionH,
+      radius: px(30),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '>',
