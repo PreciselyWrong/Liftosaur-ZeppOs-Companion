@@ -353,7 +353,6 @@ test('the first completed set creates the history record', async () => {
     week: 1,
     day: 1,
     startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
-    durationSeconds: 60,
     completedSets: [SET_ONE],
   });
 
@@ -365,6 +364,30 @@ test('the first completed set creates the history record', async () => {
   assert.ok(text.startsWith('2026-08-14T09:00:00.000Z /'));
   assert.ok(text.includes('Decline Bench Press / 1x8 80kg @8'));
   assert.ok(!text.includes('Triceps Pushdown'), 'an untouched exercise is not written');
+  assert.ok(!text.includes('duration:'), 'ongoing, so no endTime is implied');
+});
+
+test('the finished record does state a duration, unlike the live ones', async () => {
+  const client = createFakeClient();
+  const service = await serviceWithPlan(client);
+  const startedAt = Date.parse('2026-08-14T09:00:00.000Z');
+
+  await service.syncProgress({ programId: 'prog-1', week: 1, day: 1, startedAt, completedSets: [SET_ONE] });
+  assert.ok(!client.calls.createHistory[0].includes('duration:'));
+
+  await service.finishWorkout({
+    programId: 'prog-1',
+    week: 1,
+    day: 1,
+    startedAt,
+    durationSeconds: 3600,
+    completedSets: [SET_ONE],
+  });
+
+  assert.ok(
+    client.calls.updateHistory.at(-1).text.includes('duration: 3600s'),
+    'finishing is what closes the workout'
+  );
 });
 
 test('every set after the first updates the same record', async () => {

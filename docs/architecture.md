@@ -135,14 +135,27 @@ between two requests, so anything it would need to remember — which day is bei
 which history record the session owns — travels in the message. Its caches are an
 optimisation, never a requirement.
 
-## What cross-device resume can and cannot do
+### Ongoing versus finished
 
-A session started on the watch appears in the Liftosaur history while it happens, and a
-session finished anywhere is visible everywhere. What is **not** possible is picking up a
-half-finished workout on another device, the way the Liftosaur app and web page do between
-themselves: that state is synced through Liftosaur's own private storage, and the public
-REST API exposes no in-progress workout resource. On the phone the live record reads as a
-history entry with fewer sets, not as a workout waiting to be continued.
+A live record must **not** state a `duration:`. The Liftohistory deserializer derives the
+end of a workout from it:
+
+```ts
+const endTime = durationSec != null ? startTime + durationSec * 1000 : undefined;
+```
+
+so a record carrying a duration has an `endTime` and is a finished workout. Omitting it
+leaves `endTime` undefined, which is what an unfinished session looks like. The duration is
+written exactly once, at finish, when it is known — which is also the moment the record
+stops being ongoing.
+
+## Cross-device resume
+
+A session started on the watch is visible in Liftosaur while it happens, and a session
+finished anywhere is visible everywhere. Continuing a half-finished workout **on another
+device** is a separate mechanism the public API does not offer: the Liftosaur app and web
+page share in-progress state through Liftosaur's own private storage, and there is no
+in-progress workout resource in the REST API.
 
 Resuming therefore works on the watch itself — after a crash, a reboot, or the app being
 killed — and not across devices.

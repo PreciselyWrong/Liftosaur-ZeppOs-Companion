@@ -247,7 +247,6 @@ export function createProgramService({ client } = {}) {
       week,
       day,
       startedAt = null,
-      durationSeconds = null,
       completedSets = [],
       plan: sentPlan = null,
       historyId = null,
@@ -261,7 +260,8 @@ export function createProgramService({ client } = {}) {
         return { synced: false, reason: 'NO_PLAN', historyId };
       }
 
-      const text = buildProgressRecord({ plan, completedSets, startedAt, durationSeconds });
+      // No duration: this record must read as ongoing, not finished.
+      const text = buildProgressRecord({ plan, completedSets, startedAt });
       if (!text) {
         return { synced: false, reason: 'NOTHING_DONE', historyId };
       }
