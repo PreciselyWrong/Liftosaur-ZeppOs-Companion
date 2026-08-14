@@ -9,6 +9,10 @@ import {
   createWorkoutSession,
 } from '../../shared/workout-session.js';
 import { createSessionStore } from '../../shared/session-storage.js';
+import {
+  MESSAGE_TYPES,
+  createMessage,
+} from '../../shared/protocol.js';
 
 // ── Official Liftosaur Color Palette ────────────────────────────────────────
 
@@ -106,6 +110,7 @@ const sessionStore = createSessionStore(localStoreAdapter);
 
 // ── State variables ──────────────────────────────────────────────────────────
 
+let pageInstance = null;
 let session = createWorkoutSession({
   workout: WORKOUT_MOCK,
   initialJournal: sessionStore.loadJournal(),
@@ -139,10 +144,67 @@ function addWidget(type, props) {
   return w;
 }
 
+function asyncSideSyncJournal() {
+  if (!pageInstance || typeof pageInstance.request !== 'function') return;
+  try {
+    const journal = session.getJournal();
+    pageInstance
+      .request(
+        createMessage({
+          type: MESSAGE_TYPES.SYNC_JOURNAL,
+          sessionId: session.view().workoutName,
+          payload: { journal },
+        })
+      )
+      .then((res) => {
+        console.log('[liftosaur] async journal synced with side service');
+      })
+      .catch((err) => {
+        console.log('[liftosaur] async journal sync queued locally:', err?.message || String(err));
+      });
+  } catch (err) {
+    console.log('[liftosaur] sync dispatch error:', err?.message || String(err));
+  }
+}
+
+function asyncSideSubmitHistory() {
+  if (!pageInstance || typeof pageInstance.request !== 'function') return;
+  try {
+    const view = session.view();
+    const historyPayload = {
+      workoutName: view.workoutName,
+      routineName: view.routineName,
+      elapsedSeconds: view.elapsedSeconds,
+      totalVolume: view.totalVolume,
+      completedSetsCount: view.totalCompletedSetsCount,
+      completedSets: view.allCompletedSets,
+      journal: session.getJournal(),
+    };
+
+    pageInstance
+      .request(
+        createMessage({
+          type: MESSAGE_TYPES.SUBMIT_WORKOUT_HISTORY,
+          sessionId: view.workoutName,
+          payload: historyPayload,
+        })
+      )
+      .then((res) => {
+        console.log('[liftosaur] history submitted successfully to side service');
+      })
+      .catch((err) => {
+        console.log('[liftosaur] history submission saved locally for later retry:', err?.message || String(err));
+      });
+  } catch (err) {
+    console.log('[liftosaur] history dispatch error:', err?.message || String(err));
+  }
+}
+
 function persistAndRender(action) {
   if (action) {
     action();
     sessionStore.saveJournal(session.getJournal());
+    asyncSideSyncJournal();
   }
   renderUI();
 }
@@ -445,7 +507,6 @@ function renderUI() {
       color: THEME.card,
     });
 
-    // Invisible tap areas for - and + with clean text display
     addWidget(widget.BUTTON, {
       x: px(65),
       y: boxesY,
@@ -598,7 +659,7 @@ function renderUI() {
       text: `Target: ${view.currentSet.targetReps} × ${view.currentSet.targetWeight} kg${rpeText}`,
     });
 
-    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Unified at y=318, perfectly spaced) ──
+    // ── Bottom Action Bar: [<]  [  ✓  ]  [>] (Unified at y=316) ──
     const actionY = px(316);
     const actionH = px(74);
 
@@ -742,7 +803,6 @@ function renderUI() {
     return;
   }
 
-
   // ── 5. FINISHED SUMMARY SCREEN ──
   if (view.state === SESSION_STATES.FINISHED) {
     addWidget(widget.TEXT, {
@@ -856,6 +916,7 @@ function renderUI() {
       text: 'Done',
       text_size: px(26),
       click_func: () => {
+        asyncSideSubmitHistory();
         sessionStore.clearSession();
         session = createWorkoutSession({ workout: WORKOUT_MOCK });
         renderUI();
@@ -897,11 +958,6 @@ function stopUnifiedClock() {
   }
 }
 
-import {
-  MESSAGE_TYPES,
-  createMessage,
-} from '../../shared/protocol.js';
-
 // ── Page Declaration ──────────────────────────────────────────────────────────
 
 Page(
@@ -912,6 +968,7 @@ Page(
 
     build() {
       console.log('[liftosaur] page build');
+      pageInstance = this;
 
       // Fetch fresh workout prescription from Side Service if no active in-flight session
       if (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0) {
@@ -983,6 +1040,7 @@ Page(
         offGesture();
       } catch (e) {}
       stopUnifiedClock();
+      pageInstance = null;
       if (hrSensor && hrCallback) {
         try {
           hrSensor.offCurrentChange?.(hrCallback);
@@ -991,4 +1049,3 @@ Page(
     },
   })
 );
-
