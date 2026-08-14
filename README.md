@@ -113,6 +113,21 @@ zeus dev -t "Amazfit Active 2 (Round)"
 zeus preview -t "Amazfit Active 2 (Round)"
 ```
 
+The `zeus preview` QR code is hosted by Zepp and stays valid for 7 days, so it can be
+shared with testers who do not have a computer. A single QR code covers every device
+built into the bundle.
+
+### Installing as a Tester
+
+If you were sent a QR code and just want to run the app on your watch, follow
+[docs/tester-guide.md](docs/tester-guide.md). It needs a phone only, no computer.
+
+---
+
+## Changelog
+
+Release history is in [CHANGELOG.md](CHANGELOG.md).
+
 ---
 
 ## Disclaimer
