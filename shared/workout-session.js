@@ -110,7 +110,6 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         };
         prog.completedSets.push(completed);
 
-        const isLastSetOfExercise = prog.currentSetIndex + 1 >= ex.sets.length;
         const allCompleted = exercises.every(
           (e, i) => exerciseProgress[i].completedSets.length >= e.sets.length
         );
@@ -119,14 +118,42 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           state = SESSION_STATES.FINISHED;
           restInfo = null;
         } else {
-          const hasNextExercise = currentExerciseIndex + 1 < exercises.length;
+          // Check if there is an alternating superset partner or next exercise
+          let isTransitionToNextExercise = false;
+          if (ex.supersetGroup) {
+            const groupIndices = exercises
+              .map((e, idx) => (e.supersetGroup === ex.supersetGroup ? idx : -1))
+              .filter((idx) => idx !== -1);
+            
+            // Check next exercise in group that still needs set (prog.completedSets.length - 1)
+            const currentCount = prog.completedSets.length;
+            const partnerIdx = groupIndices.find(
+              (idx) => idx !== currentExerciseIndex && exerciseProgress[idx].completedSets.length < currentCount
+            );
+            if (partnerIdx !== undefined) {
+              isTransitionToNextExercise = true;
+            } else {
+              // Check if group loops back to first exercise
+              const anyPending = groupIndices.some(
+                (idx) => exerciseProgress[idx].completedSets.length < exercises[idx].sets.length
+              );
+              if (anyPending && groupIndices[0] !== currentExerciseIndex) {
+                isTransitionToNextExercise = true;
+              }
+            }
+          } else {
+            const isLastSetOfExercise = prog.completedSets.length >= ex.sets.length;
+            const hasNextExercise = currentExerciseIndex + 1 < exercises.length;
+            isTransitionToNextExercise = isLastSetOfExercise && hasNextExercise;
+          }
+
           const restDuration = ex.sets[prog.currentSetIndex]?.restSeconds ?? 90;
           state = SESSION_STATES.REST;
           restInfo = {
             startedAt: event.timestamp,
             duration: restDuration,
             endsAt: event.timestamp + restDuration * 1000,
-            isTransitionToNextExercise: isLastSetOfExercise && hasNextExercise,
+            isTransitionToNextExercise,
           };
         }
         break;
@@ -136,9 +163,54 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         const prog = getCurrentProgress();
         const ex = getCurrentExercise();
 
-        if (prog.currentSetIndex + 1 < ex.sets.length) {
-          // Next set in current exercise
-          prog.currentSetIndex += 1;
+        // 1. Superset alternating logic
+        if (ex.supersetGroup) {
+          const groupIndices = exercises
+            .map((e, idx) => (e.supersetGroup === ex.supersetGroup ? idx : -1))
+            .filter((idx) => idx !== -1);
+
+          const currentCount = prog.completedSets.length;
+          // Find partner in group that needs to catch up
+          const partnerIdx = groupIndices.find(
+            (idx) => idx !== currentExerciseIndex && exerciseProgress[idx].completedSets.length < currentCount
+          );
+
+          if (partnerIdx !== undefined) {
+            currentExerciseIndex = partnerIdx;
+            const nextProg = getCurrentProgress();
+            const nextEx = getCurrentExercise();
+            nextProg.currentSetIndex = nextProg.completedSets.length;
+            const nextTarget = nextEx.sets[nextProg.currentSetIndex];
+            nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
+            nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
+            nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
+            state = SESSION_STATES.ACTIVE_SET;
+            restInfo = null;
+            break;
+          }
+
+          // If all in group finished current round, check if group has more sets
+          const nextInGroupWithSets = groupIndices.find(
+            (idx) => exerciseProgress[idx].completedSets.length < exercises[idx].sets.length
+          );
+          if (nextInGroupWithSets !== undefined) {
+            currentExerciseIndex = nextInGroupWithSets;
+            const nextProg = getCurrentProgress();
+            const nextEx = getCurrentExercise();
+            nextProg.currentSetIndex = nextProg.completedSets.length;
+            const nextTarget = nextEx.sets[nextProg.currentSetIndex];
+            nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
+            nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
+            nextProg.currentRpe = nextTarget?.targetRpe ?? nextProg.currentRpe;
+            state = SESSION_STATES.ACTIVE_SET;
+            restInfo = null;
+            break;
+          }
+        }
+
+        // 2. Standard sequential progression
+        if (prog.completedSets.length < ex.sets.length) {
+          prog.currentSetIndex = prog.completedSets.length;
           const nextTarget = ex.sets[prog.currentSetIndex];
           prog.currentWeight = nextTarget?.targetWeight ?? prog.currentWeight;
           prog.currentReps = nextTarget?.targetReps ?? prog.currentReps;
@@ -146,10 +218,10 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           state = SESSION_STATES.ACTIVE_SET;
           restInfo = null;
         } else if (currentExerciseIndex + 1 < exercises.length) {
-          // Advance to next exercise
           currentExerciseIndex += 1;
           const nextProg = getCurrentProgress();
           const nextEx = getCurrentExercise();
+          nextProg.currentSetIndex = nextProg.completedSets.length;
           const nextTarget = nextEx.sets[nextProg.currentSetIndex];
           nextProg.currentWeight = nextTarget?.targetWeight ?? nextProg.currentWeight;
           nextProg.currentReps = nextTarget?.targetReps ?? nextProg.currentReps;
@@ -162,6 +234,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         }
         break;
       }
+
 
       case EVENT_TYPES.FINISH_WORKOUT:
         state = SESSION_STATES.FINISHED;
