@@ -124,3 +124,47 @@ test('replaying journal restores identical state', () => {
   const replayed = createWorkoutSession({ exercise: BENCH_PRESS_MOCK, initialJournal: journal });
   assert.deepEqual(replayed.view(), session.view());
 });
+
+test('multi-exercise workout allows exercise navigation and automatic progression', () => {
+  const MULTI_WORKOUT = {
+    id: 'workout-1',
+    name: 'Push Day',
+    exercises: [
+      {
+        id: 'bench',
+        name: 'Bench Press',
+        sets: [{ targetReps: 10, targetWeight: 60, restSeconds: 60 }],
+      },
+      {
+        id: 'overhead',
+        name: 'Overhead Press',
+        sets: [{ targetReps: 8, targetWeight: 40, restSeconds: 90 }],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ workout: MULTI_WORKOUT });
+  session.startWorkout();
+
+  assert.equal(session.view().exerciseName, 'Bench Press');
+  assert.equal(session.view().totalExercises, 2);
+  assert.equal(session.view().currentExerciseIndex, 0);
+
+  // Switch to next exercise manually
+  session.selectExercise(1);
+  assert.equal(session.view().exerciseName, 'Overhead Press');
+  assert.equal(session.view().currentExerciseIndex, 1);
+
+  // Complete set of Overhead Press
+  session.completeSet();
+  session.nextSet(); // Moves to next or completes
+
+  // Switch back to Bench Press
+  session.selectExercise(0);
+  assert.equal(session.view().exerciseName, 'Bench Press');
+  session.completeSet();
+
+  // All completed
+  assert.equal(session.isAllCompleted(), true);
+});
+
