@@ -1,6 +1,6 @@
 # Changelog
 
-## [2.0.0] — 14 August 2026
+## [2.0.0] - 14 August 2026
 
 Breaking rewrite. Liftosaur Cloud is now the only source of workout data. The watch reads
 your program from the API and never interprets it on its own.
@@ -8,7 +8,7 @@ your program from the API and never interprets it on its own.
 ### Added
 - The app opens on your active program with one big button that starts its next day. The
   button names the day it will start, and "Another day" opens the full choice.
-- Pick your program, then your week, then your day — all three lists come from your
+- Pick your program, then your week, then your day - all three lists come from your
   Liftosaur account. Each list opens on the entry you most likely want, shown large and
   first: your active program, the week you are in, and the day after the one you last
   logged. Everything else is one page below. Nothing is chosen until you tap it.
@@ -20,7 +20,7 @@ your program from the API and never interprets it on its own.
   program's progression, so opening the phone app afterwards shows the same state.
 - A workout is still saved when your program was edited elsewhere during the session; only
   the progression is skipped, and the watch says so.
-- An interrupted workout is resumed exactly where it stopped — the session is now saved to
+- An interrupted workout is resumed exactly where it stopped - the session is now saved to
   the watch, not held in memory. Your workout is written to Liftosaur once, when you finish
   it, so nothing half-done ever lands in your history.
 
@@ -42,7 +42,7 @@ your program from the API and never interprets it on its own.
 - A day whose prescription could not be confirmed is now reported as an error instead of
   displayed as a plausible wrong workout.
 
-## [1.0.0] — 14 August 2026
+## [1.0.0] - 14 August 2026
 
 ### Added
 - Follow your Liftosaur workouts on your wrist with live heart rate.

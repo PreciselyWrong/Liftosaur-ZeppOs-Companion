@@ -26,7 +26,7 @@ Every response carries `replyToId` set to the request's `messageId`.
 | Request | Payload | Response | Payload |
 | --- | --- | --- | --- |
 | `PING` | anything | `PONG` | `{serverTime, echo}` |
-| `LIST_PROGRAMS` | — | `PROGRAMS_DATA` | `{programs: [{id, name, isCurrent}]}` |
+| `LIST_PROGRAMS` | - | `PROGRAMS_DATA` | `{programs: [{id, name, isCurrent}]}` |
 | `GET_PROGRAM_OUTLINE` | `{programId}` | `PROGRAM_OUTLINE_DATA` | `{programId, programName, programVersion, totalWeeks, totalDays, weeks[], lastWorkout}` |
 | `GET_DAY_PLAN` | `{programId, week, day}` | `DAY_PLAN_DATA` | `{programId, programName, programVersion, week, dayInWeek, dayName, unit, exercises[], outlineNameMatches}` |
 | `FINISH_WORKOUT` | `{programId, programVersion, week, day, completedSets[], startedAt, durationSeconds}` | `FINISH_WORKOUT_RESULT` | `{status, historyId, alreadyExisted, programUpdated}` |
@@ -38,8 +38,8 @@ survives the app being killed. `ABANDON_WORKOUT` is therefore purely local: ther
 remote record to remove.
 
 That is a deliberate reversal. Writing each set to `/history` as it happened did work, but
-a record created through the public API is a *finished* workout by construction — see
-[architecture.md](architecture.md) — so a live session showed up as an already-finished one.
+a record created through the public API is a *finished* workout by construction - see
+[architecture.md](architecture.md) - so a live session showed up as an already-finished one.
 A clean history was worth more than server-side durability mid-session.
 
 ## Errors

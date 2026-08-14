@@ -3,17 +3,17 @@ import assert from 'node:assert/strict';
 import { parseProgramOutline, parseProgramDayExercises } from '../shared/liftoscript-outline.js';
 
 const USER_PROGRAM = `# Semaine 1
-// **Notation des séries** — \`2x10+ @7+\`
+// **Notation des séries** - \`2x10+ @7+\`
 // - \`10+\` : cible indicative, **dépassement attendu** jusqu'à @7
 // - \`@7+\` : saisie du **RPE réel** en fin de série
 // 
-// **Calcul automatique** — en fin de séance, \`1RM = poids réel ÷ rpeMultiplier(reps, RPE)\`
+// **Calcul automatique** - en fin de séance, \`1RM = poids réel ÷ rpeMultiplier(reps, RPE)\`
 // - Prise en compte de la **meilleure des deux séries**, la moins fatiguée
 // - Remise à zéro à chaque passage : un 1RM surévalué peut donc **baisser**
 // - Écriture directe dans \`rm1\`, lu par les semaines 2 à 18
 // 
 // **Consignes**
-// - **Aucune série à l'échec** — cible @7, soit 3 reps en réserve
+// - **Aucune série à l'échec** - cible @7, soit 3 reps en réserve
 // - Saisie **honnête** du RPE : toute la progression du bloc en dépend
 // - Correction du poids proposé dès qu'il paraît absurde
 ## Mardi: PUSH A

@@ -6,7 +6,7 @@
  * needs the gym's equipment: the bar, the plates on hand, and how many of each.
  *
  * Behaviour was established against real `GET /history` records rather than
- * from the source description, which says "nearest". It is not nearest — it is
+ * from the source description, which says "nearest". It is not nearest - it is
  * the largest achievable load **at or below** the target:
  *
  *   85% of 87.5kg = 74.375  -> 72.5, not 75   (barbell, 20kg bar)
@@ -101,7 +101,7 @@ export function roundToLoadable(target, equipment, unit = 'kg') {
     return { value: target, exact: false, resolved: false };
   }
 
-  // Fixed equipment — dumbbells, kettlebells — is picked from a list, not built.
+  // Fixed equipment - dumbbells, kettlebells - is picked from a list, not built.
   if (equipment.isFixed) {
     const fixed = (equipment.fixed || [])
       .map((entry) => parseWeightString(entry, unit))

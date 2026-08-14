@@ -2,7 +2,7 @@
  * Workout session state machine and event journal.
  *
  * The session is driven entirely by a day plan the API produced. It records
- * what the user did — weight, reps, RPE, in which order — and nothing else. It
+ * what the user did - weight, reps, RPE, in which order - and nothing else. It
  * computes no progression and rewrites no prescription: those belong to
  * `POST /playground`, which replays this journal when the workout ends.
  *
@@ -570,7 +570,7 @@ function summarizeSets(ex, unit) {
   if (workSets.length === 0) return '';
   const first = workSets[0];
   const reps = first.targetRepsMax ? `${first.targetReps}-${first.targetRepsMax}` : first.targetReps;
-  const weight = first.targetWeight === null ? '—' : `${first.targetWeight}${first.unit || unit}`;
+  const weight = first.targetWeight === null ? '-' : `${first.targetWeight}${first.unit || unit}`;
   const workStr = `${workSets.length} × ${reps} · ${weight}`;
   if (ex.warmupSetsCount > 0) {
     return `${ex.warmupSetsCount}W + ${workStr}`;

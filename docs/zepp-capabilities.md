@@ -39,12 +39,12 @@ evidence can be produced until the simulator is installed and `zeus login` succe
 
 `zeus dev` offers these simulator devices: Amazfit Falcon, T-Rex Ultra, Cheetah Pro,
 Cheetah Pro Kelvin Kiptum, Cheetah (Round), Active Edge, Balance (list truncated). Active
-Edge and Balance are **not** in the documented Workout Extension device list — availability
+Edge and Balance are **not** in the documented Workout Extension device list - availability
 in the simulator is not evidence of Workout Extension support.
 
 **The `-t` target must match the emulator image that is actually downloaded.** `zeus dev`
 offers every known device, including ones whose image was never fetched; selecting one of
-those builds a package the running emulator cannot install, and nothing appears — with no
+those builds a package the running emulator cannot install, and nothing appears - with no
 error. The downloaded images live in `~/.zepp/emulator_cache/<id>`, and `<id>` maps to an
 entry in `%APPDATA%/simulator/config.json` → `finalDownloadList`.
 
@@ -77,11 +77,11 @@ The `WORKOUT_EXTENSION` / `Empty` template produces `app.js`, `app.json`,
 | App declaration | `app.appType: "app"` **plus** `app.extType: "workout"` | TESTED |
 | Config version | `configVersion: "v3"` | TESTED |
 | API version | `compatible`, `target`, `minVersion` all `"3.6"` | TESTED |
-| Widget window | `window.isPinned: 1` — `isPinned` exists and defaults to pinned | TESTED |
+| Widget window | `window.isPinned: 1` - `isPinned` exists and defaults to pinned | TESTED |
 | Default subType | `subType: []` (all sports) | TESTED |
-| Platform entry | `platforms: [{ "st": "r" }]`, `designWidth: 480` — `st` appears to be screen shape (`r` = round) | ASSUMED |
+| Platform entry | `platforms: [{ "st": "r" }]`, `designWidth: 480` - `st` appears to be screen shape (`r` = round) | ASSUMED |
 | i18n | Per-language widget `name` required for ~33 locales | TESTED |
-| Widget entry | `DataWidget({ onInit, build, onDestroy })` — the template exposes only these three | TESTED |
+| Widget entry | `DataWidget({ onInit, build, onDestroy })` - the template exposes only these three | TESTED |
 | appId | Template ships `26440`, a placeholder; a real appId must be issued by the developer console | ASSUMED |
 
 `@zeppos/device-types` types `hmUI.sport_type` as a bare `number` with no enumeration, so
@@ -121,10 +121,10 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 - `subType`: array of sport codes; `[]` means all sports. CONFIRMED.
 - **The numeric sport code for Strength Training is UNKNOWN.** No public enumeration was
   found in the app.json reference, the SPORT_DATA reference, `getSportData` reference, or
-  search. A web search returned `52`, but this is unverifiable against official docs — treat
+  search. A web search returned `52`, but this is unverifiable against official docs - treat
   as ASSUMED until confirmed by official source or emulator test. This is risk P0-1.
 - The general [app.json reference](https://docs.zepp.com/docs/reference/app-json/) does
-  **not** document the `data-widget` module at all — only Quick Start does. Treat the
+  **not** document the `data-widget` module at all - only Quick Start does. Treat the
   Quick Start snippet as the single source until contradicted.
 
 ## Data access
@@ -132,10 +132,10 @@ the typings do **not** resolve the Strength Training code either. Risk P0-1 stan
 | Capability | Finding | Status | Source |
 | --- | --- | --- | --- |
 | `SPORT_DATA` widget | Real-time sport data display; `category` currently only `edit_widget_group_type.SPORTS`; `default_type` from `sport_data` (`@zos/ui`), includes `HR`, `DURATION_NET`, `CONSUME`, chart types | CONFIRMED | [SPORT_DATA](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/widget/SPORT_DATA/) |
-| `mock_data` | Emulator-only simulated data — the supported path for mock-first development | CONFIRMED | [SPORT_DATA](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/widget/SPORT_DATA/) |
+| `mock_data` | Emulator-only simulated data - the supported path for mock-first development | CONFIRMED | [SPORT_DATA](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/widget/SPORT_DATA/) |
 | `getSportData` | `@zos/app-access`, API_LEVEL 3.6, permission `data:user.hd.workout`, async callback with `{code, data}` where `data` is a JSON string | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
 | `getSportData` types | `speed`, `avg_speed`, `pace`, `avg_pace`, `distance`, `duration`, `calories`, `cadence`, `avg_cadence`, `altitude`, `total_up_altitude`, `total_count`, `vertical_speed`, `downhill_count`, `total_downhill_distance` | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
-| Heart rate via `getSportData` | **Not in the type list.** The `getSportData` API only accepts string keys (`speed`, `distance`, `duration`, etc.) — HR is absent. HR appears only as a `SPORT_DATA` widget field. Getting a numeric HR value in a data-widget requires a different approach (undocumented or not public). | CONFIRMED absent from getSportData |
+| Heart rate via `getSportData` | **Not in the type list.** The `getSportData` API only accepts string keys (`speed`, `distance`, `duration`, etc.) - HR is absent. HR appears only as a `SPORT_DATA` widget field. Getting a numeric HR value in a data-widget requires a different approach (undocumented or not public). | CONFIRMED absent from getSportData |
 
 ## Confirmed by the phase 0 spike (EMULATOR TESTED)
 
@@ -150,18 +150,18 @@ real data page.
 | --- | --- |
 | `sport_data` and `edit_widget_group_type` are exported by `@zos/ui` | TESTED |
 | `SPORT_DATA` renders `mock_data` in the simulator | TESTED |
-| `DataWidget` custom object properties are **not** accessible via `this` inside arrow-function callbacks — `this` is the module scope, not the DataWidget object. Mutable state must live in **module-level closure variables**. | TESTED |
+| `DataWidget` custom object properties are **not** accessible via `this` inside arrow-function callbacks - `this` is the module scope, not the DataWidget object. Mutable state must live in **module-level closure variables**. | TESTED |
 | The widget renders on Active 2, a device absent from the documented six-device list | TESTED |
-| The simulator renders a `data-widget` **outside** any workout — in a direct preview context | TESTED |
-| The Active 2 simulator image has **no Workout system app** — `Home` only shows Settings. | TESTED |
-| T-Rex 3 simulator image (officially supported device) **also has no Workout system app** — same result as Active 2. The Workout app is absent from **all** simulator device images. This is a simulator limitation, not a device limitation. | TESTED |
+| The simulator renders a `data-widget` **outside** any workout - in a direct preview context | TESTED |
+| The Active 2 simulator image has **no Workout system app** - `Home` only shows Settings. | TESTED |
+| T-Rex 3 simulator image (officially supported device) **also has no Workout system app** - same result as Active 2. The Workout app is absent from **all** simulator device images. This is a simulator limitation, not a device limitation. | TESTED |
 | Workout-context testing (lifecycle in workout, HR from system, subType scoping) is **BLOCKED** in the simulator for all images. The only test path is the real device in Developer Mode. | TESTED |
 | A `TEXT` widget has **no** `addEventListener`: calling it throws and aborts `build()` | TESTED |
-| A `FILL_RECT` **never receives** `event.CLICK_UP` — a rectangle cannot be a tap target | TESTED |
+| A `FILL_RECT` **never receives** `event.CLICK_UP` - a rectangle cannot be a tap target | TESTED |
 | `widget.BUTTON` with `click_func` **does** fire | TESTED |
 | `setProperty(prop.MORE, …)` on a `FILL_RECT` **does** repaint it | TESTED |
-| `setProperty` on a `TEXT` widget **never refreshes it** — neither `prop.TEXT`, nor `prop.MORE` with only `{text}`, nor `prop.MORE` with the full geometry | TESTED |
-| ASCII hyphen/dash (`-`) is **invisible** in the Zepp OS font renderer — confirmed by bisect: `'--'` rendered as empty, `'?'` and `'N/A'` rendered correctly | TESTED |
+| `setProperty` on a `TEXT` widget **never refreshes it** - neither `prop.TEXT`, nor `prop.MORE` with only `{text}`, nor `prop.MORE` with the full geometry | TESTED |
+| ASCII hyphen/dash (`-`) is **invisible** in the Zepp OS font renderer - confirmed by bisect: `'--'` rendered as empty, `'?'` and `'N/A'` rendered correctly | TESTED |
 
 
 ### UI constraints this imposes
@@ -186,12 +186,12 @@ if set before the widget is fully initialised).
 Consequence for phase 1: **all dynamic text must be rendered via delete + recreate**. Keep
 the widget reference in a module-level closure variable, never on `this`.
 
-A runtime error inside `build()` aborts the rest of it **silently** — the widgets already
+A runtime error inside `build()` aborts the rest of it **silently** - the widgets already
 created stay on screen, so a half-built widget looks deliberate. Any unexplained missing
 element should be read as a crash, not a layout mistake.
 
 The tap did nothing. The probe listener added on the status text threw at runtime, which
-aborted `build()` after the widgets were already drawn — so the screen looked correct while
+aborted `build()` after the widgets were already drawn - so the screen looked correct while
 the widget was in fact broken. That listener is removed; only the background `FILL_RECT`
 carries one. Whether taps work at all in the preview context is still unresolved.
 
@@ -211,15 +211,15 @@ how it behaves as a data page, or whether taps work in a real workout. Those mov
 | Item | Value | Status |
 | --- | --- | --- |
 | Module | `import { LocalStorage } from '@zos/storage'` | CONFIRMED |
-| Constructor | `new LocalStorage(storagePath?)` — defaults to the mini program's own storage file | CONFIRMED |
+| Constructor | `new LocalStorage(storagePath?)` - defaults to the mini program's own storage file | CONFIRMED |
 | Methods | `setItem(key, value)`, `getItem(key, defaultValue?)`, `removeItem(key)`, `clear()` | CONFIRMED |
 | Required API_LEVEL | 3.0 (this project targets 3.6) | CONFIRMED |
-| Permission | `device:os.local_storage` — must be listed in `app.json` | CONFIRMED |
+| Permission | `device:os.local_storage` - must be listed in `app.json` | CONFIRMED |
 | Durability | survives app restart; cleared on uninstall | CONFIRMED |
 | Quota | not documented | UNKNOWN |
 
 Source: [LocalStorage](https://docs.zepp.com/docs/reference/device-app-api/newAPI/storage/localStorage/).
-Documented, not yet device-tested — the writes are wrapped so a failure degrades to an
+Documented, not yet device-tested - the writes are wrapped so a failure degrades to an
 in-memory store rather than breaking a session.
 
 ## Open questions (blocking)
@@ -234,9 +234,9 @@ in-memory store rather than breaking a session.
 
 ## Sources
 
-- [Workout Extension — Intro](https://docs.zepp.com/docs/guides/workout-extension/intro/)
-- [Workout Extension — Quick Start](https://docs.zepp.com/docs/guides/workout-extension/quick-start/)
-- [Workout Extension — Distribute](https://docs.zepp.com/docs/guides/workout-extension/distribute/)
+- [Workout Extension - Intro](https://docs.zepp.com/docs/guides/workout-extension/intro/)
+- [Workout Extension - Quick Start](https://docs.zepp.com/docs/guides/workout-extension/quick-start/)
+- [Workout Extension - Distribute](https://docs.zepp.com/docs/guides/workout-extension/distribute/)
 - [SPORT_DATA widget](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/widget/SPORT_DATA/)
 - [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/)
 - [app.json reference](https://docs.zepp.com/docs/reference/app-json/)

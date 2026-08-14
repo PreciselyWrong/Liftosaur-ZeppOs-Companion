@@ -15,7 +15,7 @@ const pages = appJson.targets.common.module.page.pages;
 
 test('declares a standalone mini program', () => {
   assert.equal(appJson.app.appType, 'app');
-  assert.equal(appJson.app.extType, undefined, 'extType must be absent — this is not a Workout Extension');
+  assert.equal(appJson.app.extType, undefined, 'extType must be absent - this is not a Workout Extension');
   assert.equal(appJson.configVersion, 'v3');
 });
 

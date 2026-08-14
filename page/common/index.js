@@ -128,7 +128,7 @@ let activeWidgets = [];
  * Rebuilding the whole screen once a second is what made the countdown skip:
  * tearing down and recreating twenty widgets takes long enough that ticks get
  * dropped. These are patched in place instead. The creation props are kept so
- * an update re-sends the complete property set — a partial `prop.MORE` would
+ * an update re-sends the complete property set - a partial `prop.MORE` would
  * clear the geometry.
  */
 let liveWidgets = {};
@@ -305,7 +305,7 @@ function submitWorkout() {
           payload.status === 'HISTORY_SAVED_PROGRAM_CONFLICT'
             ? 'Saved. Program changed on Liftosaur, progression not written.'
             : payload.status === 'BASE_PROGRAM_UNAVAILABLE'
-              ? 'Program changed on Liftosaur. Nothing saved — pick the day again.'
+              ? 'Program changed on Liftosaur. Nothing saved - pick the day again.'
               : payload.programUpdated
                 ? 'Saved and progression updated'
                 : 'Saved to Liftosaur',
@@ -316,7 +316,7 @@ function submitWorkout() {
       renderUI();
     })
     .catch((err) => {
-      finishState = { status: 'FAILED', message: err?.message || 'Save failed — retry' };
+      finishState = { status: 'FAILED', message: err?.message || 'Save failed - retry' };
       renderUI();
     });
 }
@@ -354,7 +354,7 @@ function persistAndRender(action) {
 /**
  * Brings back a session the app was killed in the middle of. The plan is stored
  * with the journal, so the exercises, targets and history record are all
- * restored — no network needed to carry on lifting.
+ * restored - no network needed to carry on lifting.
  */
 function restoreSession() {
   const snapshot = sessionStore.load();
@@ -402,12 +402,12 @@ function truncate(str, max) {
 }
 
 function formatWeight(weight, unit) {
-  if (weight === null || weight === undefined) return '—';
+  if (weight === null || weight === undefined) return '-';
   return `${weight}${unit === 'lb' ? ' lb' : ' kg'}`;
 }
 
 function formatTargetReps(set) {
-  if (!set || set.targetReps === null) return '—';
+  if (!set || set.targetReps === null) return '-';
   const range = set.targetRepsMax ? `${set.targetReps}-${set.targetRepsMax}` : `${set.targetReps}`;
   return set.isAmrap ? `${range}+` : range;
 }
@@ -470,7 +470,7 @@ function renderSubtitle(text, { isError = false } = {}) {
 /**
  * Paged list with an optional featured entry on top.
  *
- * The featured entry is the one the account data points at — the active
+ * The featured entry is the one the account data points at - the active
  * program, the week you are in, the day after the one you last logged. It is
  * shown large and first because it is nearly always the one wanted, but it is
  * still a button: nothing is chosen until it is tapped. Everything else stays
@@ -1121,7 +1121,7 @@ function renderActiveSetScreen(view) {
       }`;
     } else {
       targetText = `Warmup ${formatTargetReps(set)} × ${
-        set.targetWeightPercent ? `${set.targetWeightPercent}%` : '—'
+        set.targetWeightPercent ? `${set.targetWeightPercent}%` : '-'
       }`;
     }
   } else {
@@ -1147,7 +1147,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(170),
     label: view.unit.toUpperCase(),
-    value: set.weight === null ? '—' : String(set.weight),
+    value: set.weight === null ? '-' : String(set.weight),
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
     onPlus: () => persistAndRender(() => session.adjustWeight(1)),
   });
@@ -1156,7 +1156,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(236),
     label: 'REPS',
-    value: set.reps === null ? '—' : String(set.reps),
+    value: set.reps === null ? '-' : String(set.reps),
     onMinus: () => persistAndRender(() => session.adjustReps(-1)),
     onPlus: () => persistAndRender(() => session.adjustReps(1)),
   });
@@ -1165,7 +1165,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(302),
     label: 'RPE',
-    value: set.rpe === null ? '—' : String(set.rpe),
+    value: set.rpe === null ? '-' : String(set.rpe),
     onMinus: () => persistAndRender(() => session.adjustRpe(-0.5)),
     onPlus: () => persistAndRender(() => session.adjustRpe(0.5)),
   });

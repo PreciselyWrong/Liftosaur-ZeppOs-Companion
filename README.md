@@ -24,7 +24,7 @@ the watch offers next.
 
 - **Explicit selection**: program, week and day are chosen by you, from lists the API returns. Your most recent workout is shown so you can see where you left off.
 - **Real prescriptions**: exercises, sets, rep ranges, AMRAP markers, weights, RPE targets and rest timers all come from the Playground, in your program's unit.
-- **Faithful write-back**: at finish, the session is replayed to Liftosaur as playground commands, so the saved record is exactly what you did. Progressions — including custom `progress:` scripts and `used: none` templates — are computed by Liftosaur, never re-implemented here.
+- **Faithful write-back**: at finish, the session is replayed to Liftosaur as playground commands, so the saved record is exactly what you did. Progressions - including custom `progress:` scripts and `used: none` templates - are computed by Liftosaur, never re-implemented here.
 - **Never overwrites a remote edit**: the program text is fingerprinted when the plan is built and re-checked before writing. If the program changed meanwhile, the workout is still saved and the progression is skipped.
 - **Live heart rate** via `@zos/sensor`, with zone colouring.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.
@@ -76,7 +76,7 @@ Shared, platform-independent modules:
 
 ### Known limits
 
-Warmup sets and superset grouping are absent from the Playground response — confirmed by
+Warmup sets and superset grouping are absent from the Playground response - confirmed by
 test. They are not absent from the API: both are named fields in the Liftoscript source
 that `GET /programs/:id` returns. Reading them back is planned; resolving a percentage
 warmup (`1x8 40%`) additionally needs Liftosaur's loadable-weight rounding. Until then the

@@ -27,7 +27,7 @@ The watch decides nothing about the content of a workout. It asks, the API answe
 
 There is no local Liftoscript evaluation, no next-day heuristic and no name-based filtering
 of days or exercises. [`shared/liftoscript-outline.js`](../../shared/liftoscript-outline.js)
-reads two grammar tokens — `# week` and `## day` — and nothing else.
+reads two grammar tokens - `# week` and `## day` - and nothing else.
 
 ## Selection flow
 
@@ -48,8 +48,8 @@ READY → ACTIVE_SET → REST → … → FINISHED
 FINISH_WORKOUT  (playground replay + finish_workout, then POST /history, then PUT /programs)
 ```
 
-Each picker features one entry — the active program, the week of the most recent
-`GET /history` record, the day after the one it names — large and first, with the rest of
+Each picker features one entry - the active program, the week of the most recent
+`GET /history` record, the day after the one it names - large and first, with the rest of
 the list one page below. [`shared/selection.js`](../../shared/selection.js) computes those
 indices from account data only. A featured entry is still a button: it suggests, it never
 selects. When the history points nowhere the list is shown flat.
@@ -57,7 +57,7 @@ selects. When the history points nowhere the list is shown flat.
 ## Rendering the clock
 
 A full re-render tears down and rebuilds every widget, which takes long enough on the watch
-that a once-a-second redraw drops ticks — the countdown then jumps two seconds at a time.
+that a once-a-second redraw drops ticks - the countdown then jumps two seconds at a time.
 The elapsed, heart-rate and rest-timer texts are therefore registered as live widgets and
 patched in place with `setProperty(prop.MORE, …)`, re-sending their complete property set
 so geometry is not lost. The tick samples every 250 ms and writes only when the displayed
@@ -97,9 +97,9 @@ lifecycle churn cannot skew it.
 
 ## Network states
 
-- `ONLINE` — Side Service reachable and last call succeeded.
-- `DEGRADED` — Side Service reachable, calls failing or timing out; queue and retry.
-- `OFFLINE` — no Side Service link; session continues fully locally.
+- `ONLINE` - Side Service reachable and last call succeeded.
+- `DEGRADED` - Side Service reachable, calls failing or timing out; queue and retry.
+- `OFFLINE` - no Side Service link; session continues fully locally.
 
 The watch is usable in all three. Only synchronisation degrades.
 
@@ -132,7 +132,7 @@ export function Progress_isCurrent(progress: IHistoryRecord | undefined): boolea
 
 An in-progress workout lives in `storage.progress` and is identified by `id === 0`.
 `POST /api/v1/history` writes into `storage.history`, and the Liftohistory deserializer
-assigns `id: startTime` — a timestamp, never `0`. **A record created through the public API
+assigns `id: startTime` - a timestamp, never `0`. **A record created through the public API
 is a finished workout by construction.** Omitting `duration:` only leaves `endTime`
 undefined; `isCurrent` never looks at `endTime`. So a live session appeared in the history
 as one already finished, and no field could change that.
@@ -148,12 +148,12 @@ another device** is not offered by the public API: the Liftosaur app and web pag
 in-progress state through `storage.progress` in Liftosaur's own private sync, and the REST
 API exposes no route to it.
 
-Resuming therefore works on the watch itself — after a crash, a reboot, or the app being
-killed — and not across devices.
+Resuming therefore works on the watch itself - after a crash, a reboot, or the app being
+killed - and not across devices.
 
 ## Known API limits
 
-Warmup sets and superset grouping are absent from the **playground** output — verified, see
+Warmup sets and superset grouping are absent from the **playground** output - verified, see
 [liftosaur-api.md](liftosaur-api.md). They are not absent from the API: both are named
 fields in the Liftoscript source that `GET /programs/:id` returns, and `warmup:` is part of
 the Liftohistory grammar. Reading them back means parsing the day's block in the program

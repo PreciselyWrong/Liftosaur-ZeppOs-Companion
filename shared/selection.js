@@ -15,7 +15,7 @@ export function suggestedProgramIndex(programs = []) {
 }
 
 /**
- * The week the last workout was in — or the one after it, when that workout was
+ * The week the last workout was in - or the one after it, when that workout was
  * the last day of its week.
  */
 export function suggestedWeekIndex(weeks = [], lastWorkout = null) {
@@ -55,7 +55,7 @@ export function withoutIndex(list = [], index = -1) {
 
 /**
  * The one week and day behind the home screen's start button, so that the
- * common case — carry on with the program — is a single tap.
+ * common case - carry on with the program - is a single tap.
  *
  * With no history to go on it offers the very first day of the program. That is
  * still an offer: the button names the day it would start.

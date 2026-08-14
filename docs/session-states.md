@@ -1,6 +1,6 @@
 # Session, Finalisation and Network States
 
-Specification only — Phase 0 defines these states without implementing them. Phase 1
+Specification only - Phase 0 defines these states without implementing them. Phase 1
 implements the session states; finalisation lands in Phase 4.
 
 ## Session states
@@ -14,7 +14,7 @@ implements the session states; finalisation lands in Phase 4.
 | `REST` | Rest running, bounded by `restEndsAt`. | `START_SET`, `SKIP_REST`, `FINISH` |
 | `FINISHING` | No sets left, or the user chose to finish. Local finalisation. | `FINALISED` |
 | `SYNCING` | Local session sealed; cloud commit in progress. | `SYNCED`, `SYNC_FAILED`, `UNKNOWN_COMMIT_STATE` |
-| `DONE` | Committed and reconciled. Session may be archived. | — |
+| `DONE` | Committed and reconciled. Session may be archived. | - |
 | `NEEDS_ATTENTION` | Sealed locally but not committed; user action required. | `RETRY`, `DISCARD` |
 
 ```
@@ -29,8 +29,8 @@ IDLE → LOADING → READY → ACTIVE_SET ⇄ REST
 
 These are rejected and logged, never coerced into something plausible:
 
-- `COMPLETE_SET` while in `REST` — the set is already closed.
-- `START_SET` while in `SYNCING`, `DONE`, or `NEEDS_ATTENTION` — the session is sealed.
+- `COMPLETE_SET` while in `REST` - the set is already closed.
+- `START_SET` while in `SYNCING`, `DONE`, or `NEEDS_ATTENTION` - the session is sealed.
 - Any edit of weight, reps or RPE outside `ACTIVE_SET`.
 - A second `COMPLETE_SET` carrying the same set identity (double tap, risk P1).
 - `LOADING` → `ACTIVE_SET` without a `READY` in between.
@@ -42,7 +42,7 @@ On launch, the journal is replayed and the resulting state decides the prompt:
 | Replayed state | Prompt |
 | --- | --- |
 | `ACTIVE_SET`, `REST`, `READY` | `RESUME` or `DISCARD` |
-| `FINISHING`, `SYNCING`, `NEEDS_ATTENTION` | `RETRY` or `DISCARD` — never auto-deleted |
+| `FINISHING`, `SYNCING`, `NEEDS_ATTENTION` | `RETRY` or `DISCARD` - never auto-deleted |
 | `DONE` | Archive silently, start fresh |
 
 `REST` is restored from `restEndsAt`, so an expired rest resurfaces as already overdue
@@ -55,8 +55,8 @@ persisted before it is attempted, so a crash never loses the knowledge that it w
 
 | Step | Call | On ambiguity |
 | --- | --- | --- |
-| 1 — history | `POST /history` | `UNKNOWN_COMMIT_STATE`: search `GET /history` for the expected record before any retry |
-| 2 — progression | `PUT /programs/current` | Compare the base program hash first; on mismatch raise `PROGRAM_CONFLICT` |
+| 1 - history | `POST /history` | `UNKNOWN_COMMIT_STATE`: search `GET /history` for the expected record before any retry |
+| 2 - progression | `PUT /programs/current` | Compare the base program hash first; on mismatch raise `PROGRAM_CONFLICT` |
 
 | State | Meaning |
 | --- | --- |
@@ -82,4 +82,4 @@ automatically, in any of these states.
 
 Transitions are driven by observed outcomes, not by a connectivity flag: a reachable phone
 with failing HTTP is `DEGRADED`, not `ONLINE`. The watch remains fully usable in all three
-states — only synchronisation degrades, never the ability to log a set.
+states - only synchronisation degrades, never the ability to log a set.
