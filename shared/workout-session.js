@@ -24,9 +24,12 @@ export const EVENT_TYPES = {
 export function createWorkoutSession({ workout, exercise, initialJournal = [] }) {
   const exercises = workout?.exercises ?? (exercise ? [exercise] : []);
   const workoutName = workout?.name ?? (exercise?.name ?? 'Workout');
+  const routineName = workout?.routineName ?? 'Routine';
 
   let state = SESSION_STATES.READY;
   let currentExerciseIndex = 0;
+  let workoutStartTime = null;
+  let workoutEndTime = null;
 
   // Per-exercise progress tracking: exerciseIndex -> { setIndex, currentWeight, currentReps, currentRpe, completedSets: [] }
   const exerciseProgress = exercises.map((ex) => ({
@@ -36,7 +39,6 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
     currentRpe: ex.sets[0]?.targetRpe ?? null,
     completedSets: [],
   }));
-
 
   let restInfo = null; // { startedAt, duration, endsAt }
   let journal = [];
@@ -55,7 +57,9 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
     switch (event.type) {
       case EVENT_TYPES.START_WORKOUT:
         state = SESSION_STATES.ACTIVE_SET;
+        workoutStartTime = event.timestamp;
         break;
+
 
       case EVENT_TYPES.SELECT_EXERCISE: {
         const targetIdx = event.payload.exerciseIndex;
@@ -238,6 +242,7 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
 
       case EVENT_TYPES.FINISH_WORKOUT:
         state = SESSION_STATES.FINISHED;
+        workoutEndTime = event.timestamp;
         restInfo = null;
         break;
     }
@@ -267,10 +272,51 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         };
       }
 
+      // Elapsed time calculation
+      let elapsedSeconds = 0;
+      if (workoutStartTime) {
+        const end = workoutEndTime || (state === SESSION_STATES.FINISHED ? now : now);
+        elapsedSeconds = Math.max(0, Math.floor((end - workoutStartTime) / 1000));
+      }
+
+      // Total Volume calculation (sum of reps * weight across all completed sets)
+      const allCompletedSets = exerciseProgress.flatMap((p) => p.completedSets);
+      const totalVolume = allCompletedSets.reduce((sum, s) => sum + (s.weight * s.reps), 0);
+
+      // Set status dots for current exercise (e.g. ['completed', 'active', 'pending'])
+      const exerciseSetsDots = ex.sets.map((_, setIdx) => {
+        if (setIdx < prog.completedSets.length) return 'completed';
+        if (setIdx === prog.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
+        return 'pending';
+      });
+
+      // Exercises overview summary for the list view
+      const overviewExercises = exercises.map((e, idx) => {
+        const p = exerciseProgress[idx];
+        const dots = e.sets.map((_, sIdx) => {
+          if (sIdx < p.completedSets.length) return 'completed';
+          if (idx === currentExerciseIndex && sIdx === p.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
+          return 'pending';
+        });
+        return {
+          index: idx,
+          id: e.id,
+          name: e.name,
+          supersetTag: e.supersetTag ?? null,
+          totalSets: e.sets.length,
+          completedSetsCount: p.completedSets.length,
+          setsDots: dots,
+          prescriptionSummary: `${e.sets.length} × ${e.sets[0]?.targetReps ?? 0} @ ${e.sets[0]?.targetWeight ?? 0} kg`,
+        };
+      });
 
       return {
         state,
         workoutName,
+        routineName,
+        elapsedSeconds,
+        totalVolume,
+        totalCompletedSetsCount: allCompletedSets.length,
         totalExercises: exercises.length,
         currentExerciseIndex,
         exerciseId: ex.id,
@@ -278,6 +324,8 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
         supersetTag: ex.supersetTag ?? null,
         totalSets: ex.sets.length,
         currentSetIndex: prog.currentSetIndex,
+        exerciseSetsDots,
+        overviewExercises,
         currentSet: {
           weight: prog.currentWeight,
           reps: prog.currentReps,
@@ -287,10 +335,11 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
           targetRpe: ex.sets[prog.currentSetIndex]?.targetRpe ?? null,
         },
         completedSets: [...prog.completedSets],
-        allCompletedSets: exerciseProgress.flatMap((p) => p.completedSets),
+        allCompletedSets,
         rest: calculatedRest,
       };
     },
+
 
     startWorkout({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.READY) return;

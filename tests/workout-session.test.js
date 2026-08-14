@@ -230,6 +230,66 @@ test('session automatically jumps alternately between exercises in a superset', 
   assert.equal(session.view().state, SESSION_STATES.FINISHED);
 });
 
+test('session calculates total workout volume, elapsed time, and set dots status', () => {
+  const WORKOUT = {
+    id: 'w-1',
+    name: 'Week 1 - Workout A',
+    routineName: 'Basic Beginner Routine',
+    exercises: [
+      {
+        id: 'bench',
+        name: 'Bench Press, Barbell',
+        sets: [
+          { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
+          { targetReps: 5, targetWeight: 60, targetRpe: 8, restSeconds: 60 },
+          { targetReps: 5, targetWeight: 60, targetRpe: 8.5, restSeconds: 60 },
+        ],
+      },
+      {
+        id: 'squat',
+        name: 'Overhead Squat, Barbell',
+        sets: [
+          { targetReps: 5, targetWeight: 40, restSeconds: 90 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ workout: WORKOUT });
+  session.startWorkout({ timestamp: 1000 });
+
+  // Initial set dots on bench press
+  const v1 = session.view(2000);
+  assert.deepEqual(v1.exerciseSetsDots, ['active', 'pending', 'pending']);
+  assert.equal(v1.elapsedSeconds, 1);
+
+  // Complete set 1 of bench press (5 * 60 = 300 kg)
+  session.completeSet({ timestamp: 3000 });
+  session.nextSet({ timestamp: 4000 });
+
+  const v2 = session.view(5000);
+  assert.deepEqual(v2.exerciseSetsDots, ['completed', 'active', 'pending']);
+
+  // Complete set 2 (5 * 60 = 300 kg)
+  session.completeSet({ timestamp: 6000 });
+  session.nextSet({ timestamp: 7000 });
+
+  // Complete set 3 (5 * 60 = 300 kg)
+  session.completeSet({ timestamp: 8000 });
+  session.nextSet({ timestamp: 9000 });
+
+  // Now on Squat, complete 1 set (5 * 40 = 200 kg)
+  session.completeSet({ timestamp: 10000 });
+
+  // Summary check
+  const summary = session.view(11000);
+  assert.equal(summary.state, SESSION_STATES.FINISHED);
+  assert.equal(summary.totalVolume, 300 + 300 + 300 + 200); // 1100 kg
+  assert.equal(summary.totalCompletedSetsCount, 4);
+  assert.equal(summary.elapsedSeconds, 10); // 11000 - 1000 = 10s
+});
+
+
 
 
 
