@@ -103,6 +103,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
   let currentExerciseIndex = 0;
   let workoutStartTime = null;
   let workoutEndTime = null;
+  let totalPausedWorkoutDurationMs = 0;
+  let pauseStartedAt = null;
   let restInfo = null;
   let journal = [];
 
@@ -305,6 +307,9 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           const remaining = Math.max(0, Math.ceil((restInfo.endsAt - event.timestamp) / 1000));
           restInfo.isPaused = true;
           restInfo.pausedRemaining = remaining;
+          if (pauseStartedAt === null) {
+            pauseStartedAt = event.timestamp;
+          }
         }
         break;
       }
@@ -316,6 +321,10 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           restInfo.endsAt = event.timestamp + remaining * 1000;
           restInfo.startedAt = event.timestamp - (restInfo.duration - remaining) * 1000;
           restInfo.pausedRemaining = null;
+          if (pauseStartedAt !== null) {
+            totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
+            pauseStartedAt = null;
+          }
         }
         break;
       }
@@ -334,12 +343,20 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       }
 
       case EVENT_TYPES.NEXT_SET: {
+        if (pauseStartedAt !== null) {
+          totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
+          pauseStartedAt = null;
+        }
         restInfo = null;
         advanceToNextSet();
         break;
       }
 
       case EVENT_TYPES.FINISH_WORKOUT: {
+        if (pauseStartedAt !== null) {
+          totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
+          pauseStartedAt = null;
+        }
         state = SESSION_STATES.FINISHED;
         workoutEndTime = event.timestamp;
         restInfo = null;
@@ -350,6 +367,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         state = exercises.length === 0 ? SESSION_STATES.NO_PLAN : SESSION_STATES.READY;
         workoutStartTime = null;
         workoutEndTime = null;
+        totalPausedWorkoutDurationMs = 0;
+        pauseStartedAt = null;
         restInfo = null;
         currentExerciseIndex = 0;
         progress.forEach((prog, i) => {
@@ -447,10 +466,16 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         0
       );
 
-      const elapsedSeconds =
+      const currentPauseMs =
+        pauseStartedAt !== null ? Math.max(0, (workoutEndTime ?? now) - pauseStartedAt) : 0;
+      const activeElapsedMs =
         workoutStartTime === null
           ? 0
-          : Math.max(0, Math.floor(((workoutEndTime ?? now) - workoutStartTime) / 1000));
+          : Math.max(
+              0,
+              (workoutEndTime ?? now) - workoutStartTime - totalPausedWorkoutDurationMs - currentPauseMs
+            );
+      const elapsedSeconds = Math.floor(activeElapsedMs / 1000);
 
       let rest = null;
       if (restInfo) {
