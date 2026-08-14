@@ -176,6 +176,10 @@ export function buildProgressRecord({ plan, completedSets = [], startedAt = null
           isAmrap: false,
           repsLeft: null,
         })),
+      // The prescription is known from the day plan, so the record carries it
+      // like any Liftosaur record. Without it the exercise reads as having no
+      // target at all.
+      targetSets: Array.isArray(exercise.sets) ? exercise.sets : [],
     });
   }
 

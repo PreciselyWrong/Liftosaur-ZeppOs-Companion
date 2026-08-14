@@ -135,27 +135,35 @@ between two requests, so anything it would need to remember — which day is bei
 which history record the session owns — travels in the message. Its caches are an
 optimisation, never a requirement.
 
-### Ongoing versus finished
+### A live record is a past workout, and cannot be otherwise
 
-A live record must **not** state a `duration:`. The Liftohistory deserializer derives the
-end of a workout from it:
+This was established the hard way, so it is written down plainly. In Liftosaur:
 
 ```ts
-const endTime = durationSec != null ? startTime + durationSec * 1000 : undefined;
+export function Progress_isCurrent(progress: IHistoryRecord | undefined): boolean {
+  return progress?.id === 0;
+}
 ```
 
-so a record carrying a duration has an `endTime` and is a finished workout. Omitting it
-leaves `endTime` undefined, which is what an unfinished session looks like. The duration is
-written exactly once, at finish, when it is known — which is also the moment the record
-stops being ongoing.
+An in-progress workout lives in `storage.progress` and is identified by `id === 0`.
+`POST /api/v1/history` writes into `storage.history`, and the Liftohistory deserializer sets
+`id: startTime` — a timestamp, never `0`. **A record created through the public API is
+therefore a finished workout by construction.**
+
+Omitting `duration:` only leaves `endTime` undefined, which changes how a duration is
+displayed. It does not make the record current: `isCurrent` never looks at `endTime`.
+
+The live record still earns its place — it puts the session on the server after every set,
+so a destroyed watch loses nothing — but it must be understood as a past-dated record that
+grows, not as an ongoing session. It carries its `target:` prescription from the day plan so
+it reads like any other record rather than one with no target at all.
 
 ## Cross-device resume
 
-A session started on the watch is visible in Liftosaur while it happens, and a session
-finished anywhere is visible everywhere. Continuing a half-finished workout **on another
-device** is a separate mechanism the public API does not offer: the Liftosaur app and web
-page share in-progress state through Liftosaur's own private storage, and there is no
-in-progress workout resource in the REST API.
+A session finished anywhere is visible everywhere. Continuing a half-finished workout **on
+another device** is not offered by the public API: the Liftosaur app and web page share
+in-progress state through `storage.progress` in Liftosaur's own private sync, and the REST
+API exposes no route to it.
 
 Resuming therefore works on the watch itself — after a crash, a reboot, or the app being
 killed — and not across devices.

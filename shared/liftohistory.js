@@ -299,6 +299,46 @@ export function formatSetGroups(sets) {
 }
 
 /**
+ * Formats a `target:` section: the prescription, with its rep range, AMRAP
+ * marker, RPE and rest timer. Unlike completed sets, a target keeps the timer.
+ */
+export function formatTargetGroups(sets) {
+  const chunks = [];
+  let run = null;
+
+  for (const set of sets) {
+    const signature = [
+      set.targetReps,
+      set.targetRepsMax ?? '',
+      set.isAmrap ? '+' : '',
+      set.targetWeight ?? '',
+      set.unit ?? '',
+      set.targetRpe ?? '',
+      set.restSeconds ?? '',
+    ].join('|');
+
+    if (run && run.signature === signature) {
+      run.count += 1;
+      continue;
+    }
+    run = { signature, count: 1, set };
+    chunks.push(run);
+  }
+
+  return chunks
+    .map(({ count, set }) => {
+      const reps = set.targetRepsMax ? `${set.targetReps}-${set.targetRepsMax}` : `${set.targetReps}`;
+      let out = `${count}x${reps}${set.isAmrap ? '+' : ''}`;
+      const weight = formatWeight(set.targetWeight, set.unit);
+      if (weight !== null) out += ` ${weight}`;
+      if (set.targetRpe !== null && set.targetRpe !== undefined) out += ` @${set.targetRpe}`;
+      if (set.restSeconds !== null && set.restSeconds !== undefined) out += ` ${set.restSeconds}s`;
+      return out;
+    })
+    .join(', ');
+}
+
+/**
  * Writes a Liftohistory record. Used only for the offline fallback: when the
  * playground is reachable its own `workout` output is submitted verbatim, so
  * the watch never rewrites what the server already serialized.
@@ -328,7 +368,11 @@ export function serializeLiftohistoryRecord({
     .filter((exercise) => Array.isArray(exercise.sets) && exercise.sets.length > 0)
     .map((exercise) => {
       const name = exercise.equipment ? `${exercise.name}, ${exercise.equipment}` : exercise.name;
-      return `  ${name} / ${formatSetGroups(exercise.sets)}`;
+      const parts = [`  ${name}`, formatSetGroups(exercise.sets)];
+      if (Array.isArray(exercise.targetSets) && exercise.targetSets.length > 0) {
+        parts.push(`target: ${formatTargetGroups(exercise.targetSets)}`);
+      }
+      return parts.join(' / ');
     });
 
   return `${header.join(' / ')}\n${body.join('\n')}\n}`;
