@@ -1,10 +1,18 @@
 # Liftosaur for Zepp OS
 
-Standalone [Liftosaur](https://www.liftosaur.com) workout tracking client for Amazfit smartwatches running Zepp OS (target: Amazfit Active 2 and compatible round watches).
+Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking client for Amazfit smartwatches running Zepp OS (target: Amazfit Active 2 and compatible round watches).
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-141%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-162%20passing-brightgreen.svg)
+
+<p align="center">
+  <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
+  <img src="docs/screenshots/active-set.png" width="19%" alt="Active Set" />
+  <img src="docs/screenshots/rest-timer.png" width="19%" alt="Rest Timer" />
+  <img src="docs/screenshots/workout-overview.png" width="19%" alt="Workout Overview" />
+  <img src="docs/screenshots/workout-summary.png" width="19%" alt="Workout Summary" />
+</p>
 
 ---
 
@@ -104,6 +112,12 @@ zeus dev -t "Amazfit Active 2 (Round)"
 # Generate QR code for real device testing
 zeus preview -t "Amazfit Active 2 (Round)"
 ```
+
+---
+
+## Disclaimer
+
+This project is an independent open-source client and is not affiliated with, maintained by, or endorsed by Anton Astashov ([@astashov](https://github.com/astashov)) or the official [Liftosaur](https://github.com/astashov/liftosaur) project. Liftosaur is a registered trademark of its respective owner.
 
 ---
 
