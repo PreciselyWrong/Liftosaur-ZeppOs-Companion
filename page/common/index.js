@@ -897,6 +897,11 @@ function stopUnifiedClock() {
   }
 }
 
+import {
+  MESSAGE_TYPES,
+  createMessage,
+} from '../../shared/protocol.js';
+
 // ── Page Declaration ──────────────────────────────────────────────────────────
 
 Page(
@@ -907,6 +912,27 @@ Page(
 
     build() {
       console.log('[liftosaur] page build');
+
+      // Fetch fresh workout prescription from Side Service if no active in-flight session
+      if (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0) {
+        try {
+          this.request(createMessage({ type: MESSAGE_TYPES.GET_CURRENT_WORKOUT }))
+            .then((res) => {
+              if (res && res.type === MESSAGE_TYPES.WORKOUT_DATA && res.payload?.workout) {
+                console.log('[liftosaur] received workout from side service:', res.payload.workout.name);
+                if (session.view().state === SESSION_STATES.READY && session.getJournal().length === 0) {
+                  session = createWorkoutSession({ workout: res.payload.workout });
+                  renderUI();
+                }
+              }
+            })
+            .catch((err) => {
+              console.log('[liftosaur] side service fetch skipped/offline:', err?.message || String(err));
+            });
+        } catch (err) {
+          console.log('[liftosaur] request dispatch error:', err?.message || String(err));
+        }
+      }
 
       // Register horizontal swipe gestures to switch exercises
       try {
@@ -965,3 +991,4 @@ Page(
     },
   })
 );
+
