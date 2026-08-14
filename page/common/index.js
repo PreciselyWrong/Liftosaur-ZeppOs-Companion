@@ -102,15 +102,23 @@ function addWidget(type, props) {
   return w;
 }
 
-function requestProgramFromSideService(isManual = false) {
+let currentRequestedDayIndex = 0;
+
+function requestProgramFromSideService(isManual = false, dayIndex = null) {
   if (!pageInstance || typeof pageInstance.request !== 'function') return;
   isSyncing = true;
   syncErrorMessage = '';
+  if (dayIndex !== null) {
+    currentRequestedDayIndex = dayIndex;
+  }
   if (isManual) renderUI();
 
   try {
     pageInstance
-      .request(createMessage({ type: MESSAGE_TYPES.GET_CURRENT_WORKOUT }))
+      .request(createMessage({
+        type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
+        payload: { dayIndex: currentRequestedDayIndex },
+      }))
       .then((res) => {
         isSyncing = false;
         if (res && res.type === MESSAGE_TYPES.WORKOUT_DATA && res.payload) {
@@ -124,7 +132,7 @@ function requestProgramFromSideService(isManual = false) {
             renderUI();
           }
         } else if (res && res.type === MESSAGE_TYPES.ERROR) {
-          syncErrorMessage = res.payload?.message || 'Connection error';
+          syncErrorMessage = res.payload?.message || 'Liftosaur API error';
           renderUI();
         }
       })
@@ -141,6 +149,7 @@ function requestProgramFromSideService(isManual = false) {
     renderUI();
   }
 }
+
 
 function asyncSideSyncJournal() {
   if (!pageInstance || typeof pageInstance.request !== 'function') return;
@@ -405,57 +414,110 @@ function renderUI() {
       color: THEME.card,
     });
 
+    const shortWorkoutName = view.workoutName.length > 20 ? view.workoutName.slice(0, 18) + '…' : view.workoutName;
     addWidget(widget.TEXT, {
       x: px(85),
-      y: px(112),
+      y: px(108),
       w: px(310),
-      h: px(38),
+      h: px(36),
       color: THEME.textPrimary,
-      text_size: px(26),
+      text_size: px(24),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: view.workoutName,
+      text: shortWorkoutName,
     });
 
     addWidget(widget.TEXT, {
       x: px(85),
-      y: px(152),
+      y: px(144),
       w: px(310),
-      h: px(30),
+      h: px(28),
       color: THEME.primaryLight,
-      text_size: px(20),
+      text_size: px(19),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: view.routineName,
     });
 
+    // Multi-day selector if program has multiple days
+    if (view.totalDays && view.totalDays > 1) {
+      const curIdx = view.currentDayIndex ?? currentRequestedDayIndex;
+
+      addWidget(widget.BUTTON, {
+        x: px(75),
+        y: px(178),
+        w: px(44),
+        h: px(38),
+        radius: px(12),
+        normal_color: THEME.primaryDark,
+        press_color: THEME.cardActive,
+        text: '<',
+        text_size: px(22),
+        click_func: () => {
+          const prevDay = (curIdx - 1 + view.totalDays) % view.totalDays;
+          requestProgramFromSideService(true, prevDay);
+        },
+      });
+
+      addWidget(widget.TEXT, {
+        x: px(122),
+        y: px(178),
+        w: px(236),
+        h: px(38),
+        color: THEME.orange,
+        text_size: px(18),
+        align_h: align.CENTER_H,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: `Day ${curIdx + 1}/${view.totalDays}`,
+      });
+
+      addWidget(widget.BUTTON, {
+        x: px(361),
+        y: px(178),
+        w: px(44),
+        h: px(38),
+        radius: px(12),
+        normal_color: THEME.primaryDark,
+        press_color: THEME.cardActive,
+        text: '>',
+        text_size: px(22),
+        click_func: () => {
+          const nextDay = (curIdx + 1) % view.totalDays;
+          requestProgramFromSideService(true, nextDay);
+        },
+      });
+    } else {
+      addWidget(widget.TEXT, {
+        x: px(85),
+        y: px(180),
+        w: px(310),
+        h: px(26),
+        color: THEME.textSecondary,
+        text_size: px(18),
+        align_h: align.CENTER_H,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: `${view.totalExercises} exercises`,
+      });
+    }
+
+    const shortFirstEx = view.exerciseName.length > 22 ? view.exerciseName.slice(0, 20) + '…' : view.exerciseName;
     addWidget(widget.TEXT, {
       x: px(85),
-      y: px(192),
+      y: px(224),
       w: px(310),
-      h: px(28),
-      color: THEME.textSecondary,
-      text_size: px(19),
+      h: px(36),
+      color: THEME.textDisabled,
+      text_size: px(17),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: `${view.totalExercises} exercises • Swipe to switch`,
+      text: `First: ${shortFirstEx}`,
     });
 
-    addWidget(widget.TEXT, {
-      x: px(85),
-      y: px(230),
-      w: px(310),
-      h: px(40),
-      color: THEME.textDisabled,
-      text_size: px(18),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: `First: ${view.exerciseName}`,
-    });
 
     addWidget(widget.BUTTON, {
       x: px(90),

@@ -1,36 +1,80 @@
 AppSettingsPage({
+  state: {
+    apiKey: '',
+  },
+
   build(props) {
+    this.getStorage(props);
+
     return Section(
       {
-        title: 'Liftosaur Account',
-        description: 'Sync with Liftosaur Cloud',
+        title: 'Liftosaur Settings',
+        description: 'Connect with your Liftosaur Cloud account',
       },
       [
         TextInput({
           label: 'API Key',
-          settingsKey: 'apiKey',
-          placeholder: 'lftsk_...',
           labelStyle: {
-            color: '#111111',
+            color: '#8356F6',
+            fontSize: '16px',
+            fontWeight: 'bold',
+          },
+          placeholder: 'lftsk_...',
+          value: this.state.apiKey,
+          settingsKey: 'apiKey',
+          subStyle: {
+            color: '#777777',
+            fontSize: '12px',
+          },
+          description: 'Paste your Liftosaur personal API key',
+          onChange: (val) => {
+            const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
+            this.state.apiKey = clean;
+            props.settingsStorage.setItem('apiKey', clean);
+          },
+        }),
+        Button({
+          label: 'Save & Synchronize',
+          style: {
+            marginTop: '16px',
+            backgroundColor: '#8356F6',
+            color: '#FFFFFF',
+            borderRadius: '10px',
             fontSize: '15px',
             fontWeight: 'bold',
           },
-          subStyle: {
-            color: '#666666',
-            fontSize: '12px',
+          onClick: () => {
+            if (this.state.apiKey) {
+              props.settingsStorage.setItem('apiKey', this.state.apiKey.trim());
+            }
           },
-          description: 'Paste your API key (starts with lftsk_)',
         }),
         Text({
           style: {
             color: '#555555',
             fontSize: '13px',
-            marginTop: '12px',
+            marginTop: '14px',
             lineHeight: '18px',
           },
-          value: 'How to find your key: Open liftosaur.com or the Liftosaur app -> Settings -> API Keys.',
+          value: 'To find your API Key:\n1. Open liftosaur.com (or the Liftosaur App)\n2. Go to Settings > API Keys\n3. Copy your key and paste it above.',
         }),
       ]
     );
+  },
+
+  getStorage(props) {
+    const raw = props.settingsStorage.getItem('apiKey');
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        this.state.apiKey = typeof parsed === 'string' ? parsed : (parsed?.value || raw);
+      } catch (e) {
+        this.state.apiKey = raw;
+      }
+    } else if (typeof raw === 'object' && raw !== null) {
+      this.state.apiKey = raw.value || '';
+    } else {
+      this.state.apiKey = '';
+    }
   },
 });
