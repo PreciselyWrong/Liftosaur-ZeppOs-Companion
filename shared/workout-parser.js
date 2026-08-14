@@ -246,17 +246,19 @@ function parseLineStructure(rawText, defaultName = 'Workout') {
     if (!line || line.startsWith('```') || line.startsWith('---')) continue;
 
     // Check for Week / Semaine heading:
-    // "# Week 1", "## Week 1", "Week 1", "# Semaine 1", "Semaine 1", "W1", "S1"
-    const weekHeading = line.match(/^(?:#{1,3}\s+)?((?:Week|Semaine|W|S)\s*([0-9A-Za-z]+).*)$/i);
+    // Requires a number, e.g. "Week 1", "# Week 1", "Semaine 2", "W1", "S2"
+    // NEVER match words like "Squat", "Shoulder Press", "Seated Row", "Standing Calf"
+    const weekHeading = line.match(/^(?:#{1,3}\s+)?(?:(?:Week|Semaine)\s*([0-9]+)|(?:W|S)\s*([0-9]+))\b(.*)$/i);
     const isBareWeek = weekHeading && (line.startsWith('#') || !line.includes('/') && !line.includes('x') && !line.includes(':'));
 
     if (isBareWeek) {
       flushWeek();
-      const rawNum = parseInt(weekHeading[2], 10);
+      const rawNum = parseInt(weekHeading[1] || weekHeading[2], 10);
       const weekNum = !isNaN(rawNum) && rawNum > 0 ? rawNum : rawWeeks.length + 1;
+      const weekName = line.replace(/^#+\s*/, '').trim();
       currentWeek = {
         weekNumber: weekNum,
-        name: weekHeading[1].trim(),
+        name: weekName,
         days: [],
         hasExplicitWeekHeader: true,
       };
@@ -267,8 +269,8 @@ function parseLineStructure(rawText, defaultName = 'Workout') {
     // Check for Day / Jour / Workout / Subheading:
     // "## Day 1", "# Day 1", "Day 1", "Jour 1", "## Jour 1", "### Push", "Push", "Pull", "Legs", "Workout A"
     const markdownHeading = line.match(/^#{1,4}\s+(.*)$/);
-    const plainDayHeading = line.match(/^(?:Day|Jour|Workout|Session|Seance|Séance)\s*([0-9A-Za-z]+.*)$/i);
-    const plainSplitHeading = line.match(/^(?:Push|Pull|Legs|Upper|Lower|Chest|Back|Arms|Shoulders|Full\s*Body|Poussée|Tirage|Jambes|Haut|Bas)\b/i);
+    const plainDayHeading = line.match(/^(?:Day|Jour|Workout|Session|Seance|Séance)\s*(?:[0-9]+|[A-Fa-f]\b).*$/i);
+    const plainSplitHeading = line.match(/^(?:Push|Pull|Legs|Upper|Lower|Chest|Back|Arms|Shoulders|Full\s*Body|Poussée|Tirage|Jambes|Haut|Bas)\s*(?:Day|Jour|\b|$)/i);
 
     let isDay = false;
     let dayTitle = '';
