@@ -161,6 +161,12 @@ function addLiveText(key, props) {
   return w;
 }
 
+function addLiveButton(key, props) {
+  const w = addWidget(widget.BUTTON, props);
+  liveWidgets[key] = { widget: w, props: { ...props } };
+  return w;
+}
+
 /** Returns false when the runtime refused the in-place update, so the caller can fall back. */
 function updateLiveText(key, changes) {
   const entry = liveWidgets[key];
@@ -451,7 +457,66 @@ function supersetColor(group) {
   return SUPERSET_COLORS[key] || THEME.primaryLight;
 }
 
+let notesPage = 0;
+
+function formatNotesMarkdown(raw) {
+  if (!raw) return 'No notes for this exercise.';
+  return String(raw)
+    .replace(/\r\n/g, '\n')
+    .replace(/^#{1,6}\s+(.*)$/gm, '$1') // remove markdown headers
+    .replace(/^[\*\-]\s+(.*)$/gm, '• $1') // list bullets
+    .replace(/^\d+\.\s+(.*)$/gm, '• $1') // numbered lists
+    .replace(/\*\*(.*?)\*\*/g, '$1') // bold
+    .replace(/\*(.*?)\*/g, '$1') // italic
+    .replace(/`(.*?)`/g, '$1') // code
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1') // links
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+function paginateNotes(text, maxCharsPerPage = 210) {
+  const formatted = formatNotesMarkdown(text);
+  if (formatted.length <= maxCharsPerPage) return [formatted];
+
+  const paragraphs = formatted.split('\n');
+  const pages = [];
+  let currentPage = '';
+
+  for (const para of paragraphs) {
+    if ((currentPage + '\n' + para).trim().length > maxCharsPerPage) {
+      if (currentPage.trim()) {
+        pages.push(currentPage.trim());
+        currentPage = '';
+      }
+      if (para.length > maxCharsPerPage) {
+        const words = para.split(' ');
+        for (const word of words) {
+          if ((currentPage + ' ' + word).trim().length > maxCharsPerPage) {
+            pages.push(currentPage.trim());
+            currentPage = word;
+          } else {
+            currentPage = (currentPage + ' ' + word).trim();
+          }
+        }
+      } else {
+        currentPage = para;
+      }
+    } else {
+      currentPage = currentPage ? `${currentPage}\n${para}` : para;
+    }
+  }
+  if (currentPage.trim()) {
+    pages.push(currentPage.trim());
+  }
+  return pages.length > 0 ? pages : [formatted];
+}
+
 function renderNotesModal() {
+  const pages = paginateNotes(activeNotesContent);
+  const totalPages = pages.length;
+  if (notesPage >= totalPages) notesPage = totalPages - 1;
+  if (notesPage < 0) notesPage = 0;
+
   addWidget(widget.FILL_RECT, {
     x: px(40),
     y: px(40),
@@ -463,9 +528,9 @@ function renderNotesModal() {
 
   addWidget(widget.TEXT, {
     x: px(56),
-    y: px(56),
+    y: px(52),
     w: px(368),
-    h: px(30),
+    h: px(28),
     color: THEME.textPrimary,
     text_size: px(20),
     align_h: align.CENTER_H,
@@ -476,11 +541,11 @@ function renderNotesModal() {
 
   addWidget(widget.TEXT, {
     x: px(56),
-    y: px(88),
+    y: px(82),
     w: px(368),
-    h: px(22),
+    h: px(20),
     color: THEME.primaryLight,
-    text_size: px(14),
+    text_size: px(13),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -489,32 +554,97 @@ function renderNotesModal() {
 
   addWidget(widget.TEXT, {
     x: px(56),
-    y: px(120),
+    y: px(108),
     w: px(368),
-    h: px(210),
+    h: px(226),
     color: THEME.textSecondary,
     text_size: px(17),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: activeNotesContent || 'No notes for this exercise.',
+    text: pages[notesPage] || 'No notes for this exercise.',
   });
 
-  addWidget(widget.BUTTON, {
-    x: px(140),
-    y: px(348),
-    w: px(200),
-    h: px(58),
-    radius: px(29),
-    normal_color: THEME.primary,
-    press_color: THEME.primaryDeep,
-    text: 'Close',
-    text_size: px(20),
-    click_func: () => {
-      isNotesModalOpen = false;
-      renderUI();
-    },
-  });
+  if (totalPages > 1) {
+    addWidget(widget.BUTTON, {
+      x: px(58),
+      y: px(348),
+      w: px(58),
+      h: px(54),
+      radius: px(27),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      text: '‹',
+      text_size: px(22),
+      click_func: () => {
+        notesPage = (notesPage - 1 + totalPages) % totalPages;
+        renderUI();
+      },
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(118),
+      y: px(348),
+      w: px(60),
+      h: px(54),
+      color: THEME.textMuted,
+      text_size: px(15),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: `${notesPage + 1}/${totalPages}`,
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(180),
+      y: px(348),
+      w: px(58),
+      h: px(54),
+      radius: px(27),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      text: '›',
+      text_size: px(22),
+      click_func: () => {
+        notesPage = (notesPage + 1) % totalPages;
+        renderUI();
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(252),
+      y: px(348),
+      w: px(160),
+      h: px(54),
+      radius: px(27),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      text: 'Close',
+      text_size: px(19),
+      click_func: () => {
+        isNotesModalOpen = false;
+        notesPage = 0;
+        renderUI();
+      },
+    });
+  } else {
+    addWidget(widget.BUTTON, {
+      x: px(140),
+      y: px(348),
+      w: px(200),
+      h: px(56),
+      radius: px(28),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      text: 'Close',
+      text_size: px(20),
+      click_func: () => {
+        isNotesModalOpen = false;
+        notesPage = 0;
+        renderUI();
+      },
+    });
+  }
 }
 
 function heartRateColor(hrVal) {
@@ -1205,7 +1335,7 @@ function renderActiveSetScreen(view) {
       },
     });
 
-    addWidget(widget.BUTTON, {
+    addLiveButton('restBannerText', {
       x: px(134),
       y: px(42),
       w: px(264),
@@ -1213,23 +1343,13 @@ function renderActiveSetScreen(view) {
       radius: px(20),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
+      color: bannerColor,
+      text_size: px(18),
+      text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
       click_func: () => {
         isRestMinimized = false;
         renderUI();
       },
-    });
-
-    addLiveText('restBannerText', {
-      x: px(134),
-      y: px(42),
-      w: px(264),
-      h: px(40),
-      color: bannerColor,
-      text_size: px(18),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
     });
   } else {
     renderTopBar(view, () => {
@@ -1264,6 +1384,7 @@ function renderActiveSetScreen(view) {
       text: 'ℹ',
       text_size: px(18),
       click_func: () => {
+        notesPage = 0;
         isNotesModalOpen = true;
         activeNotesTitle = view.exerciseName;
         activeNotesContent = view.exerciseNotes;
@@ -1563,6 +1684,7 @@ function renderRestScreen(view) {
         text: 'ℹ',
         text_size: px(16),
         click_func: () => {
+          notesPage = 0;
           isNotesModalOpen = true;
           activeNotesTitle = rest.nextExerciseName;
           activeNotesContent = rest.nextExerciseNotes;
