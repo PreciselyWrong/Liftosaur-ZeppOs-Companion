@@ -240,6 +240,7 @@ test('finishes by replaying the session, saving history, then the progression', 
 
   const submitted = client.calls.createHistory[0];
   assert.ok(submitted.startsWith('2026-08-14 09:00:00 +00:00 /'), 'uses the watch start time');
+  assert.ok(submitted.includes('program: "Test"'), 'uses the real program name');
   assert.ok(submitted.includes('duration: 3600s'), 'states the measured duration');
   assert.ok(submitted.includes('Decline Bench Press'), 'keeps the server exercises block');
 

@@ -1,5 +1,11 @@
 # Changelog
 
+## [2.0.3] - 14 août 2026
+
+### Corrections
+- Résolution du problème d'enregistrement de l'historique de séance sur le compte en ligne.
+- Mettre en pause le repos suspend désormais aussi le chrono global de la séance.
+
 ## [2.0.2] - 14 août 2026
 
 ### Nouveautés

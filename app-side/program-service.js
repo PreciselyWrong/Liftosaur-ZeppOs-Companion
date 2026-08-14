@@ -282,6 +282,7 @@ export function createProgramService({ client, referenceData = null } = {}) {
       const recordText = rewriteRecordHeader(response.workout, {
         date: startedAt ? new Date(startedAt) : null,
         durationSeconds,
+        programName: program.name,
       });
 
       const created = await commitHistory(recordText, startedAt);
