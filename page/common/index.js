@@ -210,6 +210,33 @@ function asyncSideSubmitHistory() {
   }
 }
 
+function asyncSideAbandonWorkout() {
+  if (!pageInstance || typeof pageInstance.request !== 'function') return;
+  try {
+    const view = session.view();
+    pageInstance
+      .request(
+        createMessage({
+          type: MESSAGE_TYPES.ABANDON_WORKOUT,
+          sessionId: view.workoutName,
+          payload: {
+            workoutName: view.workoutName,
+            routineName: view.routineName,
+            abandonedAt: Date.now(),
+          },
+        })
+      )
+      .then((res) => {
+        console.log('[liftosaur] workout abandon notified to side service');
+      })
+      .catch((err) => {
+        console.log('[liftosaur] abandon notify error:', err?.message || String(err));
+      });
+  } catch (err) {
+    console.log('[liftosaur] abandon dispatch error:', err?.message || String(err));
+  }
+}
+
 function persistAndRender(action) {
   if (action) {
     action();
@@ -449,8 +476,10 @@ function renderUI() {
       text_size: px(20),
       click_func: () => {
         isOverviewListOpen = false;
-        sessionStore.clear();
+        sessionStore.clearSession();
         persistAndRender(() => session.cancelWorkout());
+        asyncSideAbandonWorkout();
+        requestProgramFromSideService(false);
       },
     });
 

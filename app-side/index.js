@@ -119,6 +119,10 @@ const router = createSideRouter({
     }
   },
 
+  workoutAbandoner: async (payload) => {
+    console.log('[liftosaur-side] workout session abandoned/canceled:', payload?.workoutName || 'unnamed');
+    return { status: 'abandoned' };
+  },
 });
 
 AppSideService(
