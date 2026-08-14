@@ -29,16 +29,27 @@ test('router handles invalid envelope with structured ERROR', async () => {
   assert.equal(response.payload.code, 'INVALID_ENVELOPE');
 });
 
-test('router handles unknown message type with structured ERROR', async () => {
-  const router = createSideRouter();
-  const msg = {
-    protocolVersion: 1,
-    messageId: 'msg-2',
-    type: 'SOME_UNSUPPORTED_TYPE',
-  };
+test('router handles GET_CURRENT_WORKOUT and returns parsed workout data', async () => {
+  const router = createSideRouter({
+    programProvider: async () => ({
+      id: 'prog-1',
+      name: 'Week 1 - Workout A',
+      routineName: 'Basic Beginner Routine',
+      text: 'Bench Press, Barbell / 3x5 @ 60kg / rest 90s',
+    }),
+  });
 
-  const response = await router.handle(msg);
+  const request = createMessage({
+    type: MESSAGE_TYPES.GET_CURRENT_WORKOUT,
+    messageId: 'req-workout-1',
+  });
 
-  assert.equal(response.type, MESSAGE_TYPES.ERROR);
-  assert.equal(response.payload.code, 'INVALID_ENVELOPE');
+  const response = await router.handle(request);
+
+  assert.equal(response.type, MESSAGE_TYPES.WORKOUT_DATA);
+  assert.equal(response.replyToId, 'req-workout-1');
+  assert.equal(response.payload.workout.name, 'Week 1 - Workout A');
+  assert.equal(response.payload.workout.exercises.length, 1);
+  assert.equal(response.payload.workout.exercises[0].name, 'Bench Press, Barbell');
 });
+

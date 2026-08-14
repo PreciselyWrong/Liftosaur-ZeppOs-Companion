@@ -9,7 +9,10 @@ export const MESSAGE_TYPES = {
   PING: 'PING',
   PONG: 'PONG',
   ERROR: 'ERROR',
+  GET_CURRENT_WORKOUT: 'GET_CURRENT_WORKOUT',
+  WORKOUT_DATA: 'WORKOUT_DATA',
 };
+
 
 function generateId() {
   return Date.now().toString(36) + '-' + Math.random().toString(36).slice(2, 9);
