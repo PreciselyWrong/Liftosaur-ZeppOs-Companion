@@ -97,13 +97,8 @@ DataWidget({
       text: this.state.view().status,
     });
 
-    // A second listener on the status line itself: if the background rect turns
-    // out not to receive taps, this one narrows down where events do arrive.
-    this.statusText.addEventListener(event.CLICK_UP, () => {
-      const status = this.state.click();
-      console.log(`[liftosaur] click on text -> ${status}`);
-      this.render();
-    });
+    // A TEXT widget has no addEventListener: calling it throws and aborts build().
+    // Only the background FILL_RECT above carries the tap listener.
   },
 
   onResume() {
