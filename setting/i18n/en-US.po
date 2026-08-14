@@ -1,0 +1,5 @@
+msgid "appName"
+msgstr "Liftosaur"
+
+msgid "Liftosaur"
+msgstr "Liftosaur"

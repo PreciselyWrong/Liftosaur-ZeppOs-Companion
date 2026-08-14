@@ -9,42 +9,11 @@
       "name": "1.0.0"
     },
     "icon": "icon.png",
-    "vender": "",
+    "vender": "Liftosaur",
     "description": "Liftosaur workout tracker for Amazfit watches"
   },
-  "permissions": [
-    "data:user.hd.heart_rate"
-  ],
-  "runtime": {
-    "apiVersion": {
-      "compatible": "3.6",
-      "target": "3.6",
-      "minVersion": "3.6"
-    }
-  },
-  "targets": {
-    "common": {
-      "module": {
-        "page": {
-          "pages": [
-            "page/common/index"
-          ]
-        },
-        "app-side": {
-          "path": "app-side/index"
-        },
-        "setting": {
-          "path": "setting/index"
-        }
-      },
-      "platforms": [
-
-        {
-          "st": "r"
-        }
-      ],
-      "designWidth": 480
-    }
+  "setting": {
+    "path": "setting/index"
   },
   "i18n": {
     "en-US": {
@@ -72,6 +41,38 @@
       "appName": "Liftosaur"
     }
   },
+  "permissions": [
+    "data:user.hd.heart_rate"
+  ],
+  "runtime": {
+    "apiVersion": {
+      "compatible": "3.6",
+      "target": "3.6",
+      "minVersion": "3.6"
+    }
+  },
+  "targets": {
+    "common": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/common/index"
+          ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
+        }
+      },
+      "platforms": [
+        {
+          "st": "r"
+        }
+      ],
+      "designWidth": 480
+    }
+  },
   "defaultLanguage": "en-US"
 }
-
