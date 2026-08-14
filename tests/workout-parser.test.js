@@ -107,3 +107,41 @@ test('parseLiftoscriptWorkout parses multi-day programs and ignores script code'
   assert.equal(day2.exercises[0].name, 'Overhead Press');
   assert.equal(day2.exercises[1].name, 'Deadlift');
 });
+
+test('parseLiftoscriptWorkout parses markdown headings and skips calibration day', () => {
+  const markdownText = `
+    # Week 1
+    ## Calibration
+    Calib Bench / 1x10 @ 40kg
+
+    ## Day 1 - Bench & Squat
+    Bench Press, Barbell / 3x5 @ 80kg / rest 120s
+    Squat, Barbell / 3x5 @ 100kg / rest 180s
+
+    ## Day 2 - Deadlift & Press
+    Deadlift / 1x5 @ 140kg / rest 180s
+    Overhead Press / 3x8 @ 50kg / rest 90s
+  `;
+
+  // Default day should skip "Calibration" and pick "Day 1 - Bench & Squat"
+  const workout = parseLiftoscriptWorkout({ text: markdownText });
+  assert.equal(workout.name, 'Week 1 - Day 1 - Bench & Squat');
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Bench Press, Barbell');
+  assert.equal(workout.exercises[1].name, 'Squat, Barbell');
+});
+
+test('parseLiftoscriptWorkout parses playground exercise blocks', () => {
+  const playgroundText = `2026-03-07T10:00:00Z / program: "GZCLP" / dayName: "Day 1 - Squat" / exercises: {
+    Squat, Barbell / 3x5 100kg / target: 3x5 100kg 180s
+    Bench Press / 3x10 60kg / target: 3x10 60kg 90s
+  }`;
+
+  const workout = parseLiftoscriptWorkout({ text: playgroundText });
+  assert.equal(workout.name, 'Day 1 - Squat');
+  assert.equal(workout.exercises.length, 2);
+  assert.equal(workout.exercises[0].name, 'Squat, Barbell');
+  assert.equal(workout.exercises[0].sets.length, 3);
+  assert.equal(workout.exercises[0].sets[0].targetWeight, 100);
+});
+
