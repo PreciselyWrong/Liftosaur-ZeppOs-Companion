@@ -66,7 +66,7 @@ test('completeSet transitions to REST and starts rest timer', () => {
   assert.equal(view.completedSets[0].weight, 60);
 });
 
-test('rest timer remaining calculates from absolute timestamp', () => {
+test('rest timer remaining calculates from absolute timestamp and tracks overtime', () => {
   const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });
   session.startWorkout({ timestamp: 1000 });
   session.completeSet({ timestamp: 2000 }); // ends at 2000 + 90*1000 = 92000
@@ -74,11 +74,14 @@ test('rest timer remaining calculates from absolute timestamp', () => {
   // 30 seconds later (timestamp 32000)
   const view30s = session.view(32000);
   assert.equal(view30s.rest.remaining, 60);
+  assert.equal(view30s.rest.isOvertime, false);
 
-  // 95 seconds later (timestamp 97000)
-  const viewDone = session.view(97000);
-  assert.equal(viewDone.rest.remaining, 0);
+  // 95 seconds later (timestamp 97000): 5 seconds overtime (-5s)
+  const viewOvertime = session.view(97000);
+  assert.equal(viewOvertime.rest.remaining, -5);
+  assert.equal(viewOvertime.rest.isOvertime, true);
 });
+
 
 test('skipRest / nextSet transitions from REST to ACTIVE_SET on next set', () => {
   const session = createWorkoutSession({ exercise: BENCH_PRESS_MOCK });

@@ -255,15 +255,18 @@ export function createWorkoutSession({ workout, exercise, initialJournal = [] })
 
       let calculatedRest = null;
       if (restInfo) {
-        const remainingMs = Math.max(0, restInfo.endsAt - now);
+        const diffMs = restInfo.endsAt - now;
+        const remaining = Math.ceil(diffMs / 1000);
         calculatedRest = {
           duration: restInfo.duration,
-          remaining: Math.ceil(remainingMs / 1000),
+          remaining,
+          isOvertime: remaining <= 0,
           startedAt: restInfo.startedAt,
           endsAt: restInfo.endsAt,
           isTransitionToNextExercise: Boolean(restInfo.isTransitionToNextExercise),
         };
       }
+
 
       return {
         state,
