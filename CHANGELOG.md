@@ -2,7 +2,19 @@
 
 ## [Unreleased]
 
+### Changed
+- The application is now called **Lifto Companion**, and its vendor is the author of this project rather than Liftosaur. The previous name and vendor claimed an affiliation that does not exist, which is both inaccurate and a likely rejection at store review. Liftosaur is still named in the description as the service the application connects to.
+- The settings page no longer reports "Not connected" when no API key is stored. That state is demo mode, not a failure: it now says so, explains that nothing is saved, and points at the key field.
+
 ### Added
+- Store listing copy in the six declared locales, with the non-affiliation disclaimer and the Premium requirement kept in each one.
+- Privacy policy (`docs/privacy-policy.md`) covering the API key, the workout data, the heart rate and the three declared permissions.
+- Zepp App Store submission file (`docs/store-listing.md`): listing copy, asset list, reviewer notes, and the demo mode path that removes any need for a test account.
+- Default rest timer settings for standard sets, supersets and warmups in the phone settings page, automatically applied when a program omits explicit timers.
+- Support for square watches such as the Amazfit Bip 6 (`st: "s"`, 390x450). The screens are drawn once, in the round design space, and a single layout adapter fits them to the real panel. Round watches keep the identity transform and render exactly as before. On square watches the system status bar carrying the app name is hidden and the layout additionally keeps clear of the band it occupies, since it sat on top of the title and the first row of buttons. Validated on the Amazfit Bip 6 emulator.
+
+### Fixed
+- The app now declares the `data:os.device.info` permission. Without it the watch could not report its own screen size, which is what the square layout is built from.
 - Tester guide for installing the app from a QR code with a phone only, no computer required (`docs/tester-guide.md`).
 - Public test build QR code in the README, with its supported models and its expiry date.
 

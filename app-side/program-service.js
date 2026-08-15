@@ -49,7 +49,12 @@ export function programVersion(text) {
   return hash.toString(16).padStart(8, '0');
 }
 
-export function createProgramService({ client, referenceData = null } = {}) {
+export function createProgramService({
+  client,
+  referenceData = null,
+  defaultTimers = null,
+  getSettings = null,
+} = {}) {
   if (!client) {
     throw new Error('createProgramService requires a Liftosaur API client');
   }
@@ -204,8 +209,12 @@ export function createProgramService({ client, referenceData = null } = {}) {
         }
       }
 
+      const timers = getSettings
+        ? getSettings()?.defaultTimers
+        : (defaultTimers || { standardRest: 120, warmupRest: 60, supersetRest: 90 });
+
       const declaredExercises = parseProgramDayExercises(program.text, week, day);
-      applyProgramMetadata(plan, declaredExercises, { referenceData });
+      applyProgramMetadata(plan, declaredExercises, { referenceData, defaultTimers: timers });
 
       // Liftosaur prefixes the day with the week name only when the program has
       // more than one week, so both spellings count as a match. The numeric

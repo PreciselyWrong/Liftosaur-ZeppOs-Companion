@@ -399,3 +399,43 @@ Triceps Pushdown / 2x11 @8 / 90kg 75s / warmup: 1x8 60% / superset: A
     [[8, 52.5, 60]]
   );
 });
+
+test('getDayPlan applies custom default rest timers from getSettings', async () => {
+  const customProgram = `# Week 1
+## Day 1
+Squat / 3x5 / 100kg
+Triceps Pushdown / 3x12 / 20kg / superset: A
+`;
+
+  const client = createFakeClient({
+    async getProgram() {
+      return { id: 'prog-1', name: 'Test', text: customProgram, isCurrent: true };
+    },
+    async runPlayground() {
+      return {
+        workout: `2026-08-14 12:00:00 +00:00 / program: "Test" / dayName: "Week 1 - Day 1" / week: 1 / dayInWeek: 1 / exercises: {
+  Squat / 1x5 100kg / target: 3x5 100kg
+  Triceps Pushdown / 1x12 20kg / target: 3x12 20kg
+}`,
+      };
+    },
+  });
+
+  const settings = {
+    defaultTimers: {
+      standardRest: 180,
+      warmupRest: 45,
+      supersetRest: 30,
+    },
+  };
+
+  const service = createProgramService({
+    client,
+    getSettings: () => settings,
+  });
+
+  const plan = await service.getDayPlan('prog-1', 1, 1);
+  assert.equal(plan.exercises[0].sets[0].restSeconds, 180); // Standard rest
+  assert.equal(plan.exercises[1].sets[0].restSeconds, 30);  // Superset rest
+});
+
