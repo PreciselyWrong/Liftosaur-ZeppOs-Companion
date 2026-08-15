@@ -18,40 +18,48 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ## Try it now (test build)
 
-<p align="center">
-  <img src="docs/test-build-qr.png" width="220" alt="Test build QR code" />
-</p>
+**Scan the code that matches the shape of your watch screen.** They are two
+different builds: the round one will not install on a square watch, and the
+square one will not install on a round watch.
+
+<table align="center">
+  <tr>
+    <th>Round screen</th>
+    <th>Square screen</th>
+  </tr>
+  <tr>
+    <td align="center"><img src="docs/test-build-qr-round.png" width="220" alt="Round test build QR code" /></td>
+    <td align="center"><img src="docs/test-build-qr-square.png" width="220" alt="Square test build QR code" /></td>
+  </tr>
+  <tr>
+    <td align="center">built for <b>Amazfit Active 2 (Round)</b></td>
+    <td align="center">built for <b>Amazfit Bip 6</b></td>
+  </tr>
+</table>
 
 > ## ⚠️ Read this before scanning
 >
-> ### Round screen Amazfit watches only
+> ### Both codes expire on 2026-08-22 at 06:07 UTC
 >
-> This build installs on these 22 models, and on nothing else:
+> That is 08:07 Central European Summer Time. After that moment they stop
+> working and return a download error.
 >
-> | | | |
-> |---|---|---|
-> | Active 2 (Round) | Active 2 NFC (Round) | Active 3 Premium |
-> | Active Edge | Active Max | Balance |
-> | Balance 2 | Balance 2 XT | Balance 3 |
-> | Balance 3 Ti | Balance Ultra | Cheetah (Round) |
-> | Cheetah 2 Pro | Cheetah 2 Ultra | Cheetah Pro |
-> | Cheetah Pro Kelvin Kiptum | Falcon | T-Rex 3 |
-> | T-Rex 3 Pro (44mm) | T-Rex 3 Pro (48mm) | T-Rex Ultra |
-> | T-Rex Ultra 2 | | |
->
-> **Any watch missing from that table will fail to install.** That includes
-> every rectangular model (Bip 6, the GTS line, the square Active 2 variant) and
-> the older round models the current Zepp OS API level rules out (GTR 3, GTR 4,
-> T-Rex 2 and similar). This is not a bug, so please do not report it as one.
->
-> ### This QR code expires on 2026-08-21 at 19:45 UTC
->
-> After that moment it stops working and returns a download error.
->
-> That deadline is not my choice: `zeus preview` uploads the build to Zepp's own
+> The deadline is not my choice: `zeus preview` uploads the build to Zepp's own
 > servers, and Zepp keeps a preview for **7 days** before deleting it. There is
-> no way to extend it. This README gets a fresh code when the current one
-> lapses, so come back to this page rather than reusing an old screenshot.
+> no way to extend it. This README gets fresh codes when the current ones lapse,
+> so come back to this page rather than reusing an old screenshot.
+>
+> ### Models
+>
+> Each code is built for one device family. **Amazfit Active 2 (Round)** and
+> **Amazfit Bip 6** are the two models the builds were produced for and the only
+> two I can vouch for. Other watches of the same screen shape and a recent
+> enough Zepp OS may well accept the build; if yours does, or refuses to, say so
+> in an issue with the exact model name and I will list it here.
+>
+> Watches that are simply too old for the Zepp OS API level this project targets
+> will refuse to install whatever you scan. That is not a bug, so please do not
+> report it as one.
 
 **Version:** Lifto Companion 2.0.6
 
