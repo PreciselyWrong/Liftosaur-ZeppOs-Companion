@@ -9,27 +9,15 @@ Allow about five minutes.
 
 You need:
 
-- An Amazfit watch running Zepp OS 3.6 or later, already paired with your phone.
-  The builds are produced for **Amazfit Active 2 (Round)** and **Amazfit Bip 6**;
-  those are the two models known to work. Another watch of the same screen shape
-  may well accept the build, and reporting whether it did is useful.
-
+- An Amazfit watch running Zepp OS 3.6 or later (28 supported round and square models), already paired with your phone.
 - The **Zepp** app installed and signed in to your account.
-- The QR code that was sent to you.
+- The QR code that was sent to you or found in the [README](../README.md).
 
-> **There are two QR codes, one per screen shape.** The round build does not
-> install on a square watch and the square build does not install on a round
-> one, so make sure you were sent the one matching your watch. Both are in the
-> [README](../README.md), which always carries the current pair.
+## The QR code
 
-## The QR codes
+The test build is available as a single QR code: [test-build-qr.png](test-build-qr.png).
 
-| Screen shape | Built for | Code |
-|---|---|---|
-| Round | Amazfit Active 2 (Round) | [test-build-qr-round.png](test-build-qr-round.png) |
-| Square | Amazfit Bip 6 | [test-build-qr-square.png](test-build-qr-square.png) |
-
-Both expire on **2026-08-22 at 06:31 UTC** (08:31 Central European Summer Time).
+It expires on **2026-08-22 at 06:46 UTC** (08:46 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -85,8 +73,8 @@ On the watch, open the application list: **Lifto Companion** is there.
 
 ## Things to know
 
-**The QR codes expire after 7 days**, on 2026-08-22 at 06:31 UTC for the current
-pair. This is not a failure: past that delay the link stops working and you need
+**The QR code expires after 7 days**, on 2026-08-22 at 06:46 UTC for the current
+build. This is not a failure: past that delay the link stops working and you need
 to ask for a new one. A QR code works for everybody, as many times as needed
 while it is valid.
 
@@ -103,7 +91,7 @@ from the installed applications list in the Zepp app.
 | Scanning does nothing | Developer Mode is not enabled, redo step 1 |
 | "Download failed" | The QR code expired after 7 days, ask for a new one |
 | The install hangs | The watch is disconnected, check Bluetooth and retry |
-| The application does not appear on the watch | Wrong QR code for your screen shape, or unsupported model |
+| The application does not appear on the watch | Unsupported model |
 | The screen is cropped or misaligned | Unsupported model, report it with the exact model name |
 | The watch says it cannot reach your account | The API key is missing or wrong, redo step 3 |
 
