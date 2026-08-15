@@ -42,6 +42,54 @@ function getEffectiveApiKey() {
   return null;
 }
 
+function getEffectiveSettings() {
+  const apiKey = getEffectiveApiKey();
+  let standardRest = 120;
+  let warmupRest = 60;
+  let supersetRest = 90;
+
+  try {
+    const storage = (typeof settings !== 'undefined' && settings?.settingsStorage)
+      ? settings.settingsStorage
+      : sideServiceInstance?.settings;
+
+    if (storage) {
+      const readVal = (key, defaultVal) => {
+        const raw = storage.getItem(key);
+        if (raw === undefined || raw === null) return defaultVal;
+        let v = raw;
+        if (typeof raw === 'string') {
+          try {
+            const parsed = JSON.parse(raw);
+            v = typeof parsed === 'object' && parsed !== null ? (parsed.value ?? parsed) : parsed;
+          } catch (e) {
+            v = raw;
+          }
+        } else if (typeof raw === 'object') {
+          v = raw.value ?? defaultVal;
+        }
+        const num = parseInt(v, 10);
+        return Number.isFinite(num) ? num : defaultVal;
+      };
+
+      standardRest = readVal('defaultStandardRest', 120);
+      warmupRest = readVal('defaultWarmupRest', 60);
+      supersetRest = readVal('defaultSupersetRest', 90);
+    }
+  } catch (err) {
+    console.log('[liftosaur-side] timer settings read failed:', err?.message || String(err));
+  }
+
+  return {
+    apiKey,
+    defaultTimers: {
+      standardRest: standardRest > 0 ? standardRest : null,
+      warmupRest: warmupRest > 0 ? warmupRest : null,
+      supersetRest: supersetRest > 0 ? supersetRest : null,
+    },
+  };
+}
+
 /**
  * A new service is built per request so a key entered in the Zepp app takes
  * effect without restarting the watch app. The program text cache lives in the
@@ -53,7 +101,8 @@ let cachedKey = null;
 let cachedService = null;
 
 function getProgramService() {
-  const apiKey = getEffectiveApiKey();
+  const effective = getEffectiveSettings();
+  const apiKey = effective.apiKey;
   if (!apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo') {
     if (!cachedService || cachedKey !== 'dummy') {
       cachedKey = 'dummy';
@@ -65,7 +114,11 @@ function getProgramService() {
     cachedKey = apiKey;
     const client = createLiftosaurApiClient({ apiKey });
     const referenceData = createReferenceData({ client });
-    cachedService = createProgramService({ client, referenceData });
+    cachedService = createProgramService({
+      client,
+      referenceData,
+      getSettings: getEffectiveSettings,
+    });
   }
   return cachedService;
 }

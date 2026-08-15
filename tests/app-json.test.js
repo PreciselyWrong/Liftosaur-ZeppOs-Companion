@@ -57,6 +57,42 @@ test('setting entry point exists on disk', () => {
   assert.ok(fs.existsSync(entry), `missing setting entry ${entry}`);
 });
 
+test('declares the device info permission the layout depends on', () => {
+  // Without it `getDeviceInfo()` fails, the screen size is unknown, and every
+  // square watch silently falls back to the round layout.
+  assert.ok(
+    appJson.permissions.includes('data:os.device.info'),
+    'missing data:os.device.info - square screens will render as round',
+  );
+});
+
+test('declares a round and a square target sharing the same modules', () => {
+  const targets = appJson.targets;
+  assert.deepEqual(
+    Object.values(targets).flatMap((t) => t.platforms.map((p) => p.st)).sort(),
+    ['r', 's'],
+    'exactly one round and one square platform must be declared',
+  );
+
+  const common = JSON.stringify(targets.common.module);
+  for (const [name, target] of Object.entries(targets)) {
+    assert.equal(JSON.stringify(target.module), common, `target ${name} diverges from common`);
+    assert.equal(target.designWidth, 480, `target ${name} must keep the 480 design canvas`);
+  }
+});
+
+test('every target has its icon asset on disk', () => {
+  for (const [name, target] of Object.entries(appJson.targets)) {
+    for (const platform of target.platforms) {
+      const dir = path.join(import.meta.dirname, '..', 'assets', `${name}.${platform.st}`);
+      assert.ok(
+        fs.existsSync(path.join(dir, appJson.app.icon)),
+        `missing ${appJson.app.icon} in assets/${name}.${platform.st}`,
+      );
+    }
+  }
+});
+
 test('no secret-looking value is committed in app.json', () => {
 
   const raw = JSON.stringify(appJson);

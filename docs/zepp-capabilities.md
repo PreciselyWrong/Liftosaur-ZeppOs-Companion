@@ -222,6 +222,23 @@ Source: [LocalStorage](https://docs.zepp.com/docs/reference/device-app-api/newAP
 Documented, not yet device-tested - the writes are wrapped so a failure degrades to an
 in-memory store rather than breaking a session.
 
+## Square screens (EMULATOR TESTED)
+
+| Finding | Value | Status |
+| --- | --- | --- |
+| Bip 6 emulator image | `Bip 6 v1.1.0`, os 5.0, api 4.2, cached as `4ae8ec66a7e2d342faf040652f4f41ff` | TESTED |
+| Bip 6 device sources | `9765120`, `9765121`, `10158337` | TESTED |
+| Target selection | `zeus dev -t "Amazfit Bip 6"` builds the `square` target only; the round `common` target is not packaged | TESTED |
+| Asset folder convention | `assets/<targetName>.<st>`, so `assets/square.s/icon.png` - the build resized it without complaint | TESTED |
+| Panel geometry | 390x450, `st: "s"` | CONFIRMED |
+| Status bar | Square devices draw a system status bar with the app name **over** the page, hiding the top of the layout. `hmUI.setStatusBarVisible(false)` is documented square-only | TESTED |
+| Status bar removal | Calling it was **not enough on its own**: a widget was still covered on the emulator. The layout also reserves a top band (`TOP_INSET_RATIO`, 63 px on 390x450) | TESTED |
+| `getDeviceInfo()` permission | Requires `data:os.device.info` in `app.json`. **Undeclared, it fails instead of returning a partial result**: `screenShape` came back `undefined` and the screen size was unknown | TESTED |
+| Failure signature | With the permission missing and `px(480)` used as the size fallback, a 390 wide panel reports `390x390` - a plausible square canvas that reads as round, so the square layout silently never engaged | TESTED |
+| `designWidth` | Kept at 480 for both targets, so `px()` maps the round design canvas onto the 390 width and `shared/screen-layout.js` does the rest | TESTED |
+
+`zeus dev` overwrote `.gitignore` again on this run, as documented above. It was restored.
+
 ## Open questions (blocking)
 
 1. Numeric `subType` for Strength Training, and whether the extension can be scoped to it.

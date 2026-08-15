@@ -1,10 +1,10 @@
-# Liftosaur for Zepp OS
+# Lifto Companion for Zepp OS
 
 Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking client for Amazfit smartwatches running Zepp OS (target: Amazfit Active 2 and compatible round watches).
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-162%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-184%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -53,7 +53,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 > no way to extend it. This README gets a fresh code when the current one
 > lapses, so come back to this page rather than reusing an old screenshot.
 
-**Version:** Liftosaur 2.0.5
+**Version:** Lifto Companion 2.0.6
 
 You also need a [Liftosaur](https://www.liftosaur.com) account with at least one
 program, and Developer Mode enabled in the Zepp app. Full walkthrough, phone

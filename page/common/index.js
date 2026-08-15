@@ -1,5 +1,6 @@
 import { createWidget, deleteWidget, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
+import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
 import { HeartRate, Vibrator } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import {
@@ -15,6 +16,7 @@ import { BasePage } from '@zeppos/zml/base-page';
 import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-session.js';
 import { createSessionStore } from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
+import { createScreenLayout } from '../../shared/screen-layout.js';
 import {
   suggestedProgramIndex,
   suggestedWeekIndex,
@@ -46,8 +48,36 @@ const THEME = {
   textDisabled: 0x607284,
 };
 
-const W = px(480);
-const H = px(480);
+/**
+ * Screens are drawn in the round 480x480 design space; `LAYOUT.fit()` is the
+ * only thing that knows about the real screen. It is the identity on round
+ * watches, so they render exactly as before.
+ */
+let deviceInfo = {};
+try {
+  deviceInfo = getDeviceInfo() || {};
+} catch (err) {
+  console.log('[liftosaur] device info unavailable, assuming round 480:', err?.message || String(err));
+}
+// The real dimensions are passed straight through. Substituting `px(480)` for a
+// missing one is what silently broke the Bip 6: on a 390 wide panel it yields
+// 390x390, a plausible square canvas that the layout reads as round.
+const LAYOUT = createScreenLayout({
+  width: deviceInfo.width,
+  height: deviceInfo.height,
+  isRound:
+    typeof SCREEN_SHAPE_ROUND === 'number' && typeof deviceInfo.screenShape === 'number'
+      ? deviceInfo.screenShape === SCREEN_SHAPE_ROUND
+      : undefined,
+});
+
+console.log(
+  `[liftosaur] screen ${LAYOUT.width}x${LAYOUT.height} shape=${deviceInfo.screenShape} ` +
+    `round=${SCREEN_SHAPE_ROUND} fitted=${LAYOUT.isFitted} scale=${LAYOUT.scale} inset=${LAYOUT.insetTop}`,
+);
+
+const W = LAYOUT.width;
+const H = LAYOUT.height;
 const LIST_PAGE_SIZE = 4;
 
 // ── Screens ──────────────────────────────────────────────────────────────────
@@ -149,21 +179,33 @@ function clearWidgets() {
   liveWidgets = {};
 }
 
-function addWidget(type, props) {
+/** Creates a widget from props already expressed in real screen pixels. */
+function addRawWidget(type, props) {
   const w = createWidget(type, props);
   activeWidgets.push(w);
   return w;
 }
 
+function addWidget(type, props) {
+  return addRawWidget(type, LAYOUT.fit(props));
+}
+
+/**
+ * The fitted props are what gets stored: an in-place `prop.MORE` update
+ * re-sends the whole property set, so design-space geometry would snap the
+ * widget back off-screen on a fitted layout.
+ */
 function addLiveText(key, props) {
-  const w = addWidget(widget.TEXT, props);
-  liveWidgets[key] = { widget: w, props: { ...props } };
+  const fitted = LAYOUT.fit(props);
+  const w = addRawWidget(widget.TEXT, fitted);
+  liveWidgets[key] = { widget: w, props: { ...fitted } };
   return w;
 }
 
 function addLiveButton(key, props) {
-  const w = addWidget(widget.BUTTON, props);
-  liveWidgets[key] = { widget: w, props: { ...props } };
+  const fitted = LAYOUT.fit(props);
+  const w = addRawWidget(widget.BUTTON, fitted);
+  liveWidgets[key] = { widget: w, props: { ...fitted } };
   return w;
 }
 
@@ -864,7 +906,7 @@ function renderSetupScreen() {
     text_style: text_style.WRAP,
     text: errorMessage
       ? errorMessage
-      : 'Add your Liftosaur API key in the Zepp app:\n\nProfile > Apps > Liftosaur > Settings',
+      : 'Add your Liftosaur API key in the Zepp app:\n\nProfile > Apps > Lifto Companion > Settings',
   });
 
   addWidget(widget.BUTTON, {
@@ -1884,7 +1926,9 @@ function renderLoadingScreen() {
 
 function renderUI() {
   clearWidgets();
-  addWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
+  // The backdrop is the one widget already in screen pixels: it must cover the
+  // whole panel, fitted content included.
+  addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
   if (isNotesModalOpen) return renderNotesModal();
   if (screen === SCREEN.SETUP) return renderSetupScreen();
@@ -1992,6 +2036,21 @@ function tick() {
   }
 }
 
+/**
+ * Square watches draw a system status bar carrying the app name over the top
+ * of the page, which sits on top of our title and of the first row of buttons.
+ * `setStatusBarVisible` is documented as square-only, so round watches never
+ * reach this and nothing changes for them.
+ */
+function hideSquareStatusBar() {
+  if (!LAYOUT.isFitted) return;
+  try {
+    hmUI.setStatusBarVisible(false);
+  } catch (err) {
+    console.log('[liftosaur] status bar stays visible:', err?.message || String(err));
+  }
+}
+
 function startClock() {
   if (clockTimer) return;
   clockTimer = setInterval(tick, 250);
@@ -2012,6 +2071,8 @@ Page(
     },
 
     build() {
+      hideSquareStatusBar();
+
       try {
         setPageBrightTime({ brightTime: 60000 });
         pauseDropWristScreenOff({ duration: 0 });
