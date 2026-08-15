@@ -12,7 +12,7 @@
  * weight that might be wrong.
  */
 
-import { roundToLoadable, resolveEquipmentId } from '../shared/weight-rounding.js';
+import { roundToLoadable, roundToStep, resolveEquipmentId } from '../shared/weight-rounding.js';
 
 function normalizeName(name) {
   return String(name || '')
@@ -90,11 +90,19 @@ export function createReferenceData({ client } = {}) {
      * `ambiguous` is true when several exercises share the name and nothing
      * distinguishes them.
      */
-    lookupExercise(exerciseName, equipmentName = null) {
+    lookupExercise(exerciseName, equipmentName = null, fullName = null) {
       if (!cache) return { found: false, ambiguous: false, data: null, equipment: null };
 
-      const candidates = cache.exerciseDataByName.get(normalizeName(exerciseName)) || [];
-      const wanted = equipmentName ? resolveEquipmentId({ equipmentName }) : null;
+      // A custom exercise can carry a comma in its own name ("Romanian Deadlift,
+      // Barebell"), which the Liftohistory parser reads as name + equipment. The
+      // raw label is tried first so those still find their settings.
+      const byFullName = fullName ? cache.exerciseDataByName.get(normalizeName(fullName)) : null;
+      const candidates = byFullName || cache.exerciseDataByName.get(normalizeName(exerciseName)) || [];
+
+      // When the whole label is the exercise name, the text after the comma is
+      // not an equipment name and must not be read as one.
+      const equipmentHint = byFullName ? null : equipmentName;
+      const wanted = equipmentHint ? resolveEquipmentId({ equipmentName: equipmentHint }) : null;
 
       let data = null;
       let ambiguous = false;
@@ -123,7 +131,7 @@ export function createReferenceData({ client } = {}) {
       const equipmentId = resolveEquipmentId({
         exerciseData: data,
         exerciseKey: data?.key ?? null,
-        equipmentName,
+        equipmentName: equipmentHint,
         currentGymId: cache.currentGymId,
       });
 
@@ -139,13 +147,23 @@ export function createReferenceData({ client } = {}) {
     /**
      * Turns a target weight into one that can be loaded for this exercise.
      * Returns `resolved: false` whenever the answer would be a guess.
+     *
+     * The gym's equipment answers best - it knows the bar and the plates. When
+     * it cannot be pinned down, the exercise's own `rounding` step is the next
+     * best thing; failing both, nothing is invented.
      */
-    resolveWeight(exerciseName, equipmentName, target, unit = 'kg') {
-      const lookup = this.lookupExercise(exerciseName, equipmentName);
-      if (lookup.ambiguous || !lookup.equipment) {
-        return { value: target, exact: false, resolved: false };
+    resolveWeight(exerciseName, equipmentName, target, unit = 'kg', fullName = null) {
+      const lookup = this.lookupExercise(exerciseName, equipmentName, fullName);
+      if (!lookup.ambiguous && lookup.equipment) {
+        return roundToLoadable(target, lookup.equipment, unit);
       }
-      return roundToLoadable(target, lookup.equipment, unit);
+
+      const rounding = lookup.data?.rounding;
+      if (!lookup.ambiguous && Number.isFinite(rounding) && rounding > 0) {
+        return roundToStep(target, rounding);
+      }
+
+      return { value: target, exact: false, resolved: false };
     },
 
     resolveNotes(exerciseName) {

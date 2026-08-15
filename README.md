@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-184%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-197%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -39,9 +39,9 @@ square one will not install on a round watch.
 
 > ## ⚠️ Read this before scanning
 >
-> ### Both codes expire on 2026-08-22 at 06:07 UTC
+> ### Both codes expire on 2026-08-22 at 06:31 UTC
 >
-> That is 08:07 Central European Summer Time. After that moment they stop
+> That is 08:31 Central European Summer Time. After that moment they stop
 > working and return a download error.
 >
 > The deadline is not my choice: `zeus preview` uploads the build to Zepp's own

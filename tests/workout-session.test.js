@@ -704,3 +704,89 @@ test('pausing rest pauses the global workout elapsed time', () => {
   assert.equal(session.view(50_000).elapsedSeconds, 20);
 });
 
+
+test('the Prepare screen edits the upcoming set, not the one just logged', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1000 });
+
+  const resting = session.view(1000);
+  assert.equal(resting.state, SESSION_STATES.REST);
+  assert.equal(resting.pending.exerciseName, 'Decline Bench Press');
+  assert.equal(resting.pending.setIndex, 1, 'set 2 of the same exercise');
+  assert.equal(resting.pending.set.weight, 80);
+
+  // Adjust while resting: the set already recorded must not move.
+  session.adjustWeight(-1, { timestamp: 2000 });
+  session.adjustReps(-2, { timestamp: 2000 });
+
+  const adjusted = session.view(2000);
+  assert.equal(adjusted.pending.set.weight, 77.5);
+  assert.equal(adjusted.pending.set.reps, 6);
+  assert.equal(adjusted.completedSets[0].weight, 80, 'the logged set is untouched');
+  assert.equal(adjusted.completedSets[0].reps, 8);
+
+  // Starting the set keeps what was prepared.
+  session.nextSet({ timestamp: 3000 });
+  const active = session.view(3000);
+  assert.equal(active.state, SESSION_STATES.ACTIVE_SET);
+  assert.equal(active.currentSet.weight, 77.5);
+  assert.equal(active.currentSet.reps, 6);
+});
+
+test('preparing during rest edits the superset partner that comes next', () => {
+  const plan = {
+    programId: 'p1',
+    unit: 'kg',
+    exercises: [
+      {
+        index: 1,
+        name: 'Bench Press',
+        supersetGroup: 'A',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 8, targetWeight: 80, restSeconds: 60 },
+          { index: 2, targetReps: 8, targetWeight: 80, restSeconds: 60 },
+        ],
+      },
+      {
+        index: 2,
+        name: 'Triceps Pushdown',
+        supersetGroup: 'A',
+        warmupSets: [],
+        sets: [
+          { index: 1, targetReps: 12, targetWeight: 35, restSeconds: 60 },
+          { index: 2, targetReps: 12, targetWeight: 35, restSeconds: 60 },
+        ],
+      },
+    ],
+  };
+
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 10 });
+
+  const resting = session.view(10);
+  assert.equal(resting.pending.exerciseName, 'Triceps Pushdown');
+  assert.equal(resting.pending.set.weight, 35);
+
+  session.adjustWeight(2, { timestamp: 20 });
+  assert.equal(session.view(20).pending.set.weight, 40);
+
+  session.nextSet({ timestamp: 30 });
+  const active = session.view(30);
+  assert.equal(active.exerciseName, 'Triceps Pushdown');
+  assert.equal(active.currentSet.weight, 40);
+});
+
+test('an untouched Prepare screen still loads the plan targets', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.adjustWeight(4, { timestamp: 10 }); // 90kg on set 1
+  session.completeSet({ timestamp: 1000 });
+
+  // Set 2 starts from the prescription again, not from what set 1 was pushed to.
+  assert.equal(session.view(1000).pending.set.weight, 80);
+  session.nextSet({ timestamp: 2000 });
+  assert.equal(session.view(2000).currentSet.weight, 80);
+});

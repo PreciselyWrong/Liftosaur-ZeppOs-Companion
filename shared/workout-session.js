@@ -124,6 +124,21 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     return progress[currentExerciseIndex] || null;
   }
 
+  /**
+   * The set the lifter is about to perform: the active one normally, and during
+   * rest the one the "Prepare" screen shows. Adjustments made while resting
+   * belong to that upcoming set, not to the one already logged.
+   */
+  function pendingIndex() {
+    if (state !== SESSION_STATES.REST) return currentExerciseIndex;
+    const nextIdx = findNextExerciseIndex(currentExerciseIndex);
+    return nextIdx === -1 ? currentExerciseIndex : nextIdx;
+  }
+
+  function pendingProgress() {
+    return progress[pendingIndex()] || null;
+  }
+
   function loadSetTargets(exerciseIdx, setIdx) {
     const exercise = exercises[exerciseIdx];
     const prog = progress[exerciseIdx];
@@ -231,7 +246,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       }
 
       case EVENT_TYPES.ADJUST_WEIGHT: {
-        const prog = currentProgress();
+        const prog = pendingProgress();
         if (!prog) break;
         const base = prog.currentWeight ?? 0;
         prog.currentWeight = Math.max(0, Math.round((base + event.payload.delta) * 100) / 100);
@@ -239,14 +254,14 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       }
 
       case EVENT_TYPES.ADJUST_REPS: {
-        const prog = currentProgress();
+        const prog = pendingProgress();
         if (!prog) break;
         prog.currentReps = Math.max(0, (prog.currentReps ?? 0) + event.payload.delta);
         break;
       }
 
       case EVENT_TYPES.ADJUST_RPE: {
-        const prog = currentProgress();
+        const prog = pendingProgress();
         if (!prog) break;
         const base = prog.currentRpe ?? 8;
         prog.currentRpe = Math.min(10, Math.max(1, Math.round((base + event.payload.delta) * 2) / 2));
@@ -291,6 +306,13 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
         if (restDuration && restDuration > 0) {
           state = SESSION_STATES.REST;
+          // The upcoming set's targets are loaded now rather than when rest
+          // ends, so the "Prepare" screen has real numbers to edit and what the
+          // lifter changes there survives into the set itself.
+          const upcomingIdx = findNextExerciseIndex(currentExerciseIndex);
+          if (upcomingIdx !== -1) {
+            loadSetTargets(upcomingIdx, progress[upcomingIdx].completedSets.length);
+          }
           restInfo = {
             startedAt: event.timestamp,
             duration: restDuration,
@@ -352,7 +374,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           pauseStartedAt = null;
         }
         restInfo = null;
-        advanceToNextSet();
+        advanceToNextSet({ keepAdjustments: true });
         break;
       }
 
@@ -437,7 +459,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     };
   }
 
-  function advanceToNextSet() {
+  function advanceToNextSet({ keepAdjustments = false } = {}) {
     const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     if (nextIdx === -1) {
       state = SESSION_STATES.FINISHED;
@@ -445,12 +467,66 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     }
 
     currentExerciseIndex = nextIdx;
-    loadSetTargets(nextIdx, progress[nextIdx].completedSets.length);
+    const nextSetIdx = progress[nextIdx].completedSets.length;
+    // Coming out of rest the targets are already loaded, and reloading them
+    // would silently undo whatever was set on the "Prepare" screen.
+    if (!keepAdjustments || progress[nextIdx].currentSetIndex !== nextSetIdx) {
+      loadSetTargets(nextIdx, nextSetIdx);
+    }
     state = SESSION_STATES.ACTIVE_SET;
   }
 
   for (const event of initialJournal) {
     applyEvent(event);
+  }
+
+  /**
+   * The upcoming set as the "Prepare" screen needs it: which exercise, which
+   * set of it, and the editable weight / reps / RPE. During an active set this
+   * is simply the current set, so one screen can render either state.
+   */
+  function describePendingSet() {
+    const idx = pendingIndex();
+    const exercise = exercises[idx];
+    const prog = progress[idx];
+    if (!exercise || !prog) return null;
+
+    const setIdx = state === SESSION_STATES.REST ? prog.completedSets.length : prog.currentSetIndex;
+    const target = exercise.sets[setIdx] || null;
+
+    return {
+      exerciseIndex: idx,
+      exerciseName: exercise.name,
+      exerciseNotes: exercise.notes ?? null,
+      supersetGroup: exercise.supersetGroup ?? null,
+      setIndex: setIdx,
+      totalSets: exercise.sets.length,
+      setsDots: exercise.sets.map((_, i) =>
+        i < prog.completedSets.length ? 'completed' : i === setIdx ? 'active' : 'pending'
+      ),
+      set: {
+        isWarmup: Boolean(target?.isWarmup),
+        warmupIndex: target?.warmupIndex ?? null,
+        totalWarmups: target?.totalWarmups ?? 0,
+        workSetIndex: target?.workSetIndex ?? null,
+        totalWorkSets: target?.totalWorkSets ?? exercise.workSetsCount,
+        targetWeightPercent: target?.targetWeightPercent ?? null,
+        supersetGroup: exercise.supersetGroup ?? null,
+        weight: prog.currentWeight,
+        reps: prog.currentReps,
+        rpe: prog.currentRpe,
+        targetWeight: target?.targetWeight ?? null,
+        targetReps: target?.targetReps ?? null,
+        targetRepsMax: target?.targetRepsMax ?? null,
+        targetRpe: target?.targetRpe ?? null,
+        isAmrap: Boolean(target?.isAmrap),
+        restSeconds: target?.restSeconds ?? null,
+      },
+    };
+  }
+
+  function isAdjustable() {
+    return state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST;
   }
 
   function allCompletedSets() {
@@ -608,6 +684,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           restSeconds: target?.restSeconds ?? null,
         },
         completedSets: [...prog.completedSets],
+        pending: describePendingSet(),
         rest,
       };
     },
@@ -621,18 +698,20 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex }, timestamp });
     },
 
+    // Adjusting is allowed during rest too: that is what the "Prepare" screen is
+    // for, and the change lands on the set about to be performed.
     adjustWeight(steps = 1, { timestamp = Date.now() } = {}) {
-      if (state !== SESSION_STATES.ACTIVE_SET) return;
+      if (!isAdjustable()) return;
       applyEvent({ type: EVENT_TYPES.ADJUST_WEIGHT, payload: { delta: steps * step }, timestamp });
     },
 
     adjustReps(delta, { timestamp = Date.now() } = {}) {
-      if (state !== SESSION_STATES.ACTIVE_SET) return;
+      if (!isAdjustable()) return;
       applyEvent({ type: EVENT_TYPES.ADJUST_REPS, payload: { delta }, timestamp });
     },
 
     adjustRpe(delta, { timestamp = Date.now() } = {}) {
-      if (state !== SESSION_STATES.ACTIVE_SET) return;
+      if (!isAdjustable()) return;
       applyEvent({ type: EVENT_TYPES.ADJUST_RPE, payload: { delta }, timestamp });
     },
 

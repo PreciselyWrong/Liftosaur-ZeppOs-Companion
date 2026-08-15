@@ -137,6 +137,22 @@ test('resolves equipment from the current gym first', () => {
   assert.equal(resolveEquipmentId({ exerciseData, currentGymId: 'other' }), 'barbell');
 });
 
+test('takes the only mapped equipment when neither this gym nor a default is listed', () => {
+  assert.equal(
+    resolveEquipmentId({ exerciseData: { equipment: { fmmayomc: 'barbell' } }, currentGymId: 'default' }),
+    'barbell',
+    'one gym, nothing to choose between'
+  );
+  assert.equal(
+    resolveEquipmentId({
+      exerciseData: { equipment: { one: 'barbell', two: 'dumbbell' } },
+      currentGymId: 'default',
+    }),
+    null,
+    'two answers is a guess, not a resolution'
+  );
+});
+
 test('falls back to the exercise key, then to the name after the comma', () => {
   assert.equal(resolveEquipmentId({ exerciseKey: 'latPulldown_cable' }), 'cable');
   assert.equal(resolveEquipmentId({ exerciseKey: 'declineBenchPress_barbell' }), 'barbell');

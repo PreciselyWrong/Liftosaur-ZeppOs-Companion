@@ -174,9 +174,11 @@ test('applyProgramMetadata leaves plan untouched when alignment fails', () => {
   assert.deepEqual(plan.exercises[0].warmupSets, []);
 });
 
-test('applyProgramMetadata falls back to step rounding when referenceData fails and defaults rest to 60s', () => {
+test('applyProgramMetadata shows no warmup weight when referenceData cannot resolve it, and defaults rest to 60s', () => {
   const plan = buildDayPlan(PROBE_RESPONSE);
-  // Lat Pulldown first work set is 60kg. Warmup 50% -> 30kg.
+  // Lat Pulldown first work set is 60kg, so 50% is 30kg on paper - but without
+  // the gym's equipment nothing says 30kg can be loaded (a 20kg bar cannot make
+  // 15kg). The percentage is shown instead of an unloadable number.
   const declared = [
     { name: 'Lat Pulldown', equipment: null, warmupText: '1x8 50%', supersetTag: null },
     { name: 'Incline Curl', equipment: null, warmupText: '1x5 10kg', supersetTag: null },
@@ -189,7 +191,8 @@ test('applyProgramMetadata falls back to step rounding when referenceData fails 
 
   applyProgramMetadata(plan, declared, { referenceData: unresolvingRef });
 
-  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, null);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
   assert.equal(plan.exercises[0].warmupSets[0].restSeconds, 60);
   assert.equal(plan.exercises[1].warmupSets[0].restSeconds, 60);
 });

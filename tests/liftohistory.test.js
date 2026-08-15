@@ -6,6 +6,7 @@ import {
   parseSetGroups,
   expandSetGroups,
   rewriteRecordHeader,
+  collectExerciseNotes,
 } from '../shared/liftohistory.js';
 
 // Structure taken from the published Liftohistory format reference.
@@ -153,4 +154,64 @@ test('parses and expands percentage-based set groups', () => {
   assert.equal(expanded[0].reps, 8);
   assert.equal(expanded[1].percent, 70);
   assert.equal(expanded[2].percent, 85);
+});
+
+test('a note belongs to the exercise it precedes', () => {
+  const record = parseLiftohistoryRecord(RECORD);
+  assert.equal(record.exercises[0].note, 'felt strong today');
+  assert.equal(record.exercises[1].note, null, 'the note does not leak to the next exercise');
+  assert.deepEqual(record.notes, ['felt strong today'], 'record-level notes stay available');
+});
+
+test('a note above the header is the workout note', () => {
+  const record = parseLiftohistoryRecord(`// short on time
+${RECORD}`);
+  assert.equal(record.workoutNote, 'short on time');
+  assert.equal(record.exercises[0].note, 'felt strong today');
+});
+
+test('collects the notes past workouts left, newest first', () => {
+  const older = `2026-02-20T10:00:00Z / program: "P" / exercises: {
+  // belt one notch tighter
+  Squat, Barbell / 3x5 100kg
+}`;
+  const newer = `2026-02-27T10:00:00Z / program: "P" / exercises: {
+  // left knee complained on set 3
+  Squat, Barbell / 3x5 102.5kg
+  Bench Press / 3x5 80kg
+}`;
+
+  const notes = collectExerciseNotes([newer, older]);
+  const squat = notes.get('squat');
+
+  assert.equal(squat.length, 2);
+  assert.equal(squat[0].note, 'left knee complained on set 3');
+  assert.equal(squat[0].date, '2026-02-27T10:00:00Z');
+  assert.equal(squat[1].note, 'belt one notch tighter');
+
+  assert.equal(notes.get('squat, barbell').length, 2, 'the full label is keyed too');
+  assert.equal(notes.has('bench press'), false, 'an exercise with no note is absent');
+});
+
+test('keeps only the most recent notes and drops repeats', () => {
+  const record = (date, note) => `${date}T10:00:00Z / program: "P" / exercises: {
+  // ${note}
+  Squat / 3x5 100kg
+}`;
+
+  const notes = collectExerciseNotes(
+    [
+      record('2026-03-04', 'same note'),
+      record('2026-03-03', 'same note'),
+      record('2026-03-02', 'second'),
+      record('2026-03-01', 'third'),
+      record('2026-02-28', 'fourth'),
+    ],
+    { maxPerExercise: 3 }
+  );
+
+  assert.deepEqual(
+    notes.get('squat').map((entry) => entry.note),
+    ['same note', 'second', 'third']
+  );
 });

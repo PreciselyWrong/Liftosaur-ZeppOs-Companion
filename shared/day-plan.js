@@ -37,6 +37,7 @@ export function buildDayPlan(workoutText) {
       index: index + 1,
       id: `ex-${index + 1}`,
       name: exercise.name,
+      fullName: exercise.fullName || exercise.name,
       equipment: exercise.equipment,
       supersetGroup: null,
       supersetTag: null,
@@ -171,12 +172,17 @@ export function applyProgramMetadata(
           if (Number.isFinite(firstWorkSetWeight) && firstWorkSetWeight > 0) {
             const rawTarget = (wSet.percent / 100) * firstWorkSetWeight;
             if (referenceData && typeof referenceData.resolveWeight === 'function') {
-              const resolved = referenceData.resolveWeight(ex.name, ex.equipment, rawTarget, plan.unit);
+              const resolved = referenceData.resolveWeight(
+                ex.name,
+                ex.equipment,
+                rawTarget,
+                plan.unit,
+                ex.fullName
+              );
+              // No fallback rounding on purpose: a percentage of the work set is
+              // not a loadable weight, and a 15kg prescription on a 20kg bar is
+              // worse than showing the percentage and letting the lifter decide.
               targetWeight = resolved.resolved ? resolved.value : null;
-            }
-            if (targetWeight === null) {
-              const step = plan.unit === 'lb' ? 5 : 2.5;
-              targetWeight = Math.round(rawTarget / step) * step;
             }
           }
         } else {
