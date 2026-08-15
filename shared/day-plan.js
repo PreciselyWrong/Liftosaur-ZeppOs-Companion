@@ -66,24 +66,83 @@ export function buildDayPlan(workoutText) {
 }
 
 /**
+ * Applies default rest timers across a day plan when none were explicitly
+ * prescribed by the Liftoscript source.
+ *
+ * Precedence:
+ * 1. Explicit timer in Liftoscript (e.g. target: 3x8 80kg @8 90s) -> preserved
+ * 2. Superset work set with no timer -> defaultTimers.supersetRest (default 90s)
+ * 3. Standard work set with no timer -> defaultTimers.standardRest (default 120s)
+ * 4. Warmup set with no timer -> defaultTimers.warmupRest (default 60s)
+ *
+ * A value of 0 or null for any default means "Off" (no rest timer).
+ *
+ * @param {object} plan Day plan produced by buildDayPlan
+ * @param {{standardRest?: number|null, supersetRest?: number|null, warmupRest?: number|null}} defaultTimers
+ * @returns {object} The plan with default timers applied
+ */
+export function applyDefaultTimers(plan, defaultTimers = {}) {
+  if (!plan || !Array.isArray(plan.exercises)) return plan;
+
+  const std = defaultTimers?.standardRest !== undefined ? defaultTimers.standardRest : 120;
+  const sup = defaultTimers?.supersetRest !== undefined ? defaultTimers.supersetRest : 90;
+  const wrm = defaultTimers?.warmupRest !== undefined ? defaultTimers.warmupRest : 60;
+
+  for (const ex of plan.exercises) {
+    const isSuperset = Boolean(ex.supersetGroup || ex.supersetTag);
+    const workDefault = isSuperset ? sup : std;
+    const workRest = Number.isFinite(workDefault) && workDefault > 0 ? workDefault : null;
+    const warmupDefault = Number.isFinite(wrm) && wrm > 0 ? wrm : null;
+
+    for (const set of ex.sets || []) {
+      if (set.restSeconds === null || set.restSeconds === undefined) {
+        set.restSeconds = workRest;
+      }
+    }
+
+    for (const wSet of ex.warmupSets || []) {
+      if (wSet.restSeconds === null || wSet.restSeconds === undefined) {
+        wSet.restSeconds = warmupDefault;
+      }
+    }
+  }
+
+  return plan;
+}
+
+/**
  * Enriches a day plan with warmups and superset groupings read from the program
  * text. Applies metadata only when the exercise names and count align
  * strictly with the playground's output.
  *
  * @param {object} plan Day plan produced by buildDayPlan
  * @param {Array<{name: string, equipment: string|null, warmupText: string|null, supersetTag: string|null}>} programExercises
- * @param {{referenceData?: object}} options
+ * @param {{referenceData?: object, defaultTimers?: object}} options
  * @returns {object} The enriched plan
  */
-export function applyProgramMetadata(plan, programExercises, { referenceData = null } = {}) {
-  if (!plan || !Array.isArray(plan.exercises) || !Array.isArray(programExercises)) return plan;
-  if (plan.exercises.length !== programExercises.length) return plan;
+export function applyProgramMetadata(
+  plan,
+  programExercises,
+  { referenceData = null, defaultTimers = {} } = {}
+) {
+  if (!plan || !Array.isArray(plan.exercises) || !Array.isArray(programExercises)) {
+    return applyDefaultTimers(plan, defaultTimers);
+  }
+  if (plan.exercises.length !== programExercises.length) {
+    return applyDefaultTimers(plan, defaultTimers);
+  }
 
   for (let i = 0; i < plan.exercises.length; i++) {
     if (normalizeName(plan.exercises[i].name) !== normalizeName(programExercises[i].name)) {
-      return plan; // Name mismatch: do not guess
+      return applyDefaultTimers(plan, defaultTimers); // Name mismatch: do not guess, but apply timers
     }
   }
+
+  const effectiveTimers = {
+    standardRest: defaultTimers?.standardRest !== undefined ? defaultTimers.standardRest : 120,
+    warmupRest: defaultTimers?.warmupRest !== undefined ? defaultTimers.warmupRest : 60,
+    supersetRest: defaultTimers?.supersetRest !== undefined ? defaultTimers.supersetRest : 90,
+  };
 
   for (let i = 0; i < plan.exercises.length; i++) {
     const ex = plan.exercises[i];
@@ -127,7 +186,7 @@ export function applyProgramMetadata(plan, programExercises, { referenceData = n
         const warmupRest =
           Number.isFinite(wSet.restSeconds) && wSet.restSeconds > 0
             ? wSet.restSeconds
-            : 60;
+            : (Number.isFinite(effectiveTimers.warmupRest) && effectiveTimers.warmupRest > 0 ? effectiveTimers.warmupRest : null);
 
         ex.warmupSets.push({
           index: wIdx + 1,
@@ -146,7 +205,7 @@ export function applyProgramMetadata(plan, programExercises, { referenceData = n
     }
   }
 
-  return plan;
+  return applyDefaultTimers(plan, defaultTimers);
 }
 
 function detectUnit(exercises) {

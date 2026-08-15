@@ -194,3 +194,74 @@ test('applyProgramMetadata falls back to step rounding when referenceData fails 
   assert.equal(plan.exercises[1].warmupSets[0].restSeconds, 60);
 });
 
+test('applies default standard rest timer when omitted in Liftoscript and preserves explicit timer', () => {
+  // GZCLP Day 1: Squat (T1, no timer), Bench (T2, no timer), Lat Pulldown (T3, 90s timer)
+  const GZCLP_PROBE = `2026-08-14 12:00:00 +00:00 / program: "GZCLP" / dayName: "Day 1" / week: 1 / dayInWeek: 1 / exercises: {
+  Squat / 1x3 100lb / target: 4x3 100lb, 1x3+ 100lb
+  Bench Press / 1x10 82.5lb / target: 3x10 82.5lb
+  Lat Pulldown / 1x15 40lb / target: 2x15 40lb 90s, 1x15+ 40lb 90s
+}`;
+
+  const plan = buildDayPlan(GZCLP_PROBE);
+  const declared = [
+    { name: 'Squat', equipment: 'barbell', warmupText: null, supersetTag: null },
+    { name: 'Bench Press', equipment: 'barbell', warmupText: null, supersetTag: null },
+    { name: 'Lat Pulldown', equipment: 'cable', warmupText: null, supersetTag: null },
+  ];
+
+  applyProgramMetadata(plan, declared, {
+    defaultTimers: { standardRest: 180, supersetRest: 90, warmupRest: 60 },
+  });
+
+  // T1 Squat -> gets default 180s
+  assert.equal(plan.exercises[0].sets[0].restSeconds, 180);
+  assert.equal(plan.exercises[0].sets[4].restSeconds, 180);
+
+  // T2 Bench Press -> gets default 180s
+  assert.equal(plan.exercises[1].sets[0].restSeconds, 180);
+
+  // T3 Lat Pulldown -> preserves explicit 90s from Liftoscript
+  assert.equal(plan.exercises[2].sets[0].restSeconds, 90);
+  assert.equal(plan.exercises[2].sets[2].restSeconds, 90);
+});
+
+test('applies default superset rest timer when exercise is in a superset and has no explicit timer', () => {
+  const SUPERSET_PROBE = `2026-08-14 12:00:00 +00:00 / program: "Custom" / dayName: "Day 1" / week: 1 / dayInWeek: 1 / exercises: {
+  Triceps Pushdown / 1x12 25kg / target: 3x12 25kg
+  Bicep Curl / 1x12 12kg / target: 3x12 12kg
+}`;
+
+  const plan = buildDayPlan(SUPERSET_PROBE);
+  const declared = [
+    { name: 'Triceps Pushdown', equipment: null, warmupText: null, supersetTag: 'A' },
+    { name: 'Bicep Curl', equipment: null, warmupText: null, supersetTag: 'A' },
+  ];
+
+  applyProgramMetadata(plan, declared, {
+    defaultTimers: { standardRest: 120, supersetRest: 45, warmupRest: 60 },
+  });
+
+  // Both are in superset A -> get supersetRest 45s
+  assert.equal(plan.exercises[0].sets[0].restSeconds, 45);
+  assert.equal(plan.exercises[1].sets[0].restSeconds, 45);
+});
+
+test('disables timer when setting is Off (0 or null)', () => {
+  const PROBE_NO_TIMERS = `2026-08-14 12:00:00 +00:00 / program: "Custom" / dayName: "Day 1" / week: 1 / dayInWeek: 1 / exercises: {
+  Squat / 1x5 100kg / target: 3x5 100kg
+}`;
+
+  const plan = buildDayPlan(PROBE_NO_TIMERS);
+  const declared = [
+    { name: 'Squat', equipment: null, warmupText: '1x5 50kg', supersetTag: null },
+  ];
+
+  applyProgramMetadata(plan, declared, {
+    defaultTimers: { standardRest: 0, supersetRest: 0, warmupRest: 0 },
+  });
+
+  assert.equal(plan.exercises[0].sets[0].restSeconds, null);
+  assert.equal(plan.exercises[0].warmupSets[0].restSeconds, null);
+});
+
+

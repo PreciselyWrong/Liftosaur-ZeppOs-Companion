@@ -2,11 +2,11 @@
   "configVersion": "v3",
   "app": {
     "appId": 1123411,
-    "appName": "Liftosaur",
+    "appName": "Lifto Companion",
     "appType": "app",
     "version": {
-      "code": 19,
-      "name": "2.0.5"
+      "code": 20,
+      "name": "2.0.6"
     },
 
 
@@ -22,41 +22,42 @@
 
 
     "icon": "icon.png",
-    "vender": "Liftosaur",
-    "description": "Liftosaur workout tracker for Amazfit watches"
+    "vender": "Sni3rs",
+    "description": "Unofficial companion client for Liftosaur on Amazfit watches"
   },
   "setting": {
     "path": "setting/index"
   },
   "i18n": {
     "en-US": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     },
     "fr-FR": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     },
     "zh-CN": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     },
     "de-DE": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     },
     "es-ES": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     },
     "it-IT": {
-      "name": "Liftosaur",
-      "appName": "Liftosaur"
+      "name": "Lifto Companion",
+      "appName": "Lifto Companion"
     }
   },
   "permissions": [
     "data:user.hd.heart_rate",
-    "device:os.local_storage"
+    "device:os.local_storage",
+    "data:os.device.info"
   ],
   "runtime": {
     "apiVersion": {
@@ -83,6 +84,27 @@
       "platforms": [
         {
           "st": "r"
+        }
+      ],
+      "designWidth": 480
+    },
+    "square": {
+      "module": {
+        "page": {
+          "pages": [
+            "page/common/index"
+          ]
+        },
+        "app-side": {
+          "path": "app-side/index"
+        },
+        "setting": {
+          "path": "setting/index"
+        }
+      },
+      "platforms": [
+        {
+          "st": "s"
         }
       ],
       "designWidth": 480
