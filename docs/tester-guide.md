@@ -9,96 +9,88 @@ Allow about five minutes.
 
 You need:
 
-- An Amazfit watch running Zepp OS 3.6 or later (28 supported round and square models), already paired with your phone.
-- The **Zepp** app installed and signed in to your account.
-- The QR code that was sent to you or found in the [README](../README.md).
+- A supported Amazfit watch running Zepp OS 3.6 or later (28 models supported):
+  - **Round**: Active 2 (Round), Active 2 NFC (Round), Active 3 Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3, Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra, Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm), T-Rex 3 Pro (48mm), T-Rex Ultra, T-Rex Ultra 2.
+  - **Square**: Active, Active 2 (Square), Active 2 NFC (Square), Bip 6, Bip Max, Cheetah (Square).
+- The **Zepp** app installed and signed in to your account with your watch paired.
+- The QR code below.
 
 ## The QR code
 
-The test build is available as a single QR code: [test-build-qr.png](test-build-qr.png).
+<p align="center">
+  <img src="test-build-qr.png" width="220" alt="Test build QR code" />
+</p>
 
-It expires on **2026-08-22 at 06:46 UTC** (08:46 Central European Summer Time).
+This code expires on **2026-08-22 at 06:46 UTC** (08:46 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
-Developer Mode is a hidden setting in the Zepp app. Its only purpose here is to
-allow installing an application that does not come from the official store.
+Developer Mode is a standard Zepp feature for sideloading preview applications.
 
-Follow the official instructions from Zepp:
-[docs.zepp.com/docs/guides/tools/zepp-app](https://docs.zepp.com/docs/guides/tools/zepp-app/).
+1. Open the **Zepp** app on your phone.
+2. Tap **Profile** at the bottom right.
+3. Tap **Settings** > **About**.
+4. Tap the **Zepp** icon or version number **7 times** in a row until a message confirms Developer Mode is enabled.
+5. Go back to **Profile** and tap your paired watch under **My Devices**.
+6. Scroll down: **Developer Mode** is now visible.
 
-Once it is enabled, Developer Mode appears under **Device** > **General**.
+Official documentation: [docs.zepp.com/docs/guides/tools/zepp-app](https://docs.zepp.com/docs/guides/tools/zepp-app/).
 
 ## Step 2: scan the QR code
 
-1. Make sure your watch is **connected** to the Zepp app. It must show as
-   connected on the home screen, not as offline.
-2. In the Zepp app, go to **Device** > **General** > **Developer Mode**.
+1. Make sure your watch is **connected** to the Zepp app (shows as connected on the home screen).
+2. In the Zepp app, go to **Profile** > your watch > **Developer Mode**.
 3. Tap **+** at the top right, then choose **Scan**.
-4. Scan the QR code.
+4. Scan the QR code above.
 
-The install starts and transfers to the watch. Depending on the connection,
-allow up to a minute.
+The application downloads to your phone and transfers to the watch over Bluetooth. Allow up to a minute.
 
-## Step 3: enter your Liftosaur API key (optional)
+## Step 3: settings and Liftosaur account (optional)
 
-**You can skip this step.** With no key the application runs in demo mode on a
-sample program: every screen works and a whole workout can be played through,
-nothing is saved anywhere. That is enough to test the interface, and it needs no
-Liftosaur subscription.
+**You can skip this step.** With no API key, Lifto Companion runs in **demo mode** on sample workouts: every screen, timer, note and transition works, and nothing is saved anywhere. You do not need a Liftosaur subscription to test the interface.
 
-Do the rest of this step only to use your own account. It needs a Liftosaur
-Premium subscription, because the API the application talks to is a Premium
-feature. Do it **right after the install**, before opening the application on
-the watch.
+To sync with your own Liftosaur account, you need a Liftosaur Premium subscription (the cloud API is a Premium feature). Configure it **right after installing**:
 
-First get the key:
+### Get your API key
 
-1. Open [liftosaur.com](https://www.liftosaur.com) or the Liftosaur app.
+1. Open [liftosaur.com](https://www.liftosaur.com) or the Liftosaur mobile app.
 2. Go to **Settings** > **API Keys**.
-3. Copy your personal API key. It starts with `lftsk_`.
+3. Copy your personal API key (starts with `lftsk_`).
 
-Then enter it:
+### Enter it in the Zepp app
 
-1. In the Zepp app, go back to **Device** > **General** > **Developer Mode**.
+1. In the Zepp app, go to **Profile** > your watch > **Developer Mode**.
 2. Open the **Mini Program** tab.
-3. Next to Lifto Companion, tap **Settings**.
-4. Tap the API key box and paste your key.
+3. Next to **Lifto Companion**, tap **Settings**.
+4. Paste your key into the API Key box.
+5. Optional: adjust your default rest timers for standard sets, supersets and warmups.
 
-The page confirms once the key is saved.
+The settings save automatically.
 
 ## Step 4: start the application
 
-On the watch, open the application list: **Lifto Companion** is there.
+On your watch, press the side button to open the app list: **Lifto Companion** is ready to launch.
 
 ## Things to know
 
-**The QR code expires after 7 days**, on 2026-08-22 at 06:46 UTC for the current
-build. This is not a failure: past that delay the link stops working and you need
-to ask for a new one. A QR code works for everybody, as many times as needed
-while it is valid.
+- **The QR code expires after 7 days** (on 2026-08-22 at 06:46 UTC for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
+- **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
+- **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 
-**A new version means a new QR code.** Just scan the new one; the application
-updates over the previous install.
+## Troubleshooting
 
-**To uninstall**, long press the application icon on the watch, or remove it
-from the installed applications list in the Zepp app.
-
-## If it does not work
-
-| Symptom | Likely cause |
+| Symptom | Likely cause & fix |
 |---|---|
-| Scanning does nothing | Developer Mode is not enabled, redo step 1 |
-| "Download failed" | The QR code expired after 7 days, ask for a new one |
-| The install hangs | The watch is disconnected, check Bluetooth and retry |
-| The application does not appear on the watch | Unsupported model |
-| The screen is cropped or misaligned | Unsupported model, report it with the exact model name |
-| The watch says it cannot reach your account | The API key is missing or wrong, redo step 3 |
+| Cannot find Developer Mode | Redo step 1 by tapping the version 7 times in Profile > Settings > About. |
+| "Download failed" | The QR code expired after 7 days, check the README for a fresh code. |
+| Install hangs or fails | The watch lost Bluetooth connection. Reconnect the watch in the Zepp app and retry. |
+| App does not appear on watch | The watch model is not running Zepp OS 3.6 or later. |
+| Watch says cannot reach account | Check that the API key starts with `lftsk_` and was entered under Settings in Developer Mode. |
 
 ## Reporting a problem
 
 Please include:
 
 - The **exact model** of your watch and its Zepp OS version.
-- What you were doing when the problem happened.
+- What you were doing when the issue occurred.
 - A photo of the screen if something is displayed incorrectly.
