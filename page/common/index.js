@@ -1,7 +1,7 @@
 import { createWidget, deleteWidget, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
-import { HeartRate, Vibrator } from '@zos/sensor';
+import { HeartRate, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import {
   setPageBrightTime,
@@ -147,6 +147,9 @@ let hrSensor = null;
 let hrCallback = null;
 let vibrator = null;
 let lastVibratedOvertimeStep = -1;
+let flashWidget = null;
+let flashTimer = null;
+let vibrationTimer = null;
 let isRestMinimized = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
@@ -168,6 +171,7 @@ let activeWidgets = [];
 let liveWidgets = {};
 
 function clearWidgets() {
+  clearFlash();
   for (const w of activeWidgets) {
     try {
       deleteWidget(w);
@@ -699,13 +703,140 @@ function heartRateColor(hrVal) {
   return 0xff3333;
 }
 
-function triggerVibration() {
+// ── Rest reminder feedback ───────────────────────────────────────────────────
+
+/** Blinks of the outline, in on/off pairs: 4 x (400 + 200) is 2.4s of flashing. */
+const FLASH_BLINKS = 4;
+/** How long the ring stays lit, then dark, in ms. */
+const FLASH_ON_MS = 400;
+const FLASH_OFF_MS = 200;
+const FLASH_LINE_WIDTH = Math.max(4, Math.round(W * 0.02));
+// `fit()` only kicks in on a square panel, so an identity layout is the round
+// 480 canvas the screens were drawn for: there the outline has to be a circle.
+const FLASH_RADIUS = LAYOUT.isFitted ? Math.round(W * 0.12) : Math.round(W / 2);
+
+function clearFlash() {
+  if (flashTimer) {
+    clearTimeout(flashTimer);
+    flashTimer = null;
+  }
+  if (flashWidget) {
+    try {
+      deleteWidget(flashWidget);
+    } catch (e) {
+      // Already torn down by the runtime.
+    }
+    flashWidget = null;
+  }
+}
+
+/**
+ * Pulses a ring along the bezel to back up the reminder vibration, for when the
+ * watch is on the bench rather than on the wrist. The widget is deliberately
+ * kept out of `activeWidgets`: it outlives no render, it just draws on top of
+ * whatever screen is up and removes itself.
+ */
+function flashScreenEdge() {
   try {
-    if (!vibrator) vibrator = new Vibrator();
+    clearFlash();
+    let remaining = FLASH_BLINKS * 2;
+    const step = () => {
+      flashTimer = null;
+      let lit;
+      if (flashWidget) {
+        try {
+          deleteWidget(flashWidget);
+        } catch (e) {
+          // Already torn down by the runtime.
+        }
+        flashWidget = null;
+        lit = false;
+      } else {
+        flashWidget = createWidget(widget.STROKE_RECT, {
+          x: 1,
+          y: 1,
+          w: W - 2,
+          h: H - 2,
+          radius: FLASH_RADIUS,
+          line_width: FLASH_LINE_WIDTH,
+          color: THEME.primary,
+        });
+        lit = true;
+      }
+      remaining -= 1;
+      if (remaining > 0) flashTimer = setTimeout(step, lit ? FLASH_ON_MS : FLASH_OFF_MS);
+    };
+    step();
+  } catch (err) {
+    console.log('[liftosaur] flash error:', err?.message || String(err));
+    flashWidget = null;
+  }
+}
+
+/**
+ * How long the motor runs for the nth reminder of a rest period, in ms: the set
+ * is over and being ignored, so each nudge is harder to miss than the last.
+ * Capped, past which it reads as a malfunction rather than a reminder.
+ */
+const VIBRATION_MS = [700, 1200, 1800];
+const VIBRATION_MS_STEP = 600;
+const VIBRATION_MS_MAX = 4000;
+
+function vibrationDuration(index) {
+  if (index < VIBRATION_MS.length) return VIBRATION_MS[index];
+  const extra = (index - VIBRATION_MS.length + 1) * VIBRATION_MS_STEP;
+  return Math.min(VIBRATION_MS[VIBRATION_MS.length - 1] + extra, VIBRATION_MS_MAX);
+}
+
+function stopVibration() {
+  if (vibrationTimer) {
+    clearTimeout(vibrationTimer);
+    vibrationTimer = null;
+  }
+  try {
+    if (vibrator) vibrator.stop();
+  } catch (err) {
+    console.log('[liftosaur] vibrator stop error:', err?.message || String(err));
+  }
+}
+
+/**
+ * `VIBRATOR_SCENE_DURATION` runs the motor until `stop()`, which is what makes
+ * the length controllable here. The setter is called both ways because the
+ * documented example passes the bare constant while the typings ask for an
+ * option object, and which one a given firmware accepts is not worth guessing.
+ */
+function setVibrationDurationMode() {
+  try {
+    vibrator.setMode(VIBRATOR_SCENE_DURATION);
+    return;
+  } catch (e) {
+    // Older/newer signature, try the object form below.
+  }
+  try {
+    vibrator.setMode({ mode: VIBRATOR_SCENE_DURATION });
+  } catch (err) {
+    console.log('[liftosaur] vibrator mode error:', err?.message || String(err));
+  }
+}
+
+function triggerVibration(index = 0) {
+  const duration = vibrationDuration(index);
+  try {
+    stopVibration();
+    if (!vibrator) {
+      vibrator = new Vibrator();
+      setVibrationDurationMode();
+    }
     vibrator.start();
+    vibrationTimer = setTimeout(() => {
+      vibrationTimer = null;
+      stopVibration();
+    }, duration);
   } catch (err) {
     console.log('[liftosaur] vibrator error:', err?.message || String(err));
   }
+  flashScreenEdge();
 }
 
 // ── Shared chrome ────────────────────────────────────────────────────────────
@@ -1353,8 +1484,18 @@ function renderOverviewScreen(view) {
 }
 
 function renderActiveSetScreen(view) {
-  const set = view.currentSet;
   const isResting = view.state === SESSION_STATES.REST && view.rest;
+
+  // While resting this screen is "Prepare": it shows and edits the set about to
+  // be performed, which may belong to the next exercise of a superset.
+  const pending = view.pending;
+  const set = (isResting && pending ? pending.set : null) || view.currentSet;
+  const exerciseName = isResting && pending ? pending.exerciseName : view.exerciseName;
+  const exerciseNotes = isResting && pending ? pending.exerciseNotes : view.exerciseNotes;
+  const supersetGroup = isResting && pending ? pending.supersetGroup : view.supersetGroup;
+  const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
+  const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
+  const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
 
   if (isResting) {
     const bannerColor = view.rest.isOvertime
@@ -1403,17 +1544,17 @@ function renderActiveSetScreen(view) {
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(92),
-    w: view.exerciseNotes ? px(306) : px(356),
+    w: exerciseNotes ? px(306) : px(356),
     h: px(30),
     color: THEME.textPrimary,
     text_size: px(22),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: truncate(view.exerciseName, 22),
+    text: truncate(exerciseName, 22),
   });
 
-  if (view.exerciseNotes) {
+  if (exerciseNotes) {
     addWidget(widget.BUTTON, {
       x: px(374),
       y: px(88),
@@ -1428,31 +1569,31 @@ function renderActiveSetScreen(view) {
       click_func: () => {
         notesPage = 0;
         isNotesModalOpen = true;
-        activeNotesTitle = view.exerciseName;
-        activeNotesContent = view.exerciseNotes;
+        activeNotesTitle = exerciseName;
+        activeNotesContent = exerciseNotes;
         renderUI();
       },
     });
   }
 
-  const ssColor = supersetColor(view.supersetGroup);
-  const ssBadge = view.supersetGroup ? ` (SS ${view.supersetGroup})` : '';
+  const ssColor = supersetColor(supersetGroup);
+  const ssBadge = supersetGroup ? ` (SS ${supersetGroup})` : '';
 
   const setLabel = set.isWarmup
     ? `🔥 WARMUP ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
-    : `SET ${set.workSetIndex || view.currentSetIndex + 1}/${set.totalWorkSets || view.totalSets}${ssBadge}`;
+    : `SET ${set.workSetIndex || setIndex + 1}/${set.totalWorkSets || totalSets}${ssBadge}`;
 
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(122),
     w: px(356),
     h: px(26),
-    color: set.isWarmup ? 0xffb544 : (view.supersetGroup ? ssColor : THEME.textSecondary),
+    color: set.isWarmup ? 0xffb544 : (supersetGroup ? ssColor : THEME.textSecondary),
     text_size: px(16),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${setLabel}   ${formatDots(view.exerciseSetsDots)}`,
+    text: `${setLabel}   ${formatDots(setsDots)}`,
   });
 
   let targetText;
@@ -1984,18 +2125,20 @@ function tick() {
 
   if (view.rest && !view.rest.isPaused && view.rest.remaining <= 0) {
     const overtime = -view.rest.remaining;
+    // The index is the rank of the reminder within this rest period, which is
+    // what makes each buzz longer than the one before it.
     if (overtime >= 0 && lastVibratedOvertimeStep < 0) {
       lastVibratedOvertimeStep = 0;
-      triggerVibration();
+      triggerVibration(0);
     } else if (overtime >= 30 && lastVibratedOvertimeStep < 30) {
       lastVibratedOvertimeStep = 30;
-      triggerVibration();
+      triggerVibration(1);
     } else if (overtime >= 60 && lastVibratedOvertimeStep < 60) {
       lastVibratedOvertimeStep = 60;
-      triggerVibration();
+      triggerVibration(2);
     } else if (overtime >= 120 && overtime >= lastVibratedOvertimeStep + 60) {
       lastVibratedOvertimeStep = Math.floor(overtime / 60) * 60;
-      triggerVibration();
+      triggerVibration(2 + lastVibratedOvertimeStep / 60 - 1);
     }
   }
 
@@ -2061,6 +2204,8 @@ function stopClock() {
     clearInterval(clockTimer);
     clockTimer = null;
   }
+  clearFlash();
+  stopVibration();
 }
 
 Page(
