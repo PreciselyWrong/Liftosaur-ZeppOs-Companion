@@ -4,6 +4,7 @@
 
 ### Changed
 - The application is now called **Lifto Companion**, and its vendor is the author of this project rather than Liftosaur. The previous name and vendor claimed an affiliation that does not exist, which is both inaccurate and a likely rejection at store review. Liftosaur is still named in the description as the service the application connects to.
+- Fresh test build QR codes, one per screen shape, valid until 22 August 2026 at 06:07 UTC. The README and the tester guide carry both, and the tester guide now states that the API key step is optional, since demo mode covers a tester with no Premium subscription.
 - The settings page no longer reports "Not connected" when no API key is stored. That state is demo mode, not a failure: it now says so, explains that nothing is saved, and points at the key field.
 
 ### Added

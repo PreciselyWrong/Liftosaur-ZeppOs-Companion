@@ -1,4 +1,4 @@
-# Installing Liftosaur on your watch: tester guide
+# Installing Lifto Companion on your watch: tester guide
 
 This guide is for people who want to test the application. No technical skill is
 required, and **you do not need a computer**: everything happens on your phone.
@@ -9,20 +9,27 @@ Allow about five minutes.
 
 You need:
 
-- A supported Amazfit watch, already paired with your phone. The current build
-  covers 22 round models: Active 2 (Round), Active 2 NFC (Round), Active 3
-  Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3,
-  Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra,
-  Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm),
-  T-Rex 3 Pro (48mm), T-Rex Ultra and T-Rex Ultra 2.
+- An Amazfit watch running Zepp OS 3.6 or later, already paired with your phone.
+  The builds are produced for **Amazfit Active 2 (Round)** and **Amazfit Bip 6**;
+  those are the two models known to work. Another watch of the same screen shape
+  may well accept the build, and reporting whether it did is useful.
 
 - The **Zepp** app installed and signed in to your account.
 - The QR code that was sent to you.
 
-> **Any watch missing from that list is unsupported by this build**, including
-> Bip 6 and every other rectangular screen model, and including older round
-> models such as the GTR 3, the GTR 4 and the T-Rex 2. There is no point
-> trying: the install will fail.
+> **There are two QR codes, one per screen shape.** The round build does not
+> install on a square watch and the square build does not install on a round
+> one, so make sure you were sent the one matching your watch. Both are in the
+> [README](../README.md), which always carries the current pair.
+
+## The QR codes
+
+| Screen shape | Built for | Code |
+|---|---|---|
+| Round | Amazfit Active 2 (Round) | [test-build-qr-round.png](test-build-qr-round.png) |
+| Square | Amazfit Bip 6 | [test-build-qr-square.png](test-build-qr-square.png) |
+
+Both expire on **2026-08-22 at 06:07 UTC** (08:07 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -45,10 +52,17 @@ Once it is enabled, Developer Mode appears under **Device** > **General**.
 The install starts and transfers to the watch. Depending on the connection,
 allow up to a minute.
 
-## Step 3: enter your Liftosaur API key
+## Step 3: enter your Liftosaur API key (optional)
 
-Do this **right after the install**, before opening the application on the
-watch. Without the key the application cannot reach your account.
+**You can skip this step.** With no key the application runs in demo mode on a
+sample program: every screen works and a whole workout can be played through,
+nothing is saved anywhere. That is enough to test the interface, and it needs no
+Liftosaur subscription.
+
+Do the rest of this step only to use your own account. It needs a Liftosaur
+Premium subscription, because the API the application talks to is a Premium
+feature. Do it **right after the install**, before opening the application on
+the watch.
 
 First get the key:
 
@@ -60,21 +74,21 @@ Then enter it:
 
 1. In the Zepp app, go back to **Device** > **General** > **Developer Mode**.
 2. Open the **Mini Program** tab.
-3. Next to Liftosaur, tap **Settings**.
+3. Next to Lifto Companion, tap **Settings**.
 4. Tap the API key box and paste your key.
 
 The page confirms once the key is saved.
 
 ## Step 4: start the application
 
-On the watch, open the application list: **Liftosaur** is there.
+On the watch, open the application list: **Lifto Companion** is there.
 
 ## Things to know
 
-**The QR code expires after 7 days.** This is not a failure: past that delay the
-link stops working and you need to ask for a new one. The same QR code works for
-everybody and on every supported model, as many times as needed while it is
-valid.
+**The QR codes expire after 7 days**, on 2026-08-22 at 06:07 UTC for the current
+pair. This is not a failure: past that delay the link stops working and you need
+to ask for a new one. A QR code works for everybody, as many times as needed
+while it is valid.
 
 **A new version means a new QR code.** Just scan the new one; the application
 updates over the previous install.
@@ -89,7 +103,7 @@ from the installed applications list in the Zepp app.
 | Scanning does nothing | Developer Mode is not enabled, redo step 1 |
 | "Download failed" | The QR code expired after 7 days, ask for a new one |
 | The install hangs | The watch is disconnected, check Bluetooth and retry |
-| The application does not appear on the watch | Unsupported model (rectangular screen) |
+| The application does not appear on the watch | Wrong QR code for your screen shape, or unsupported model |
 | The screen is cropped or misaligned | Unsupported model, report it with the exact model name |
 | The watch says it cannot reach your account | The API key is missing or wrong, redo step 3 |
 
