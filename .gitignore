@@ -11,6 +11,22 @@
 secrets.json
 config.local.json
 
+# Keystores, certificates and credential files
+*.p12
+*.pfx
+*.jks
+*.keystore
+*.crt
+*.cer
+*.der
+.netrc
+_netrc
+id_rsa
+id_rsa.*
+id_ed25519
+id_ed25519.*
+*.ppk
+
 # Node / Zeus CLI
 node_modules/
 node_modules/**
