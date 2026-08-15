@@ -137,6 +137,19 @@ export function roundToLoadable(target, equipment, unit = 'kg') {
 }
 
 /**
+ * Floors a target onto a fixed increment, the per-exercise `rounding` setting.
+ * Used only when the gym's equipment is unknown but the exercise still declares
+ * a step it can be loaded in.
+ */
+export function roundToStep(target, step) {
+  if (!Number.isFinite(target) || !Number.isFinite(step) || step <= 0) {
+    return { value: target, exact: false, resolved: false };
+  }
+  const value = round5(Math.floor(round5(target / step) + 1e-9) * step);
+  return { value, exact: Math.abs(value - target) < 1e-9, resolved: true };
+}
+
+/**
  * Resolves the equipment id an exercise uses.
  *
  * `GET /exercise-data` maps equipment per gym, so the current gym wins, then
@@ -149,6 +162,14 @@ export function resolveEquipmentId({ exerciseData = null, exerciseKey = null, eq
   if (mapping) {
     if (currentGymId && mapping[currentGymId]) return mapping[currentGymId];
     if (mapping.default) return mapping.default;
+
+    // Neither the current gym nor a default is listed. When every gym maps this
+    // exercise to the same equipment there is nothing to choose between, so the
+    // single value is the answer rather than a guess.
+    const values = Object.keys(mapping)
+      .map((gymId) => mapping[gymId])
+      .filter(Boolean);
+    if (values.length > 0 && values.every((value) => value === values[0])) return values[0];
   }
 
   if (exerciseKey && exerciseKey.includes('_')) {

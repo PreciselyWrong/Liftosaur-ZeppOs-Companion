@@ -439,3 +439,35 @@ Triceps Pushdown / 3x12 / 20kg / superset: A
   assert.equal(plan.exercises[1].sets[0].restSeconds, 30);  // Superset rest
 });
 
+
+test('getDayPlan carries the comments past workouts left on each exercise', async () => {
+  const client = createFakeClient();
+  client.state.historyRecords = [
+    {
+      id: 7,
+      text: `2026-08-07T10:00:00Z / program: "Test" / dayName: "Semaine 1 - Mardi: PUSH A" / week: 1 / dayInWeek: 1 / exercises: {
+  // banc au cran 2, epaule ok
+  Decline Bench Press / 3x8 80kg
+  Triceps Pushdown / 2x11 35kg
+}`,
+    },
+  ];
+
+  const service = createProgramService({ client });
+  const plan = await service.getDayPlan('prog-1', 1, 1);
+
+  assert.match(plan.exercises[0].notes, /Past sessions/);
+  assert.match(plan.exercises[0].notes, /2026-08-07: banc au cran 2, epaule ok/);
+  assert.equal(plan.exercises[1].notes, null, 'an exercise with no past comment keeps none');
+});
+
+test('a history call that fails does not cost the user the day plan', async () => {
+  const client = createFakeClient({
+    async listHistory() {
+      throw new Error('network');
+    },
+  });
+
+  const plan = await createProgramService({ client }).getDayPlan('prog-1', 1, 1);
+  assert.equal(plan.exercises.length, 2);
+});

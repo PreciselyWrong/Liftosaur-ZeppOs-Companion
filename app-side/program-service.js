@@ -24,7 +24,11 @@ import {
   buildWorkoutCommands,
   applyProgramMetadata,
 } from '../shared/day-plan.js';
-import { parseLiftohistoryRecord, rewriteRecordHeader } from '../shared/liftohistory.js';
+import {
+  parseLiftohistoryRecord,
+  rewriteRecordHeader,
+  collectExerciseNotes,
+} from '../shared/liftohistory.js';
 
 const PROBE_CEILING = 32;
 const PROBE_MAX_ATTEMPTS = 4;
@@ -61,6 +65,37 @@ export function createProgramService({
 
   /** programId -> { id, name, text, version } */
   const programCache = new Map();
+
+  /** Recent history, kept for the notes past workouts carry. Dropped on write. */
+  let historyCache = null;
+
+  async function loadRecentHistory({ limit = 20, force = false } = {}) {
+    if (historyCache && !force) return historyCache;
+    const history = await client.listHistory({ limit });
+    historyCache = history.records;
+    return historyCache;
+  }
+
+  /**
+   * Appends the comments earlier sessions left on this exercise to its notes,
+   * which is the one place the watch already shows free text.
+   */
+  function appendHistoryNotes(plan, notesByName) {
+    for (const exercise of plan.exercises) {
+      const entries =
+        notesByName.get(normalizeName(exercise.fullName || '')) ||
+        notesByName.get(normalizeName(exercise.name)) ||
+        [];
+      if (entries.length === 0) continue;
+
+      const lines = entries.map((entry) => {
+        const day = entry.date ? String(entry.date).slice(0, 10) : null;
+        return day ? `• ${day}: ${entry.note}` : `• ${entry.note}`;
+      });
+      const block = `Past sessions\n${lines.join('\n')}`;
+      exercise.notes = exercise.notes ? `${exercise.notes}\n\n${block}` : block;
+    }
+  }
 
   async function loadProgram(programId, { force = false } = {}) {
     if (!force && programCache.has(programId)) {
@@ -143,8 +178,10 @@ export function createProgramService({
 
       let lastWorkout = null;
       try {
-        const history = await client.listHistory({ limit: historyLimit });
-        for (const entry of history.records) {
+        // Fetched fresh: the outline is where the user looks to see the workout
+        // they just finished, and it is the same list the notes are read from.
+        const records = await loadRecentHistory({ limit: historyLimit, force: true });
+        for (const entry of records) {
           const record = parseLiftohistoryRecord(entry.text);
           if (!record) continue;
           if (program.name && record.programName && record.programName !== program.name) continue;
@@ -215,6 +252,14 @@ export function createProgramService({
 
       const declaredExercises = parseProgramDayExercises(program.text, week, day);
       applyProgramMetadata(plan, declaredExercises, { referenceData, defaultTimers: timers });
+
+      try {
+        const records = await loadRecentHistory();
+        appendHistoryNotes(plan, collectExerciseNotes(records.map((entry) => entry.text)));
+      } catch (err) {
+        // Past comments are a nicety; a history call that fails must not cost
+        // the user their workout.
+      }
 
       // Liftosaur prefixes the day with the week name only when the program has
       // more than one week, so both spellings count as a match. The numeric
@@ -346,6 +391,7 @@ export function createProgramService({
   };
 
   async function commitHistory(recordText, startedAt) {
+    historyCache = null; // A written workout makes the cached list stale.
     try {
       const created = await client.createHistoryRecord(recordText);
       return { id: created?.id ?? null, alreadyExisted: false };

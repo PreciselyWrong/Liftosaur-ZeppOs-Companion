@@ -4,7 +4,7 @@
 
 ### Changed
 - The application is now called **Lifto Companion**, and its vendor is the author of this project rather than Liftosaur. The previous name and vendor claimed an affiliation that does not exist, which is both inaccurate and a likely rejection at store review. Liftosaur is still named in the description as the service the application connects to.
-- Fresh test build QR codes, one per screen shape, valid until 22 August 2026 at 06:07 UTC. The README and the tester guide carry both, and the tester guide now states that the API key step is optional, since demo mode covers a tester with no Premium subscription.
+- Fresh test build QR codes, one per screen shape, valid until 22 August 2026 at 06:31 UTC. The README and the tester guide carry both, and the tester guide now states that the API key step is optional, since demo mode covers a tester with no Premium subscription.
 - The settings page no longer reports "Not connected" when no API key is stored. That state is demo mode, not a failure: it now says so, explains that nothing is saved, and points at the key field.
 
 ### Added
@@ -13,8 +13,11 @@
 - Zepp App Store submission file (`docs/store-listing.md`): listing copy, asset list, reviewer notes, and the demo mode path that removes any need for a test account.
 - Default rest timer settings for standard sets, supersets and warmups in the phone settings page, automatically applied when a program omits explicit timers.
 - Support for square watches such as the Amazfit Bip 6 (`st: "s"`, 390x450). The screens are drawn once, in the round design space, and a single layout adapter fits them to the real panel. Round watches keep the identity transform and render exactly as before. On square watches the system status bar carrying the app name is hidden and the layout additionally keeps clear of the band it occupies, since it sat on top of the title and the first row of buttons. Validated on the Amazfit Bip 6 emulator.
+- The comments left on an exercise in past workouts (the `//` notes Liftosaur records in the history) are now shown under "Past sessions" in that exercise's notes, up to the three most recent. Exercises that had no notes at all now get the ℹ button as soon as a past comment exists.
 
 ### Fixed
+- The steppers on the "Prepare" screen now work. They were rendered during rest but every tap was ignored, and they showed the set that had just been logged rather than the one coming up. Prepare now targets the upcoming set - including the superset partner when the next set belongs to another exercise - and what is set there is what the set starts with.
+- Warmup weights are now always loadable with the equipment you actually own. A warmup below the bar (15 kg asked on a 20 kg bar) came from a fallback that simply rounded the percentage to the nearest 2.5 kg whenever the gym's equipment could not be identified. That fallback is gone: the gym's bar and plates answer first, the exercise's own rounding step second, and if neither can, the percentage is shown rather than an unloadable number. Equipment identification also improved in two cases that caused most of these misses: custom exercises whose name contains a comma ("Romanian Deadlift, Barebell"), and exercises mapped to equipment in a single gym with no `default` entry.
 - The app now declares the `data:os.device.info` permission. Without it the watch could not report its own screen size, which is what the square layout is built from.
 - Tester guide for installing the app from a QR code with a phone only, no computer required (`docs/tester-guide.md`).
 - Public test build QR code in the README, with its supported models and its expiry date.

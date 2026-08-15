@@ -39,6 +39,14 @@ const EXERCISE_DATA = [
   { key: 'benchPress_barbell', exerciseName: 'Bench Press', equipment: { default: 'barbell' } },
   { key: 'benchPress_dumbbell', exerciseName: 'Bench Press', equipment: { default: 'dumbbell' } },
   { key: 'lateralRaise_cable', exerciseName: 'Lateral Raise', rounding: 2.5 },
+  // A custom exercise whose own name contains a comma, mapped only for a gym
+  // that is not the current one.
+  {
+    key: 'vpslulox',
+    exerciseName: 'Romanian Deadlift, Barebell',
+    rm1: '47.5kg',
+    equipment: { fmmayomc: 'barbell' },
+  },
 ];
 
 function createFakeClient(overrides = {}) {
@@ -153,6 +161,47 @@ test('refuses to resolve an exercise it has never heard of', async () => {
   await reference.load();
 
   assert.equal(reference.resolveWeight('Unknown Movement', null, 50, 'kg').resolved, false);
+});
+
+test('finds a custom exercise whose own name contains a comma', async () => {
+  const reference = createReferenceData({ client: createFakeClient() });
+  await reference.load();
+
+  // The Liftohistory parser reads "Romanian Deadlift, Barebell" as name plus
+  // equipment "Barebell", which matches nothing. The raw label does.
+  const lookup = reference.lookupExercise(
+    'Romanian Deadlift',
+    'Barebell',
+    'Romanian Deadlift, Barebell'
+  );
+  assert.equal(lookup.found, true);
+  assert.equal(lookup.equipmentId, 'barbell');
+});
+
+test('never proposes a warmup lighter than the bar', async () => {
+  const reference = createReferenceData({ client: createFakeClient() });
+  await reference.load();
+
+  // 50% of a 30kg work set is 15kg, which a 20kg bar cannot make.
+  const resolved = reference.resolveWeight(
+    'Romanian Deadlift',
+    'Barebell',
+    15,
+    'kg',
+    'Romanian Deadlift, Barebell'
+  );
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.value, 20);
+});
+
+test("falls back to the exercise's own rounding when the equipment is unknown", async () => {
+  const reference = createReferenceData({ client: createFakeClient() });
+  await reference.load();
+
+  // lateralRaise_cable points at cable equipment this gym does not have.
+  const resolved = reference.resolveWeight('Lateral Raise', null, 13.7, 'kg');
+  assert.equal(resolved.resolved, true);
+  assert.equal(resolved.value, 12.5);
 });
 
 test('answers safely before anything is loaded', () => {

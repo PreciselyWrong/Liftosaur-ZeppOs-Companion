@@ -128,6 +128,10 @@ function parseExerciseLine(line) {
   const exercise = {
     name,
     equipment,
+    // Custom exercises may carry a comma in their own name ("Romanian Deadlift,
+    // Barebell"), in which case the split above is wrong. The raw label is kept
+    // so equipment lookups can try it verbatim.
+    fullName: nameAndEquipment.trim(),
     completedGroups: [],
     warmupGroups: [],
     targetGroups: [],
@@ -205,20 +209,89 @@ export function parseLiftohistoryRecord(text) {
   record.notes = [];
   record.exercises = [];
 
+  // A `//` line before the header is the workout's own note.
+  record.workoutNote =
+    lines
+      .slice(0, bodyStart - 1)
+      .map((line) => line.trim())
+      .filter((line) => line.startsWith('//'))
+      .map((line) => line.replace(/^\/\/\s*/, ''))
+      .join('\n') || null;
+
+  // Inside the block, a `//` line belongs to the exercise it precedes. Notes
+  // with no exercise after them stay on the record.
+  let pendingNotes = [];
+
   for (let i = bodyStart; i < lines.length; i++) {
     const line = lines[i].trim();
     if (line === '}' || line === '') continue;
     if (line.startsWith('//')) {
-      record.notes.push(line.replace(/^\/\/\s*/, ''));
+      const note = line.replace(/^\/\/\s*/, '');
+      pendingNotes.push(note);
+      record.notes.push(note);
       continue;
     }
     const exercise = parseExerciseLine(line);
     if (exercise) {
+      exercise.note = pendingNotes.length > 0 ? pendingNotes.join('\n') : null;
       record.exercises.push(exercise);
     }
+    pendingNotes = [];
   }
 
   return record;
+}
+
+/**
+ * Gathers the notes past workouts carry for each exercise, most recent first.
+ *
+ * These are the comments written during a session in the Liftosaur app - "belt
+ * too loose", "left shoulder complained" - and they are worth reading again the
+ * next time the same exercise comes up.
+ *
+ * Records are read in the order given, which `GET /history` returns newest
+ * first. Both the exercise name alone and the full `Name, Equipment` label are
+ * keyed, since either spelling can reach this from a day plan.
+ *
+ * @param {Array<string>} recordTexts raw `records[].text` from GET /history
+ * @param {{maxPerExercise?: number}} options
+ * @returns {Map<string, Array<{date: string|null, note: string}>>} keyed by lowercased name
+ */
+export function collectExerciseNotes(recordTexts, { maxPerExercise = 3 } = {}) {
+  const byName = new Map();
+
+  const add = (key, entry) => {
+    if (!key) return;
+    const list = byName.get(key) || [];
+    if (list.length >= maxPerExercise) return;
+    // The same note repeated across sessions is read once.
+    if (list.some((existing) => existing.note === entry.note)) return;
+    list.push(entry);
+    byName.set(key, list);
+  };
+
+  for (const text of recordTexts || []) {
+    const record = parseLiftohistoryRecord(text);
+    if (!record) continue;
+
+    for (const exercise of record.exercises) {
+      if (!exercise.note) continue;
+      const entry = { date: record.date || null, note: exercise.note };
+      add(normalizeNoteKey(exercise.name), entry);
+      if (exercise.fullName && exercise.fullName !== exercise.name) {
+        add(normalizeNoteKey(exercise.fullName), entry);
+      }
+    }
+  }
+
+  return byName;
+}
+
+function normalizeNoteKey(name) {
+  return String(name || '')
+    .replace(/\s+/g, ' ')
+    .trim()
+    .toLowerCase();
 }
 
 export function formatDateForHistory(date) {

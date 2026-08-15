@@ -29,7 +29,7 @@ You need:
 | Round | Amazfit Active 2 (Round) | [test-build-qr-round.png](test-build-qr-round.png) |
 | Square | Amazfit Bip 6 | [test-build-qr-square.png](test-build-qr-square.png) |
 
-Both expire on **2026-08-22 at 06:07 UTC** (08:07 Central European Summer Time).
+Both expire on **2026-08-22 at 06:31 UTC** (08:31 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -85,7 +85,7 @@ On the watch, open the application list: **Lifto Companion** is there.
 
 ## Things to know
 
-**The QR codes expire after 7 days**, on 2026-08-22 at 06:07 UTC for the current
+**The QR codes expire after 7 days**, on 2026-08-22 at 06:31 UTC for the current
 pair. This is not a failure: past that delay the link stops working and you need
 to ask for a new one. A QR code works for everybody, as many times as needed
 while it is valid.
