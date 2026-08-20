@@ -1,7 +1,7 @@
 import { createWidget, deleteWidget, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
-import { HeartRate, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
+import { HeartRate, Time, TIME_HOUR_FORMAT_12, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import {
   setPageBrightTime,
@@ -17,6 +17,13 @@ import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-sessi
 import { createSessionStore } from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
+import {
+  TYPOGRAPHY,
+  LIST_PAGE_SIZE,
+  OVERVIEW_PAGE_SIZE,
+  READY_PREVIEW_SIZE,
+  activeSetLayout,
+} from '../../shared/watch-layout.js';
 import {
   suggestedProgramIndex,
   suggestedWeekIndex,
@@ -78,7 +85,10 @@ console.log(
 
 const W = LAYOUT.width;
 const H = LAYOUT.height;
-const LIST_PAGE_SIZE = 4;
+
+function font(role) {
+  return px(TYPOGRAPHY[role]);
+}
 
 // ── Screens ──────────────────────────────────────────────────────────────────
 //
@@ -108,6 +118,17 @@ try {
   deviceStorage = new LocalStorage();
 } catch (err) {
   console.log('[liftosaur] LocalStorage unavailable, session kept in memory:', err?.message || String(err));
+}
+
+/**
+ * The watch clock. Created once here rather than per render: it is read on
+ * every screen and its absence must never cost more than a missing label.
+ */
+let timeSensor = null;
+try {
+  timeSensor = new Time();
+} catch (err) {
+  console.log('[liftosaur] time sensor unavailable, clock hidden:', err?.message || String(err));
 }
 
 const localStoreAdapter = {
@@ -155,6 +176,7 @@ let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
 let clockTimer = null;
+let lastRenderedClock = null;
 let lastRenderedSecond = null;
 let lastRenderedState = null;
 let activeWidgets = [];
@@ -520,7 +542,7 @@ function formatNotesMarkdown(raw) {
     .trim();
 }
 
-function paginateNotes(text, maxCharsPerPage = 210) {
+function paginateNotes(text, maxCharsPerPage = 150) {
   const formatted = formatNotesMarkdown(text);
   if (formatted.length <= maxCharsPerPage) return [formatted];
 
@@ -578,7 +600,7 @@ function renderNotesModal() {
     w: px(368),
     h: px(28),
     color: THEME.textPrimary,
-    text_size: px(20),
+    text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -587,24 +609,11 @@ function renderNotesModal() {
 
   addWidget(widget.TEXT, {
     x: px(56),
-    y: px(82),
+    y: px(88),
     w: px(368),
-    h: px(20),
-    color: THEME.primaryLight,
-    text_size: px(13),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: 'EXERCISE NOTES',
-  });
-
-  addWidget(widget.TEXT, {
-    x: px(56),
-    y: px(108),
-    w: px(368),
-    h: px(226),
+    h: px(246),
     color: THEME.textSecondary,
-    text_size: px(17),
+    text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
@@ -621,7 +630,7 @@ function renderNotesModal() {
       normal_color: THEME.cardActive,
       press_color: THEME.card,
       text: '‹',
-      text_size: px(22),
+      text_size: font('button'),
       click_func: () => {
         notesPage = (notesPage - 1 + totalPages) % totalPages;
         renderUI();
@@ -633,8 +642,8 @@ function renderNotesModal() {
       y: px(348),
       w: px(60),
       h: px(54),
-      color: THEME.textMuted,
-      text_size: px(15),
+      color: THEME.textSecondary,
+      text_size: font('micro'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -650,7 +659,7 @@ function renderNotesModal() {
       normal_color: THEME.cardActive,
       press_color: THEME.card,
       text: '›',
-      text_size: px(22),
+      text_size: font('button'),
       click_func: () => {
         notesPage = (notesPage + 1) % totalPages;
         renderUI();
@@ -666,7 +675,7 @@ function renderNotesModal() {
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'Close',
-      text_size: px(19),
+      text_size: font('button'),
       click_func: () => {
         isNotesModalOpen = false;
         notesPage = 0;
@@ -683,7 +692,7 @@ function renderNotesModal() {
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'Close',
-      text_size: px(20),
+      text_size: font('button'),
       click_func: () => {
         isNotesModalOpen = false;
         notesPage = 0;
@@ -848,7 +857,7 @@ function renderTitle(text, color = THEME.primaryLight) {
     w: px(360),
     h: px(32),
     color,
-    text_size: px(22),
+    text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -867,11 +876,64 @@ function renderSubtitle(text, { isError = false } = {}) {
     w: px(360),
     h: px(28),
     color: isError ? THEME.error : THEME.textSecondary,
-    text_size: px(16),
+    text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: truncate(text, 44),
+  });
+}
+
+/** Design row of the clock line: the last one inside `DESIGN_BOX`. */
+const CLOCK_Y = 442;
+
+/**
+ * Watch time in the user's own setting. `getFormatHour()` already applies the
+ * 12h/24h choice; the constant is only needed to know whether a meridiem has
+ * to be appended, and when it cannot be resolved the bare hour is shown rather
+ * than a guessed AM/PM.
+ */
+function currentClockLabel() {
+  if (!timeSensor) return '';
+  try {
+    const minutes = timeSensor.getMinutes();
+    const mm = minutes < 10 ? `0${minutes}` : String(minutes);
+    const hour = timeSensor.getFormatHour();
+    const is12h =
+      typeof TIME_HOUR_FORMAT_12 === 'number' && timeSensor.getHourFormat() === TIME_HOUR_FORMAT_12;
+    if (is12h) return `${hour}:${mm} ${timeSensor.getHours() < 12 ? 'AM' : 'PM'}`;
+    return `${hour < 10 ? `0${hour}` : hour}:${mm}`;
+  } catch (err) {
+    // One failure is enough: the clock is decoration, and a per-second log is not.
+    console.log('[liftosaur] clock unavailable:', err?.message || String(err));
+    timeSensor = null;
+    return '';
+  }
+}
+
+/**
+ * The time of day, under the bottom button of every screen.
+ *
+ * The app holds the screen on for a whole workout, so the watch face is out of
+ * reach for as long as the session lasts. This line gives it back without ever
+ * competing with the countdown: smallest type on the screen, dimmest colour,
+ * and the one row of the design box no button ever occupies.
+ */
+function renderClock() {
+  const label = currentClockLabel();
+  if (!label) return;
+  lastRenderedClock = label;
+  addLiveText('clock', {
+    x: px(160),
+    y: px(CLOCK_Y),
+    w: px(160),
+    h: px(20),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: label,
   });
 }
 
@@ -899,14 +961,14 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       press_color: THEME.primaryDeep,
       color: THEME.textPrimary,
       text: `${truncate(featured.title, 20)}\n${featured.label}`,
-      text_size: px(22),
+      text_size: font('title'),
       click_func: featured.onSelect,
     });
   }
 
   const pageSize = featured ? LIST_PAGE_SIZE - 1 : LIST_PAGE_SIZE;
-  const cardH = featured ? px(54) : px(62);
-  const cardStep = featured ? px(60) : px(68);
+  const cardH = featured ? px(68) : px(76);
+  const cardStep = featured ? px(74) : px(82);
   let y = featured ? px(198) : px(100);
 
   const totalPages = Math.max(1, Math.ceil(items.length / pageSize));
@@ -926,7 +988,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       press_color: THEME.cardActive,
       color: THEME.textPrimary,
       text: item.subtitle ? `${item.title}\n${item.subtitle}` : item.title,
-      text_size: item.subtitle ? px(17) : px(20),
+      text_size: item.subtitle ? font('caption') : font('body'),
       click_func: () => onSelect(start + i),
     });
     y += cardStep;
@@ -945,7 +1007,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       press_color: THEME.cardActive,
       color: THEME.textSecondary,
       text: 'Back',
-      text_size: px(17),
+      text_size: font('caption'),
       click_func: onBack,
     });
   }
@@ -960,7 +1022,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       normal_color: THEME.primaryDark,
       press_color: THEME.cardActive,
       text: '‹',
-      text_size: px(24),
+      text_size: font('button'),
       click_func: () => {
         listPage = (listPage - 1 + totalPages) % totalPages;
         renderUI();
@@ -973,7 +1035,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       w: px(60),
       h: px(52),
       color: THEME.textSecondary,
-      text_size: px(17),
+      text_size: font('caption'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -989,7 +1051,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       normal_color: THEME.primaryDark,
       press_color: THEME.cardActive,
       text: '›',
-      text_size: px(24),
+      text_size: font('button'),
       click_func: () => {
         listPage = (listPage + 1) % totalPages;
         renderUI();
@@ -1018,7 +1080,7 @@ function renderSetupScreen() {
     w: px(330),
     h: px(30),
     color: THEME.orange,
-    text_size: px(22),
+    text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1031,7 +1093,7 @@ function renderSetupScreen() {
     w: px(320),
     h: px(150),
     color: THEME.textSecondary,
-    text_size: px(17),
+    text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
@@ -1049,7 +1111,7 @@ function renderSetupScreen() {
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
     text: isBusy ? 'Checking…' : 'Retry',
-    text_size: px(26),
+    text_size: font('title'),
     click_func: loadPrograms,
   });
 }
@@ -1079,7 +1141,7 @@ function renderHomeScreen() {
     press_color: THEME.primaryDeep,
     color: THEME.textPrimary,
     text: `${truncate(start.day.name, 18)}\n${truncate(start.week.name || `Week ${start.week.number}`, 20)}`,
-    text_size: px(26),
+    text_size: font('value'),
     click_func: () => loadDayPlan(start.week, start.day),
   });
 
@@ -1093,7 +1155,7 @@ function renderHomeScreen() {
     press_color: THEME.cardActive,
     color: THEME.textSecondary,
     text: 'Another day',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       listPage = 0;
       screen = SCREEN.WEEKS;
@@ -1111,7 +1173,7 @@ function renderHomeScreen() {
     press_color: THEME.cardActive,
     color: THEME.textSecondary,
     text: 'Another program',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       listPage = 0;
       screen = SCREEN.PROGRAMS;
@@ -1125,8 +1187,8 @@ function renderHomeScreen() {
     y: px(388),
     w: px(332),
     h: px(40),
-    color: THEME.textDisabled,
-    text_size: px(15),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.WRAP,
@@ -1250,9 +1312,11 @@ function renderReadyScreen(view) {
   });
 
   const preview = view.overviewExercises
-    .slice(0, 5)
-    .map((ex) => `${truncate(ex.name, 20)}  ${ex.prescriptionSummary}`)
-    .join('\n');
+    .slice(0, READY_PREVIEW_SIZE)
+    .map((ex) => `${truncate(ex.name, 18)}\n${ex.prescriptionSummary}`);
+  if (view.totalExercises > READY_PREVIEW_SIZE) {
+    preview.push(`+ ${view.totalExercises - READY_PREVIEW_SIZE} more`);
+  }
 
   addWidget(widget.TEXT, {
     x: px(78),
@@ -1260,11 +1324,11 @@ function renderReadyScreen(view) {
     w: px(324),
     h: px(168),
     color: THEME.textPrimary,
-    text_size: px(16),
+    text_size: font('caption'),
     align_h: align.LEFT,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: preview || 'This day has no exercises',
+    text: preview.join('\n') || 'This day has no exercises',
   });
 
   addWidget(widget.TEXT, {
@@ -1272,8 +1336,8 @@ function renderReadyScreen(view) {
     y: px(306),
     w: px(356),
     h: px(24),
-    color: THEME.textDisabled,
-    text_size: px(16),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1290,7 +1354,7 @@ function renderReadyScreen(view) {
     press_color: THEME.cardActive,
     color: THEME.textSecondary,
     text: 'Change',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       listPage = 0;
       screen = SCREEN.DAYS;
@@ -1307,7 +1371,7 @@ function renderReadyScreen(view) {
     normal_color: view.totalExercises > 0 ? THEME.primary : THEME.card,
     press_color: THEME.primaryDeep,
     text: 'Start',
-    text_size: px(24),
+    text_size: font('title'),
     click_func: () => {
       if (view.totalExercises === 0) return;
       persistAndRender(() => session.startWorkout());
@@ -1319,23 +1383,23 @@ function renderTopBar(view, onBack) {
   addWidget(widget.BUTTON, {
     x: px(82),
     y: px(45),
-    w: px(44),
-    h: px(40),
-    radius: px(20),
+    w: px(52),
+    h: px(48),
+    radius: px(24),
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: '≡',
-    text_size: px(22),
+    text_size: font('button'),
     click_func: onBack,
   });
 
   addLiveText('elapsed', {
-    x: px(130),
+    x: px(138),
     y: px(45),
     w: px(120),
     h: px(40),
     color: THEME.primaryLight,
-    text_size: px(20),
+    text_size: font('button'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1348,7 +1412,7 @@ function renderTopBar(view, onBack) {
     w: px(120),
     h: px(40),
     color: heartRateColor(liveHr),
-    text_size: px(20),
+    text_size: font('button'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1363,13 +1427,13 @@ function renderOverviewScreen(view) {
   });
 
   const all = view.overviewExercises;
-  const totalPages = Math.max(1, Math.ceil(all.length / LIST_PAGE_SIZE));
+  const totalPages = Math.max(1, Math.ceil(all.length / OVERVIEW_PAGE_SIZE));
   if (overviewPage >= totalPages) overviewPage = totalPages - 1;
 
-  const start = overviewPage * LIST_PAGE_SIZE;
+  const start = overviewPage * OVERVIEW_PAGE_SIZE;
   let y = px(94);
 
-  all.slice(start, start + LIST_PAGE_SIZE).forEach((ex, i) => {
+  all.slice(start, start + OVERVIEW_PAGE_SIZE).forEach((ex, i) => {
     const idx = start + i;
     const isCurrent = idx === view.currentExerciseIndex;
     const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
@@ -1378,34 +1442,34 @@ function renderOverviewScreen(view) {
       x: px(64),
       y,
       w: px(352),
-      h: px(54),
+      h: px(68),
       radius: px(14),
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
       color: ssColor || (isCurrent ? THEME.primaryPale : THEME.textPrimary),
       text: `${ssPrefix}${truncate(ex.name, 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
-      text_size: px(16),
+      text_size: font('caption'),
       click_func: () => {
         session.selectExercise(idx);
         isOverviewOpen = false;
         persistAndRender();
       },
     });
-    y += px(60);
+    y += px(74);
   });
 
-  const actionY = px(336);
+  const actionY = px(324);
 
   addWidget(widget.BUTTON, {
     x: px(64),
     y: actionY,
     w: px(170),
-    h: px(54),
-    radius: px(27),
+    h: px(60),
+    radius: px(30),
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
     text: 'Finish',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       isOverviewOpen = false;
       persistAndRender(() => session.finishWorkout());
@@ -1417,13 +1481,13 @@ function renderOverviewScreen(view) {
     x: px(246),
     y: actionY,
     w: px(170),
-    h: px(54),
-    radius: px(27),
+    h: px(60),
+    radius: px(30),
     normal_color: 0x3a1a1a,
     press_color: 0x551111,
     color: THEME.error,
     text: 'Discard',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       isOverviewOpen = false;
       abandonWorkout();
@@ -1445,7 +1509,7 @@ function renderOverviewScreen(view) {
       normal_color: THEME.primaryDark,
       press_color: THEME.cardActive,
       text: '‹',
-      text_size: px(22),
+      text_size: font('button'),
       click_func: () => {
         overviewPage = (overviewPage - 1 + totalPages) % totalPages;
         renderUI();
@@ -1458,7 +1522,7 @@ function renderOverviewScreen(view) {
       w: px(60),
       h: px(44),
       color: THEME.textSecondary,
-      text_size: px(16),
+      text_size: font('micro'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -1474,7 +1538,7 @@ function renderOverviewScreen(view) {
       normal_color: THEME.primaryDark,
       press_color: THEME.cardActive,
       text: '›',
-      text_size: px(22),
+      text_size: font('button'),
       click_func: () => {
         overviewPage = (overviewPage + 1) % totalPages;
         renderUI();
@@ -1496,6 +1560,7 @@ function renderActiveSetScreen(view) {
   const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
+  const controls = activeSetLayout(set);
 
   if (isResting) {
     const bannerColor = view.rest.isOvertime
@@ -1511,7 +1576,7 @@ function renderActiveSetScreen(view) {
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: '≡',
-      text_size: px(22),
+      text_size: font('button'),
       click_func: () => {
         isOverviewOpen = true;
         renderUI();
@@ -1527,7 +1592,7 @@ function renderActiveSetScreen(view) {
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       color: bannerColor,
-      text_size: px(18),
+      text_size: font('caption'),
       text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
       click_func: () => {
         isRestMinimized = false;
@@ -1547,7 +1612,7 @@ function renderActiveSetScreen(view) {
     w: exerciseNotes ? px(306) : px(356),
     h: px(30),
     color: THEME.textPrimary,
-    text_size: px(22),
+    text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1565,7 +1630,7 @@ function renderActiveSetScreen(view) {
       press_color: THEME.card,
       color: THEME.primaryLight,
       text: 'ℹ',
-      text_size: px(18),
+      text_size: font('caption'),
       click_func: () => {
         notesPage = 0;
         isNotesModalOpen = true;
@@ -1589,7 +1654,7 @@ function renderActiveSetScreen(view) {
     w: px(356),
     h: px(26),
     color: set.isWarmup ? 0xffb544 : (supersetGroup ? ssColor : THEME.textSecondary),
-    text_size: px(16),
+    text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1618,8 +1683,8 @@ function renderActiveSetScreen(view) {
     y: px(146),
     w: px(356),
     h: px(22),
-    color: THEME.textDisabled,
-    text_size: px(15),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1628,7 +1693,8 @@ function renderActiveSetScreen(view) {
 
   // Weight stepper
   renderStepper({
-    y: px(170),
+    y: px(controls.rows[0].y),
+    height: px(controls.rowHeight),
     label: view.unit.toUpperCase(),
     value: set.weight === null ? '-' : String(set.weight),
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
@@ -1637,33 +1703,36 @@ function renderActiveSetScreen(view) {
 
   // Reps stepper
   renderStepper({
-    y: px(236),
+    y: px(controls.rows[1].y),
+    height: px(controls.rowHeight),
     label: 'REPS',
     value: set.reps === null ? '-' : String(set.reps),
     onMinus: () => persistAndRender(() => session.adjustReps(-1)),
     onPlus: () => persistAndRender(() => session.adjustReps(1)),
   });
 
-  // RPE stepper
-  renderStepper({
-    y: px(302),
-    label: 'RPE',
-    value: set.rpe === null ? '-' : String(set.rpe),
-    onMinus: () => persistAndRender(() => session.adjustRpe(-0.5)),
-    onPlus: () => persistAndRender(() => session.adjustRpe(0.5)),
-  });
+  if (controls.showRpe) {
+    renderStepper({
+      y: px(controls.rows[2].y),
+      height: px(controls.rowHeight),
+      label: 'RPE',
+      value: set.rpe === null ? '-' : String(set.rpe),
+      onMinus: () => persistAndRender(() => session.adjustRpe(-0.5)),
+      onPlus: () => persistAndRender(() => session.adjustRpe(0.5)),
+    });
+  }
 
   addWidget(widget.BUTTON, {
     x: px(120),
-    y: px(372),
+    y: px(controls.actionY),
     w: px(240),
-    h: px(64),
-    radius: px(32),
+    h: px(controls.actionHeight),
+    radius: px(controls.actionHeight / 2),
     normal_color: THEME.success,
     press_color: 0x1c9c6d,
     color: 0x00281c,
     text: isResting ? 'Start set' : 'Done',
-    text_size: px(24),
+    text_size: font('title'),
     click_func: () => {
       lastVibratedOvertimeStep = -1;
       if (isResting) {
@@ -1679,17 +1748,18 @@ function renderActiveSetScreen(view) {
   });
 }
 
-function renderStepper({ y, label, value, onMinus, onPlus }) {
+function renderStepper({ y, height, label, value, onMinus, onPlus }) {
+  const buttonSize = height;
   addWidget(widget.BUTTON, {
     x: px(74),
     y,
-    w: px(62),
-    h: px(62),
-    radius: px(31),
+    w: buttonSize,
+    h: buttonSize,
+    radius: buttonSize / 2,
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: '−',
-    text_size: px(28),
+    text_size: font('value'),
     click_func: onMinus,
   });
 
@@ -1697,9 +1767,9 @@ function renderStepper({ y, label, value, onMinus, onPlus }) {
     x: px(142),
     y,
     w: px(196),
-    h: px(36),
+    h: height - px(24),
     color: THEME.textPrimary,
-    text_size: px(30),
+    text_size: font('value'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1708,11 +1778,11 @@ function renderStepper({ y, label, value, onMinus, onPlus }) {
 
   addWidget(widget.TEXT, {
     x: px(142),
-    y: y + px(34),
+    y: y + height - px(28),
     w: px(196),
     h: px(24),
-    color: THEME.textMuted,
-    text_size: px(14),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1720,15 +1790,15 @@ function renderStepper({ y, label, value, onMinus, onPlus }) {
   });
 
   addWidget(widget.BUTTON, {
-    x: px(344),
+    x: px(406) - buttonSize,
     y,
-    w: px(62),
-    h: px(62),
-    radius: px(31),
+    w: buttonSize,
+    h: buttonSize,
+    radius: buttonSize / 2,
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: '+',
-    text_size: px(28),
+    text_size: font('value'),
     click_func: onPlus,
   });
 }
@@ -1756,7 +1826,7 @@ function renderRestScreen(view) {
     w: px(356),
     h: px(28),
     color: labelColor,
-    text_size: px(20),
+    text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1769,7 +1839,7 @@ function renderRestScreen(view) {
     w: px(356),
     h: px(64),
     color: restColor,
-    text_size: px(62),
+    text_size: font('timer'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1786,7 +1856,7 @@ function renderRestScreen(view) {
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: '-10s',
-    text_size: px(18),
+    text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.adjustRest(-10));
     },
@@ -1802,7 +1872,7 @@ function renderRestScreen(view) {
     press_color: THEME.cardActive,
     color: rest.isPaused ? 0x000000 : THEME.textPrimary,
     text: rest.isPaused ? 'Resume' : 'Pause',
-    text_size: px(18),
+    text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.toggleRestPause());
     },
@@ -1817,7 +1887,7 @@ function renderRestScreen(view) {
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: '+10s',
-    text_size: px(18),
+    text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.adjustRest(10));
     },
@@ -1846,7 +1916,7 @@ function renderRestScreen(view) {
       w: rest.nextExerciseNotes ? px(300) : px(360),
       h: px(26),
       color: THEME.textPrimary,
-      text_size: px(17),
+      text_size: font('body'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -1864,7 +1934,7 @@ function renderRestScreen(view) {
         press_color: THEME.card,
         color: THEME.primaryLight,
         text: 'ℹ',
-        text_size: px(16),
+        text_size: font('caption'),
         click_func: () => {
           notesPage = 0;
           isNotesModalOpen = true;
@@ -1881,7 +1951,7 @@ function renderRestScreen(view) {
       w: px(360),
       h: px(22),
       color: rest.nextIsWarmup ? 0xffb544 : (rest.nextSupersetGroup ? ssColor : THEME.primaryLight),
-      text_size: px(15),
+      text_size: font('micro'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
@@ -1894,25 +1964,13 @@ function renderRestScreen(view) {
       w: px(360),
       h: px(32),
       color: THEME.yellow,
-      text_size: px(21),
+      text_size: font('title'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: formatNextTargetSummary(rest),
     });
 
-    addWidget(widget.TEXT, {
-      x: px(60),
-      y: px(326),
-      w: px(360),
-      h: px(20),
-      color: THEME.textDisabled,
-      text_size: px(13),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: 'Tap "Prepare" to view & adjust set',
-    });
   }
 
   // Action buttons
@@ -1925,7 +1983,7 @@ function renderRestScreen(view) {
     normal_color: THEME.cardActive,
     press_color: THEME.card,
     text: 'Prepare',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       isRestMinimized = true;
       renderUI();
@@ -1941,7 +1999,7 @@ function renderRestScreen(view) {
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
     text: 'Start set',
-    text_size: px(21),
+    text_size: font('button'),
     click_func: () => {
       lastVibratedOvertimeStep = -1;
       isRestMinimized = false;
@@ -1969,7 +2027,7 @@ function renderFinishedScreen(view) {
     w: px(324),
     h: px(124),
     color: THEME.textPrimary,
-    text_size: px(18),
+    text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
@@ -1994,7 +2052,7 @@ function renderFinishedScreen(view) {
     w: px(340),
     h: px(64),
     color: statusColor,
-    text_size: px(16),
+    text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
@@ -2013,7 +2071,7 @@ function renderFinishedScreen(view) {
     press_color: THEME.cardActive,
     color: THEME.textSecondary,
     text: 'Done',
-    text_size: px(20),
+    text_size: font('button'),
     click_func: () => {
       sessionStore.clear();
       session = createWorkoutSession({ plan: null });
@@ -2041,7 +2099,7 @@ function renderFinishedScreen(view) {
       normal_color: THEME.primary,
       press_color: THEME.primaryDeep,
       text: 'Retry',
-      text_size: px(20),
+      text_size: font('button'),
       click_func: submitWorkout,
     });
   }
@@ -2055,7 +2113,7 @@ function renderLoadingScreen() {
     w: px(356),
     h: px(60),
     color: THEME.textSecondary,
-    text_size: px(20),
+    text_size: font('button'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.WRAP,
@@ -2071,6 +2129,13 @@ function renderUI() {
   // whole panel, fitted content included.
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
+  renderScreen();
+  // Drawn last so it belongs to no screen in particular: every renderer below
+  // returns early, and the clock has to survive all of them.
+  renderClock();
+}
+
+function renderScreen() {
   if (isNotesModalOpen) return renderNotesModal();
   if (screen === SCREEN.SETUP) return renderSetupScreen();
   if (screen === SCREEN.LOADING) return renderLoadingScreen();
@@ -2109,10 +2174,24 @@ function renderUI() {
 // ── Clock ────────────────────────────────────────────────────────────────────
 
 /**
+ * The clock changes once a minute, so it is patched in place like the
+ * chronometer rather than redrawn: a full rebuild here would restart the
+ * countdown skipping this file already had to fix once.
+ */
+function updateClock() {
+  const label = currentClockLabel();
+  if (!label || label === lastRenderedClock) return;
+  lastRenderedClock = label;
+  if (!updateLiveText('clock', { text: label })) renderUI();
+}
+
+/**
  * Sampled faster than once a second so a tick is never missed, but it only
  * touches the screen when the displayed second actually changes.
  */
 function tick() {
+  updateClock();
+
   if (screen !== SCREEN.SESSION) return;
 
   const view = session.view();

@@ -5,8 +5,8 @@
     "appName": "Lifto Companion",
     "appType": "app",
     "version": {
-      "code": 20,
-      "name": "2.0.6"
+      "code": 21,
+      "name": "0.3.0"
     },
 
 
@@ -30,26 +30,6 @@
   },
   "i18n": {
     "en-US": {
-      "name": "Lifto Companion",
-      "appName": "Lifto Companion"
-    },
-    "fr-FR": {
-      "name": "Lifto Companion",
-      "appName": "Lifto Companion"
-    },
-    "zh-CN": {
-      "name": "Lifto Companion",
-      "appName": "Lifto Companion"
-    },
-    "de-DE": {
-      "name": "Lifto Companion",
-      "appName": "Lifto Companion"
-    },
-    "es-ES": {
-      "name": "Lifto Companion",
-      "appName": "Lifto Companion"
-    },
-    "it-IT": {
       "name": "Lifto Companion",
       "appName": "Lifto Companion"
     }

@@ -45,7 +45,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 > will refuse to install whatever you scan. That is not a bug, so please do not
 > report it as one.
 
-**Version:** Lifto Companion 2.0.6
+**Version:** Lifto Companion 0.3.0
 
 You also need a [Liftosaur](https://www.liftosaur.com) account with at least one
 program, and Developer Mode enabled in the Zepp app. Full walkthrough, phone

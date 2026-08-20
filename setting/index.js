@@ -43,7 +43,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '18px',
+                  fontSize: '22px',
                   fontWeight: 'bold',
                   color: '#111827',
                   marginBottom: '4px',
@@ -59,7 +59,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '13px',
+                  fontSize: '16px',
                   color: '#6B7280',
                   marginBottom: '12px',
                   textAlign: 'center',
@@ -89,7 +89,7 @@ AppSettingsPage({
                     style: {
                       display: 'block',
                       width: '100%',
-                      fontSize: '13px',
+                      fontSize: '16px',
                       fontWeight: '600',
                       color: hasKey ? '#065F46' : '#92400E',
                       textAlign: 'center',
@@ -126,7 +126,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '12px',
+                  fontSize: '17px',
                   fontWeight: 'bold',
                   color: '#8356F6',
                   textTransform: 'uppercase',
@@ -143,7 +143,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '13px',
+                  fontSize: '16px',
                   color: '#4B5563',
                   marginBottom: '12px',
                   textAlign: 'center',
@@ -165,7 +165,7 @@ AppSettingsPage({
                   label: 'API Key (Tap to edit)',
                   labelStyle: {
                     color: '#111827',
-                    fontSize: '15px',
+                    fontSize: '17px',
                     fontWeight: 'bold',
                     textAlign: 'center',
                     width: '100%',
@@ -175,7 +175,7 @@ AppSettingsPage({
                   settingsKey: 'apiKey',
                   subStyle: {
                     color: '#6B7280',
-                    fontSize: '13px',
+                    fontSize: '16px',
                     textAlign: 'center',
                   },
                   description: hasKey
@@ -197,7 +197,7 @@ AppSettingsPage({
                 backgroundColor: '#8356F6',
                 color: '#FFFFFF',
                 borderRadius: '8px',
-                fontSize: '15px',
+                fontSize: '17px',
                 fontWeight: 'bold',
                 padding: '12px',
                 textAlign: 'center',
@@ -217,7 +217,7 @@ AppSettingsPage({
                     backgroundColor: '#FEF2F2',
                     color: '#DC2626',
                     borderRadius: '8px',
-                    fontSize: '14px',
+                    fontSize: '17px',
                     fontWeight: '600',
                     border: '1px solid #FECACA',
                     padding: '10px',
@@ -254,7 +254,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '12px',
+                  fontSize: '17px',
                   fontWeight: 'bold',
                   color: '#8356F6',
                   textTransform: 'uppercase',
@@ -271,7 +271,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '13px',
+                  fontSize: '16px',
                   color: '#4B5563',
                   marginBottom: '14px',
                   textAlign: 'center',
@@ -292,7 +292,7 @@ AppSettingsPage({
                   label: 'Standard Set Rest (seconds)',
                   labelStyle: {
                     color: '#111827',
-                    fontSize: '14px',
+                    fontSize: '17px',
                     fontWeight: 'bold',
                     textAlign: 'center',
                     width: '100%',
@@ -321,27 +321,27 @@ AppSettingsPage({
                   [
                     Button({
                       label: '60s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultStandardRest = '60'; props.settingsStorage.setItem('defaultStandardRest', '60'); },
                     }),
                     Button({
                       label: '90s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultStandardRest = '90'; props.settingsStorage.setItem('defaultStandardRest', '90'); },
                     }),
                     Button({
                       label: '120s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultStandardRest = '120'; props.settingsStorage.setItem('defaultStandardRest', '120'); },
                     }),
                     Button({
                       label: '180s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultStandardRest = '180'; props.settingsStorage.setItem('defaultStandardRest', '180'); },
                     }),
                     Button({
                       label: 'Off',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
                       onClick: () => { this.state.defaultStandardRest = '0'; props.settingsStorage.setItem('defaultStandardRest', '0'); },
                     }),
                   ]
@@ -362,7 +362,7 @@ AppSettingsPage({
                   label: 'Warmup Set Rest (seconds)',
                   labelStyle: {
                     color: '#111827',
-                    fontSize: '14px',
+                    fontSize: '17px',
                     fontWeight: 'bold',
                     textAlign: 'center',
                     width: '100%',
@@ -391,27 +391,27 @@ AppSettingsPage({
                   [
                     Button({
                       label: '30s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultWarmupRest = '30'; props.settingsStorage.setItem('defaultWarmupRest', '30'); },
                     }),
                     Button({
                       label: '45s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultWarmupRest = '45'; props.settingsStorage.setItem('defaultWarmupRest', '45'); },
                     }),
                     Button({
                       label: '60s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultWarmupRest = '60'; props.settingsStorage.setItem('defaultWarmupRest', '60'); },
                     }),
                     Button({
                       label: '90s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultWarmupRest = '90'; props.settingsStorage.setItem('defaultWarmupRest', '90'); },
                     }),
                     Button({
                       label: 'Off',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
                       onClick: () => { this.state.defaultWarmupRest = '0'; props.settingsStorage.setItem('defaultWarmupRest', '0'); },
                     }),
                   ]
@@ -431,7 +431,7 @@ AppSettingsPage({
                   label: 'Superset Rest (seconds)',
                   labelStyle: {
                     color: '#111827',
-                    fontSize: '14px',
+                    fontSize: '17px',
                     fontWeight: 'bold',
                     textAlign: 'center',
                     width: '100%',
@@ -460,27 +460,27 @@ AppSettingsPage({
                   [
                     Button({
                       label: '30s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultSupersetRest = '30'; props.settingsStorage.setItem('defaultSupersetRest', '30'); },
                     }),
                     Button({
                       label: '60s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultSupersetRest = '60'; props.settingsStorage.setItem('defaultSupersetRest', '60'); },
                     }),
                     Button({
                       label: '90s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultSupersetRest = '90'; props.settingsStorage.setItem('defaultSupersetRest', '90'); },
                     }),
                     Button({
                       label: '120s',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
                       onClick: () => { this.state.defaultSupersetRest = '120'; props.settingsStorage.setItem('defaultSupersetRest', '120'); },
                     }),
                     Button({
                       label: 'Off',
-                      style: { fontSize: '12px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
+                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
                       onClick: () => { this.state.defaultSupersetRest = '0'; props.settingsStorage.setItem('defaultSupersetRest', '0'); },
                     }),
                   ]
@@ -511,7 +511,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '14px',
+                  fontSize: '17px',
                   fontWeight: 'bold',
                   color: '#111827',
                   marginBottom: '10px',
@@ -527,7 +527,7 @@ AppSettingsPage({
                 style: {
                   display: 'block',
                   width: '100%',
-                  fontSize: '13px',
+                  fontSize: '16px',
                   color: '#4B5563',
                   lineHeight: '20px',
                   textAlign: 'center',

@@ -1,5 +1,5 @@
 msgid "appName"
-msgstr "Liftosaur"
+msgstr "Lifto Companion"
 
 msgid "Liftosaur"
-msgstr "Liftosaur"
+msgstr "Lifto Companion"

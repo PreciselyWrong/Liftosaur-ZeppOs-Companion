@@ -178,7 +178,7 @@ Milestone exit: Hardware validation matrix complete on physical watch.
 ## Phase 8 - Final Release Preparation
 
 - [x] Code and documentation cleanup → verify: all tests pass, zero dead code or unredacted debug logging.
-- [x] Localization support: English (`en-US`) and French (`fr-FR`) translation catalogs.
+- [x] English-only interface and translation catalogs.
 - [x] Public release audit (`/public-release-audit`) passed.
 - [x] README and architecture documentation up to date.
 

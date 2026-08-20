@@ -18,8 +18,15 @@
 /** The canvas every screen is authored against. */
 export const DESIGN_CANVAS = 480;
 
-/** Bounding box of all drawn widgets in that canvas, background fill aside. */
-export const DESIGN_BOX = { x: 40, y: 38, w: 400, h: 404 };
+/**
+ * Bounding box of all drawn widgets in that canvas, background fill aside.
+ *
+ * The last 20 rows are the clock line drawn under the bottom button of every
+ * screen. They belong to the box even though only one small label lives there:
+ * on a square watch the fit is height bound, so a row left out of the box is a
+ * row drawn past the bottom edge.
+ */
+export const DESIGN_BOX = { x: 40, y: 38, w: 400, h: 424 };
 
 /** Breathing room kept against the bezel, in device pixels. */
 const MARGIN_X = 6;
