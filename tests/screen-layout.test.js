@@ -45,6 +45,27 @@ test('a square screen fits the design box inside the panel', () => {
   assert.ok(bottomRight.y <= BIP_6.height, `bottom edge ${bottomRight.y} past ${BIP_6.height}`);
 });
 
+test('the clock row fits both panels', () => {
+  // The clock is the bottom row of the design box: x 160..320, y 442..462.
+  const box = { x: 160, y: 442, w: 160, h: 20 };
+  assert.equal(DESIGN_BOX.y + DESIGN_BOX.h, box.y + box.h, 'the box must end on the clock row');
+
+  // Round: the far corners of that row stay inside the 480 circle.
+  const radius = DESIGN_CANVAS / 2;
+  for (const x of [box.x, box.x + box.w]) {
+    const dx = x - radius;
+    const dy = box.y + box.h - radius;
+    assert.ok(Math.sqrt(dx * dx + dy * dy) < radius, `clock corner ${x} clipped by the bezel`);
+  }
+
+  // Square: the fitted row stays above the bottom edge.
+  const layout = createScreenLayout(BIP_6);
+  const base = BIP_6.width / DESIGN_CANVAS;
+  const fitted = layout.fit({ x: box.x * base, y: box.y * base, w: box.w * base, h: box.h * base });
+  assert.ok(fitted.y + fitted.h <= BIP_6.height, `clock bottom ${fitted.y + fitted.h} past the panel`);
+  assert.ok(fitted.x >= 0 && fitted.x + fitted.w <= BIP_6.width);
+});
+
 test('nothing is drawn under the square status bar', () => {
   const layout = createScreenLayout(BIP_6);
   const base = BIP_6.width / DESIGN_CANVAS;
@@ -102,4 +123,10 @@ test('non numeric props and colors pass through untouched', () => {
 test('a text size never collapses to zero', () => {
   const layout = createScreenLayout({ width: 100, height: 200, isRound: false });
   assert.ok(layout.fit({ text_size: 1 }).text_size >= 1);
+});
+
+test('fitting a square screen never shrinks text a second time', () => {
+  const layout = createScreenLayout(BIP_6);
+  const deviceTextSize = 18;
+  assert.ok(layout.fit({ text_size: deviceTextSize }).text_size >= deviceTextSize);
 });

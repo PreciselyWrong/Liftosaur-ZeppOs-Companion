@@ -1,14 +1,21 @@
 # Changelog
 
-## [Unreleased]
+## [0.3.0] - 20 August 2026
 
 ### Changed
+- Every watch screen now uses one readable type scale, fewer rows and stronger contrast. Exercise lists, workout previews, set controls, rest details and sync results stay clear at real watch size.
+- The phone settings page now uses readable labels and controls, and the beta interface ships in English only.
+- Sets without an RPE target now use two larger controls for weight and reps. The RPE control appears only when the current set asks for it.
+- Version history now correctly identifies every build as pre-release software. Versions remain below 1.0.0 until physical-watch validation clears the real release gate.
 - The application is now called **Lifto Companion**, and its vendor is the author of this project rather than Liftosaur. The previous name and vendor claimed an affiliation that does not exist, which is both inaccurate and a likely rejection at store review. Liftosaur is still named in the description as the service the application connects to.
 - Fresh unified test build QR code covering all 28 Zepp OS 3.6+ round and square models, valid until 22 August 2026 at 06:46 UTC. The README and the tester guide carry the single code, and the tester guide states that the API key step is optional, since demo mode covers a tester with no Premium subscription.
 - The settings page no longer reports "Not connected" when no API key is stored. That state is demo mode, not a failure: it now says so, explains that nothing is saved, and points at the key field.
+- README now links the changelog and the tester guide, and documents the 7 day validity of a `zeus preview` QR code.
+- Changelog, agent context and TODO are now written in English.
 
 ### Added
-- Store listing copy in the six declared locales, with the non-affiliation disclaimer and the Premium requirement kept in each one.
+- The time of day, under the bottom button of every screen. The app keeps the screen on for the whole workout, which is exactly when the watch face is out of reach, so the clock sits on the one row no button uses: smallest type, dimmest colour, and your own 12h or 24h setting.
+- English store listing copy with the non-affiliation disclaimer and Premium requirement.
 - Privacy policy (`docs/privacy-policy.md`) covering the API key, the workout data, the heart rate and the three declared permissions.
 - Zepp App Store submission file (`docs/store-listing.md`): listing copy, asset list, reviewer notes, and the demo mode path that removes any need for a test account.
 - Default rest timer settings for standard sets, supersets and warmups in the phone settings page, automatically applied when a program omits explicit timers.
@@ -22,34 +29,30 @@
 - Tester guide for installing the app from a QR code with a phone only, no computer required (`docs/tester-guide.md`).
 - Public test build QR code in the README, with its supported models and its expiry date.
 
-### Changed
-- README now links the changelog and the tester guide, and documents the 7 day validity of a `zeus preview` QR code.
-- Changelog, agent context and TODO are now written in English.
-
-## [2.0.5] - 14 August 2026
+## [0.2.5] - 14 August 2026
 
 ### Fixed
 - ISO formatting of the workout date, and more reliable transmission of the duration in your history.
 
-## [2.0.4] - 14 August 2026
+## [0.2.4] - 14 August 2026
 
 ### Changed
 - Warmup sets are now clearly marked with a distinct badge and label.
 - Fixed the calculation and upload of the total workout duration to your online account.
 
-## [2.0.3] - 14 August 2026
+## [0.2.3] - 14 August 2026
 
 ### Fixed
 - Fixed saving the workout history to your online account.
 - Pausing the rest timer now also pauses the overall workout timer.
 
-## [2.0.2] - 14 August 2026
+## [0.2.2] - 14 August 2026
 
 ### Added
 - Superset exercises show a badge and a distinct color per group so you can spot them faster.
 - An info button to read an exercise's notes and comments right during a set or rest.
 
-## [2.0.1] - 14 August 2026
+## [0.2.1] - 14 August 2026
 
 ### Added
 - The rest timer shows the next exercise's name, set and target weight so you can prepare your equipment.
@@ -60,7 +63,7 @@
 ### Fixed
 - Warmup sets now show their weight correctly and start their rest timer.
 
-## [2.0.0] - 14 August 2026
+## [0.2.0] - 14 August 2026
 
 Breaking rewrite. Liftosaur Cloud is now the only source of workout data. The watch reads
 your program from the API and never interprets it on its own.
@@ -102,7 +105,7 @@ your program from the API and never interprets it on its own.
 - A day whose prescription could not be confirmed is now reported as an error instead of
   displayed as a plausible wrong workout.
 
-## [1.0.0] - 14 August 2026
+## [0.1.0] - 14 August 2026
 
 ### Added
 - Follow your Liftosaur workouts on your wrist with live heart rate.

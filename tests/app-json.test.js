@@ -7,8 +7,9 @@ import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
 
+const root = process.cwd();
 const appJson = JSON.parse(
-  fs.readFileSync(path.join(import.meta.dirname, '..', 'app.json'), 'utf8'),
+  fs.readFileSync(path.join(root, 'app.json'), 'utf8'),
 );
 
 const pages = appJson.targets.common.module.page.pages;
@@ -17,6 +18,13 @@ test('declares a standalone mini program', () => {
   assert.equal(appJson.app.appType, 'app');
   assert.equal(appJson.app.extType, undefined, 'extType must be absent - this is not a Workout Extension');
   assert.equal(appJson.configVersion, 'v3');
+});
+
+test('ships an English-only interface during beta', () => {
+  assert.deepEqual(Object.keys(appJson.i18n), ['en-US']);
+  assert.equal(appJson.defaultLanguage, 'en-US');
+  assert.ok(!fs.existsSync(path.join(root, 'page', 'i18n', 'fr-FR.po')));
+  assert.ok(!fs.existsSync(path.join(root, 'setting', 'i18n', 'fr-FR.po')));
 });
 
 test('carries the registered appId, not the template placeholder', () => {
@@ -38,7 +46,7 @@ test('declares at least one page', () => {
 
 test('every page entry point exists on disk', () => {
   for (const page of pages) {
-    const entry = path.join(import.meta.dirname, '..', `${page}.js`);
+    const entry = path.join(root, `${page}.js`);
     assert.ok(fs.existsSync(entry), `missing page entry ${entry}`);
   }
 });
@@ -46,14 +54,14 @@ test('every page entry point exists on disk', () => {
 test('app-side entry point exists on disk', () => {
   const appSide = appJson.targets.common.module['app-side'];
   assert.ok(appSide && typeof appSide.path === 'string', 'missing app-side declaration');
-  const entry = path.join(import.meta.dirname, '..', `${appSide.path}.js`);
+  const entry = path.join(root, `${appSide.path}.js`);
   assert.ok(fs.existsSync(entry), `missing app-side entry ${entry}`);
 });
 
 test('setting entry point exists on disk', () => {
   const setting = appJson.targets.common.module['setting'];
   assert.ok(setting && typeof setting.path === 'string', 'missing setting declaration');
-  const entry = path.join(import.meta.dirname, '..', `${setting.path}.js`);
+  const entry = path.join(root, `${setting.path}.js`);
   assert.ok(fs.existsSync(entry), `missing setting entry ${entry}`);
 });
 
@@ -84,7 +92,7 @@ test('declares a round and a square target sharing the same modules', () => {
 test('every target has its icon asset on disk', () => {
   for (const [name, target] of Object.entries(appJson.targets)) {
     for (const platform of target.platforms) {
-      const dir = path.join(import.meta.dirname, '..', 'assets', `${name}.${platform.st}`);
+      const dir = path.join(root, 'assets', `${name}.${platform.st}`);
       assert.ok(
         fs.existsSync(path.join(dir, appJson.app.icon)),
         `missing ${appJson.app.icon} in assets/${name}.${platform.st}`,
