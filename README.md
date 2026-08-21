@@ -24,9 +24,9 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 > ## ⚠️ Read this before scanning
 >
-> ### This QR code expires on 2026-08-22 at 06:46 UTC
+> ### This QR code expires on 2026-08-28 at 14:14 UTC
 >
-> That is 08:46 Central European Summer Time. After that moment it stops
+> That is 16:14 Central European Summer Time. After that moment it stops
 > working and returns a download error.
 >
 > The deadline is not my choice: `zeus preview` uploads the build to Zepp's own
