@@ -7,6 +7,7 @@ import {
   suggestedDayIndex,
   suggestedStart,
   withoutIndex,
+  programForSavedPlan,
 } from '../shared/selection.js';
 
 const WEEKS = [
@@ -97,4 +98,13 @@ test('removes the featured entry and keeps the order of the rest', () => {
 
 test('keeps the whole list when nothing is featured', () => {
   assert.deepEqual(withoutIndex(['a', 'b'], -1), ['a', 'b']);
+});
+
+test('recovers the program from a saved completed session after an app restart', () => {
+  const plan = { programId: 'p1', programName: 'Strength' };
+  assert.deepEqual(programForSavedPlan(null, [], plan), {
+    id: 'p1',
+    name: 'Strength',
+    isCurrent: true,
+  });
 });
