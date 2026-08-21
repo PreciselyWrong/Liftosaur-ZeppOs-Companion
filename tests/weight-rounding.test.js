@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
+  formatLoadoutLabel,
   roundToLoadable,
   parseWeightString,
   resolveEquipmentId,
@@ -46,6 +47,18 @@ const DUMBBELL = {
   isFixed: true,
   plates: [{ weight: '5kg', num: 2 }],
   fixed: ['5kg', '7.5kg', '10kg', '12.5kg', '15kg', '17.5kg', '20kg', '25kg', '20lb'],
+};
+
+const ONE_SIDED_STACK = {
+  id: 'plateStack',
+  bar: { lb: '0lb', kg: '0kg' },
+  multiplier: 1,
+  isFixed: false,
+  plates: [
+    { weight: '20kg', num: 1 },
+    { weight: '2.5kg', num: 1 },
+  ],
+  fixed: [],
 };
 
 // ── The oracle: values Liftosaur itself produced, read back from history ──────
@@ -102,6 +115,28 @@ test('finds a combination a greedy fill would miss', () => {
   // Greedy from the top takes 20 then cannot reach 26.25; the answer needs
   // 20 + 5 + 1.25 per side.
   assert.equal(roundToLoadable(72.5, BARBELL, 'kg').value, 72.5);
+});
+
+test('formats the exact plates to load on each side of a barbell', () => {
+  assert.equal(formatLoadoutLabel(60, BARBELL, 'kg'), 'PER SIDE · 1×20 KG');
+  assert.equal(
+    formatLoadoutLabel(72.5, BARBELL, 'kg'),
+    'PER SIDE · 1×20 + 1×5 + 1×1.25 KG'
+  );
+});
+
+test('formats a one-sided plate stack as one load', () => {
+  assert.equal(formatLoadoutLabel(22.5, ONE_SIDED_STACK, 'kg'), 'LOAD · 1×20 + 1×2.5 KG');
+});
+
+test('does not suggest plates for an inexact or unresolved weight', () => {
+  assert.equal(formatLoadoutLabel(61, BARBELL, 'kg'), null);
+  assert.equal(formatLoadoutLabel(60, null, 'kg'), null);
+});
+
+test('identifies an exact fixed weight without inventing plates', () => {
+  assert.equal(formatLoadoutLabel(17.5, DUMBBELL, 'kg'), 'USE 17.5 KG');
+  assert.equal(formatLoadoutLabel(16, DUMBBELL, 'kg'), null);
 });
 
 test('picks from the list for fixed equipment', () => {

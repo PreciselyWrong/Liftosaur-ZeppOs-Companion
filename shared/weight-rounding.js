@@ -39,25 +39,25 @@ function round5(value) {
 }
 
 /**
- * Plates usable in this unit, one entry per *pair* when the multiplier is 2.
+ * Plate groups usable in this unit, one entry per pair when the multiplier is 2.
  * `num` is the total count on hand, so a barbell with `num: 2` can take one
  * plate per side, not two.
  */
-function usablePlates(equipment, unit) {
+function usablePlateGroups(equipment, unit) {
   const multiplier = equipment.multiplier || 1;
-  const plates = [];
+  const groups = [];
 
   for (const plate of equipment.plates || []) {
     const parsed = parseWeightString(plate.weight, unit);
     if (!parsed || parsed.unit !== unit || parsed.value <= 0) continue;
 
-    const groups = Math.floor((plate.num || 0) / multiplier);
-    for (let i = 0; i < groups; i++) {
-      plates.push(round5(parsed.value * multiplier));
+    const availableGroups = Math.floor((plate.num || 0) / multiplier);
+    for (let i = 0; i < availableGroups; i++) {
+      groups.push({ plateWeight: parsed.value, totalWeight: round5(parsed.value * multiplier) });
     }
   }
 
-  return plates.sort((a, b) => b - a);
+  return groups.sort((a, b) => b.totalWeight - a.totalWeight);
 }
 
 /**
@@ -66,23 +66,118 @@ function usablePlates(equipment, unit) {
  * Exhaustive over distinct values with their available counts, so it does not
  * miss a combination the way a plain greedy fill would.
  */
-function bestFill(plates, capacity) {
-  let best = 0;
-  const reachable = new Set([0]);
+function bestFill(groups, capacity) {
+  let best = { total: 0, plates: [] };
+  const reachable = new Map([[0, []]]);
 
-  for (const plate of plates) {
-    const additions = [];
-    for (const total of reachable) {
-      const next = round5(total + plate);
-      if (next <= capacity + 1e-9 && !reachable.has(next)) {
-        additions.push(next);
-        if (next > best) best = next;
+  function isPreferred(candidate, current) {
+    if (!current) return true;
+    if (candidate.length !== current.length) return candidate.length < current.length;
+    for (let i = 0; i < candidate.length; i++) {
+      if (candidate[i] !== current[i]) return candidate[i] > current[i];
+    }
+    return false;
+  }
+
+  for (const group of groups) {
+    const additions = new Map();
+    for (const [total, plates] of reachable) {
+      const next = round5(total + group.totalWeight);
+      if (next <= capacity + 1e-9) {
+        const selected = [...plates, group.plateWeight];
+        const existing = additions.get(next) || reachable.get(next);
+        if (isPreferred(selected, existing)) additions.set(next, selected);
+        if (next > best.total || (next === best.total && isPreferred(selected, best.plates))) {
+          best = { total: next, plates: selected };
+        }
       }
     }
-    for (const value of additions) reachable.add(value);
+    for (const [total, plates] of additions) reachable.set(total, plates);
   }
 
   return best;
+}
+
+/** Resolves both the achievable total and the exact physical loading. */
+export function resolveLoadout(target, equipment, unit = 'kg') {
+  if (!Number.isFinite(target) || target < 0 || !equipment) {
+    return { value: target, exact: false, resolved: false };
+  }
+
+  if (equipment.isFixed) {
+    const fixed = (equipment.fixed || [])
+      .map((entry) => parseWeightString(entry, unit))
+      .filter((parsed) => parsed && parsed.unit === unit)
+      .map((parsed) => parsed.value)
+      .sort((a, b) => a - b);
+
+    if (fixed.length === 0) return { value: target, exact: false, resolved: false };
+
+    let chosen = fixed[0];
+    for (const weight of fixed) {
+      if (weight <= target + 1e-9) chosen = weight;
+    }
+    return {
+      value: round5(chosen),
+      exact: Math.abs(chosen - target) < 1e-9,
+      resolved: true,
+      kind: 'fixed',
+    };
+  }
+
+  const multiplier = equipment.multiplier || 1;
+  const bar = parseWeightString(equipment.bar?.[unit], unit);
+  const barWeight = bar ? bar.value : 0;
+
+  if (target <= barWeight + 1e-9) {
+    return {
+      value: round5(barWeight),
+      exact: Math.abs(barWeight - target) < 1e-9,
+      resolved: true,
+      kind: 'plates',
+      barWeight: round5(barWeight),
+      multiplier,
+      plates: [],
+    };
+  }
+
+  const fill = bestFill(usablePlateGroups(equipment, unit), target - barWeight);
+  const total = round5(barWeight + fill.total);
+  return {
+    value: total,
+    exact: Math.abs(total - target) < 1e-9,
+    resolved: true,
+    kind: 'plates',
+    barWeight: round5(barWeight),
+    multiplier,
+    plates: fill.plates,
+  };
+}
+
+function formatNumber(value) {
+  return String(round5(value));
+}
+
+/** A compact watch label, returned only when the requested weight is exact. */
+export function formatLoadoutLabel(target, equipment, unit = 'kg') {
+  const loadout = resolveLoadout(target, equipment, unit);
+  if (!loadout.resolved || !loadout.exact) return null;
+
+  const suffix = unit.toUpperCase();
+  if (loadout.kind === 'fixed') return `USE ${formatNumber(loadout.value)} ${suffix}`;
+  if (loadout.multiplier !== 1 && loadout.multiplier !== 2) return null;
+  if (loadout.plates.length === 0) {
+    return loadout.barWeight > 0 ? `EMPTY BAR · ${formatNumber(loadout.barWeight)} ${suffix}` : null;
+  }
+
+  const counts = new Map();
+  for (const plate of loadout.plates) counts.set(plate, (counts.get(plate) || 0) + 1);
+  const plates = [...counts.entries()]
+    .sort(([a], [b]) => b - a)
+    .map(([weight, count]) => `${count}×${formatNumber(weight)}`)
+    .join(' + ');
+  const prefix = loadout.multiplier === 2 ? 'PER SIDE' : 'LOAD';
+  return `${prefix} · ${plates} ${suffix}`;
 }
 
 /**
@@ -94,46 +189,7 @@ function bestFill(plates, capacity) {
  *          is the untouched target and the caller must not present it as loadable.
  */
 export function roundToLoadable(target, equipment, unit = 'kg') {
-  if (!Number.isFinite(target) || target < 0) {
-    return { value: target, exact: false, resolved: false };
-  }
-  if (!equipment) {
-    return { value: target, exact: false, resolved: false };
-  }
-
-  // Fixed equipment - dumbbells, kettlebells - is picked from a list, not built.
-  if (equipment.isFixed) {
-    const fixed = (equipment.fixed || [])
-      .map((entry) => parseWeightString(entry, unit))
-      .filter((parsed) => parsed && parsed.unit === unit)
-      .map((parsed) => parsed.value)
-      .sort((a, b) => a - b);
-
-    if (fixed.length === 0) {
-      return { value: target, exact: false, resolved: false };
-    }
-
-    let chosen = fixed[0];
-    for (const weight of fixed) {
-      if (weight <= target + 1e-9) chosen = weight;
-    }
-    return { value: round5(chosen), exact: Math.abs(chosen - target) < 1e-9, resolved: true };
-  }
-
-  const bar = parseWeightString(equipment.bar?.[unit], unit);
-  const barWeight = bar ? bar.value : 0;
-
-  if (target <= barWeight + 1e-9) {
-    return { value: round5(barWeight), exact: Math.abs(barWeight - target) < 1e-9, resolved: true };
-  }
-
-  const plates = usablePlates(equipment, unit);
-  if (plates.length === 0) {
-    return { value: round5(barWeight), exact: Math.abs(barWeight - target) < 1e-9, resolved: true };
-  }
-
-  const total = round5(barWeight + bestFill(plates, target - barWeight));
-  return { value: total, exact: Math.abs(total - target) < 1e-9, resolved: true };
+  return resolveLoadout(target, equipment, unit);
 }
 
 /**

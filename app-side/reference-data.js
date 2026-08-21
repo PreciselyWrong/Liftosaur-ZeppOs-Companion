@@ -13,13 +13,7 @@
  */
 
 import { roundToLoadable, roundToStep, resolveEquipmentId } from '../shared/weight-rounding.js';
-
-function normalizeName(name) {
-  return String(name || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+import { normalizeName } from '../shared/name.js';
 
 export function createReferenceData({ client } = {}) {
   if (!client) throw new Error('createReferenceData requires a Liftosaur API client');
@@ -164,6 +158,11 @@ export function createReferenceData({ client } = {}) {
       }
 
       return { value: target, exact: false, resolved: false };
+    },
+
+    resolveEquipment(exerciseName, equipmentName = null, fullName = null) {
+      const lookup = this.lookupExercise(exerciseName, equipmentName, fullName);
+      return lookup.ambiguous ? null : lookup.equipment;
     },
 
     resolveNotes(exerciseName) {

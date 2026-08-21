@@ -9,6 +9,55 @@ function demoNotes(description, latestNote) {
   return `Description\n${description}\n\nPast sessions\n• 2026-08-18: ${latestNote}`;
 }
 
+const DEMO_LOADING_EQUIPMENT = {
+  barbell: {
+    id: 'barbell',
+    bar: { kg: '20kg', lb: '45lb' },
+    multiplier: 2,
+    isFixed: false,
+    plates: [
+      { weight: '20kg', num: 4 },
+      { weight: '15kg', num: 2 },
+      { weight: '10kg', num: 2 },
+      { weight: '5kg', num: 2 },
+      { weight: '2.5kg', num: 2 },
+      { weight: '1.25kg', num: 2 },
+    ],
+    fixed: [],
+  },
+  cable: {
+    id: 'cable',
+    bar: { kg: '5kg', lb: '10lb' },
+    multiplier: 1,
+    isFixed: false,
+    plates: [
+      { weight: '20kg', num: 2 },
+      { weight: '10kg', num: 2 },
+      { weight: '5kg', num: 4 },
+      { weight: '2.5kg', num: 2 },
+    ],
+    fixed: [],
+  },
+  dumbbell: {
+    id: 'dumbbell',
+    bar: { kg: '0kg', lb: '0lb' },
+    multiplier: 1,
+    isFixed: true,
+    plates: [],
+    fixed: ['5kg', '10kg', '15kg', '20kg', '22.5kg', '25kg', '26kg', '30kg'],
+  },
+};
+
+function addLoadingEquipment(plan) {
+  return {
+    ...plan,
+    exercises: plan.exercises.map((exercise) => ({
+      ...exercise,
+      loadingEquipment: DEMO_LOADING_EQUIPMENT[exercise.equipment] || null,
+    })),
+  };
+}
+
 export function createDummyProgramService() {
   const programs = [
     {
@@ -277,15 +326,15 @@ export function createDummyProgramService() {
     async getDayPlan(programId, week, day) {
       const key = `${week}-${day}`;
       if (samplePlans[key]) {
-        return samplePlans[key];
+        return addLoadingEquipment(samplePlans[key]);
       }
       // Return a default plan for other days
-      return {
+      return addLoadingEquipment({
         ...samplePlans['1-1'],
         week,
         dayInWeek: day,
         dayName: `Week ${week} / Day ${day}`,
-      };
+      });
     },
 
     async finishWorkout(payload = {}) {
