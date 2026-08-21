@@ -55,15 +55,15 @@ only and no computer required: **[docs/tester-guide.md](docs/tester-guide.md)**.
 
 ## The API decides, the watch asks
 
-Every workout fact comes from Liftosaur Cloud. The watch runs no Liftoscript, guesses no
-next day and filters no exercise by name. You pick a program, a week and a day; the
+Every workout fact comes from Liftosaur Cloud. The watch runs no Liftoscript and filters no
+exercise by name. It suggests the day after your most recent workout, but you still pick a
+program, a week and a day; the
 [Playground endpoint](https://www.liftosaur.com/doc/api) returns the exercises, sets, reps,
 weights, RPE targets and rest timers; and when you finish, the same endpoint computes the
 progression that gets written back.
 
-That makes the watch and the Liftosaur app interchangeable: a session logged on the watch
-appears in the app with its progression applied, and a program edited in the app is what
-the watch offers next.
+A session logged on the watch appears in Liftosaur with its progression applied. Program
+edits made in Liftosaur are also visible on the watch.
 
 ## Features
 
@@ -120,6 +120,12 @@ Shared, platform-independent modules:
 | `shared/protocol.js` | The device ↔ phone message envelope |
 
 ### Known limits
+
+Liftosaur's public API saves the workout and updated program, but it does not expose the
+official phone app's private day pointer. After a watch workout, the phone app day pointer
+does not advance even though the history and progression are correct. The watch independently
+suggests the next day from the latest history record. Updating the phone pointer needs an
+upstream Liftosaur API change.
 
 Warmup sets and superset grouping are absent from the Playground response - confirmed by
 test. They are not absent from the API: both are named fields in the Liftoscript source

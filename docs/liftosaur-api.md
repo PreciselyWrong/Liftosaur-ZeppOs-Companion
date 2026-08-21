@@ -38,6 +38,11 @@ The key lives on the phone, inside the Side Service, and never reaches the watch
 source. There is no ETag and no version field, so the base text is fingerprinted locally
 and compared before any write - see [risks.md](risks.md).
 
+The official client also stores its current workout position in `program.nextDay`. That
+field is not exposed by the REST API: program responses omit it, and program updates accept
+only `text` and optional `name`. Updating a program's text therefore cannot advance the
+official phone app's selected day.
+
 ### History
 
 | Method | Path | Body | Response |
@@ -51,6 +56,12 @@ and compared before any write - see [risks.md](risks.md).
 `POST /history` is **not idempotent and has no idempotency key**. A lost response means
 `UNKNOWN_COMMIT_STATE`: `GET /history` is searched for a record with the same `dayName`
 and a start time within two minutes before any retry.
+
+The API links a record carrying `program`, `week` and `dayInWeek` to the matching program
+and resolves its numeric program day. It does not update `program.nextDay`. Consequently,
+a workout finished through this API appears in Liftosaur history and can update program
+progression, while the official phone app remains pointed at the completed day. There is no
+safe client-side workaround through the documented API.
 
 `PUT` is what makes a workout visible while it happens: the first completed set creates the
 record, every set after it updates the same one, and the finish replaces its text with the
