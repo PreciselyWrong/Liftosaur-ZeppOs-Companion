@@ -330,7 +330,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
       case EVENT_TYPES.PAUSE_REST: {
         if (state === SESSION_STATES.REST && restInfo && !restInfo.isPaused) {
-          const remaining = Math.max(0, Math.ceil((restInfo.endsAt - event.timestamp) / 1000));
+          const remaining = Math.ceil((restInfo.endsAt - event.timestamp) / 1000);
           restInfo.isPaused = true;
           restInfo.pausedRemaining = remaining;
           if (pauseStartedAt === null) {
