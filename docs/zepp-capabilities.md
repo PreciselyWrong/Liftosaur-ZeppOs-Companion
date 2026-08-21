@@ -32,7 +32,7 @@ evidence can be produced until the simulator is installed and `zeus login` succe
 | `zeus --version` | node/npm/zeus/zpm versions | TESTED |
 | `zeus status` | login and simulator connection state | TESTED |
 | `zeus create <name>` | `WORKOUT_EXTENSION` + `Empty` template scaffolds a project | TESTED |
-| `zeus login` | logged in (userID 7083308791) | TESTED |
+| `zeus login` | logged in | TESTED |
 | `zeus dev` | prompts host/port/device, then **fails to connect** to the simulator | BLOCKED |
 | `zeus preview` / `zeus build` | not run | UNKNOWN |
 | `npm test` | 8 app.json invariant checks, all passing (`node --test`) | TESTED |
