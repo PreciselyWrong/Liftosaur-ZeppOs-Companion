@@ -317,3 +317,9 @@ test('heart rate uses a monochrome heart instead of the HR abbreviation', () => 
   assert.match(source, /text:\s*formatHeartRate\(liveHr\)/);
   assert.doesNotMatch(source, /`HR \$\{liveHr\}`/);
 });
+
+test('the production page never invents a heart rate when the sensor is unavailable', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+
+  assert.doesNotMatch(source, /liveHr\s*=\s*['"]138['"]/);
+});

@@ -143,8 +143,8 @@ AppSideService(
 
       const router = createSideRouter({
         programService: getProgramService(),
-        workoutAbandoner: async (payload) => {
-          console.log('[liftosaur-side] workout abandoned:', payload?.dayName || 'unnamed');
+        workoutAbandoner: async () => {
+          console.log('[liftosaur-side] workout abandoned');
           return { status: 'abandoned' };
         },
       });
