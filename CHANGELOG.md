@@ -90,7 +90,7 @@ your program from the API and never interprets it on its own.
 - Warmup sets and supersets: warmups are resolved to loadable weights against your gym's
   equipment, and superset exercises alternate working sets automatically during workouts.
 - Finishing a workout writes the session to your Liftosaur history and applies your
-  program's progression, so opening the phone app afterwards shows the same state.
+  program's progression.
 - A workout is still saved when your program was edited elsewhere during the session; only
   the progression is skipped, and the watch says so.
 - An interrupted workout is resumed exactly where it stopped - the session is now saved to

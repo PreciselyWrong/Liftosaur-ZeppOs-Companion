@@ -25,8 +25,8 @@ The watch decides nothing about the content of a workout. It asks, the API answe
 | What does this session change in my program? | `POST /playground` with `finish_workout()` |
 | Where is the workout stored? | `POST /history` |
 
-There is no local Liftoscript evaluation, no next-day heuristic and no name-based filtering
-of days or exercises. [`shared/liftoscript-outline.js`](../../shared/liftoscript-outline.js)
+There is no local Liftoscript evaluation and no name-based filtering of days or exercises.
+[`shared/liftoscript-outline.js`](../../shared/liftoscript-outline.js)
 reads two grammar tokens - `# week` and `## day` - and nothing else.
 
 ## Selection flow
@@ -52,7 +52,9 @@ Each picker features one entry - the active program, the week of the most recent
 `GET /history` record, the day after the one it names - large and first, with the rest of
 the list one page below. [`shared/selection.js`](../../shared/selection.js) computes those
 indices from account data only. A featured entry is still a button: it suggests, it never
-selects. When the history points nowhere the list is shown flat.
+selects. This history-based suggestion is independent of the official phone app's private
+day pointer, which the public API does not expose or advance. When the history points
+nowhere the list is shown flat.
 
 ## Rendering the clock
 
