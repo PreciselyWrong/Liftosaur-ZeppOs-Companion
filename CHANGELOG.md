@@ -16,6 +16,7 @@
 - Changelog, agent context and TODO are now written in English.
 
 ### Added
+- Session swipes now open and page the exercise overview, control the rest timer and switch between Rest and Prepare. Completing, finishing and discarding remain tap-only.
 - The time of day, under the bottom button of every screen. The app keeps the screen on for the whole workout, which is exactly when the watch face is out of reach, so the clock sits on the one row no button uses: smallest type, dimmest colour, and your own 12h or 24h setting.
 - English store listing copy with the non-affiliation disclaimer and Premium requirement.
 - Privacy policy (`docs/privacy-policy.md`) covering the API key, the workout data, the heart rate and the three declared permissions.

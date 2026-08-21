@@ -217,8 +217,11 @@ deferred callback did not address the fault and were removed.
 Swipe navigation is separate from widget click dispatch. The standalone application can
 register one page-level handler through
 [`onGesture`](https://docs.zepp.com/docs/v2/reference/device-app-api/newAPI/interaction/onGesture/).
-The exercise modal uses left and right to change page and down to close. This does not apply
-to the Workout Extension constraints documented above.
+The exercise modal uses left and right to change page and down to close. During a session,
+up opens the exercise overview and down closes it. The overview also pages left and right.
+On the rest timer, left and right adjust by 10 seconds, up pauses or resumes, and down opens
+Prepare. Up returns from Prepare to the timer. No swipe completes a set, finishes a workout
+or discards data. This does not apply to the Workout Extension constraints documented above.
 
 Only one `zeus dev` process may watch this project. Concurrent watchers all rebuild and
 refresh the same simulator, which makes an interaction test race against repeated app
