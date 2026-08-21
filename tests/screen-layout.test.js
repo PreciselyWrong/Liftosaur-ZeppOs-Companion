@@ -22,11 +22,11 @@ test('an unreported shape on a square canvas stays round', () => {
   assert.equal(createScreenLayout({ width: 480, height: 480 }).isFitted, false);
 });
 
-test('unknown device info degrades to the round design canvas', () => {
-  const layout = createScreenLayout({});
-  assert.equal(layout.isFitted, false);
-  assert.equal(layout.width, DESIGN_CANVAS);
-  assert.equal(layout.height, DESIGN_CANVAS);
+test('unknown device dimensions fail instead of inventing a screen size', () => {
+  assert.throws(
+    () => createScreenLayout({}),
+    /Device width and height are required/,
+  );
 });
 
 test('a square screen fits the design box inside the panel', () => {

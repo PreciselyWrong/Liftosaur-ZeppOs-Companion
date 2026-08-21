@@ -54,19 +54,23 @@ const SCALED_KEYS = ['w', 'h', 'radius', 'text_size', 'line_space', 'char_space'
  *
  * @param {{ width?: number, height?: number, isRound?: boolean }} deviceInfo
  * @returns {{ width: number, height: number, isFitted: boolean, scale: number, fit: (props: object) => object }}
+ * @throws {TypeError} when the device did not report valid screen dimensions
  */
 export function createScreenLayout(deviceInfo = {}) {
   const { width, height, isRound } = deviceInfo;
 
+  if (!Number.isFinite(width) || width <= 0 || !Number.isFinite(height) || height <= 0) {
+    throw new TypeError('Device width and height are required');
+  }
+
   const identity = {
-    width: width > 0 ? width : DESIGN_CANVAS,
-    height: height > 0 ? height : DESIGN_CANVAS,
+    width,
+    height,
     isFitted: false,
     scale: 1,
     fit: (props) => props,
   };
 
-  if (!(width > 0) || !(height > 0)) return identity;
   if (isRound === undefined ? width === height : isRound) return identity;
 
   // The incoming props are already device pixels: `px()` mapped the 480 canvas

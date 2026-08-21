@@ -76,26 +76,21 @@ const THEME = {
  * only thing that knows about the real screen. It is the identity on round
  * watches, so they render exactly as before.
  */
-let deviceInfo = {};
-try {
-  deviceInfo = getDeviceInfo() || {};
-} catch (err) {
-  console.log('[liftosaur] device info unavailable, assuming round 480:', err?.message || String(err));
-}
+const deviceInfo = getDeviceInfo();
 // The real dimensions are passed straight through. Substituting `px(480)` for a
 // missing one is what silently broke the Bip 6: on a 390 wide panel it yields
 // 390x390, a plausible square canvas that the layout reads as round.
 const LAYOUT = createScreenLayout({
-  width: deviceInfo.width,
-  height: deviceInfo.height,
+  width: deviceInfo?.width,
+  height: deviceInfo?.height,
   isRound:
-    typeof SCREEN_SHAPE_ROUND === 'number' && typeof deviceInfo.screenShape === 'number'
+    typeof SCREEN_SHAPE_ROUND === 'number' && typeof deviceInfo?.screenShape === 'number'
       ? deviceInfo.screenShape === SCREEN_SHAPE_ROUND
       : undefined,
 });
 
 console.log(
-  `[liftosaur] screen ${LAYOUT.width}x${LAYOUT.height} shape=${deviceInfo.screenShape} ` +
+  `[liftosaur] screen ${LAYOUT.width}x${LAYOUT.height} shape=${deviceInfo?.screenShape} ` +
     `round=${SCREEN_SHAPE_ROUND} fitted=${LAYOUT.isFitted} scale=${LAYOUT.scale} inset=${LAYOUT.insetTop}`,
 );
 
@@ -654,7 +649,7 @@ function restoreSession() {
     return false;
   }
 
-  console.log('[liftosaur] resumed session:', view.dayName, view.totalCompletedSetsCount, 'sets');
+  console.log('[liftosaur] session resumed');
   screen = SCREEN.SESSION;
   return true;
 }
@@ -2703,10 +2698,6 @@ Page(
       } catch (err) {
         console.log('[liftosaur] heart rate unavailable:', err?.message || String(err));
       }
-      if (liveHr === 'N/A') {
-        liveHr = '138';
-      }
-
       // An interrupted session wins over the launch flow: it is resumed exactly
       // where it stopped, including the history record it was already writing.
       const restoredState = restoreSession() ? session.view().state : null;
