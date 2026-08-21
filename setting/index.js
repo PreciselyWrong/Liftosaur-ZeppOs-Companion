@@ -564,6 +564,10 @@ AppSettingsPage({
 
     const parseRest = (key, defaultVal) => {
       const item = props.settingsStorage.getItem(key);
+      if (item === undefined || item === null) {
+        props.settingsStorage.setItem(key, defaultVal);
+        return defaultVal;
+      }
       if (typeof item === 'string') {
         try {
           const parsed = JSON.parse(item);

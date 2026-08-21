@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.1] - 21 August 2026
+
+### Fixed
+- Warmup and superset rest times are now already filled in when Settings is opened for the first time.
+
 ## [0.3.0] - 20 August 2026
 
 ### Changed
