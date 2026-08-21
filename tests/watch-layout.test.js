@@ -173,6 +173,14 @@ test('changing modal pages updates labels without rebuilding over persistent con
   assert.match(modal, /addLiveLabel\('modal-page'/);
 });
 
+test('reopening a modal recreates controls above the new modal content', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const openModal = source.slice(source.indexOf('function openTextModal'), source.indexOf('function renderDemoBadge'));
+
+  assert.match(openModal, /destroyModalControls\(\)/);
+  assert.ok(openModal.indexOf('destroyModalControls()') < openModal.indexOf('renderUI()'));
+});
+
 test('modal gestures are registered directly and removed on teardown', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
 
