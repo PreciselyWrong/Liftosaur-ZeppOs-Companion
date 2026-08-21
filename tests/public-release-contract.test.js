@@ -30,3 +30,14 @@ test('the npm lockfile is publishable for reproducible installs', () => {
   assert.equal(lockedProject.version, manifest.version);
   assert.equal(lockedProject.license, manifest.license);
 });
+
+test('gitleaks exemptions cover only the two reviewed historical test fixtures', () => {
+  const entries = read('.gitleaksignore')
+    .split(/\r?\n/)
+    .filter(Boolean);
+
+  assert.deepEqual(entries, [
+    '5a1f04b19414b115e8b2bcf11b015ea0cd0a9878:tests/liftosaur-api-client.test.js:generic-api-key:36',
+    '5a1f04b19414b115e8b2bcf11b015ea0cd0a9878:tests/liftosaur-api-client.test.js:generic-api-key:54',
+  ]);
+});
