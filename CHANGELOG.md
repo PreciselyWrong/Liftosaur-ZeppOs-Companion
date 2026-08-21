@@ -4,6 +4,17 @@
 
 ### Fixed
 - Warmup and superset rest times are now already filled in when Settings is opened for the first time.
+- A completed workout now resumes its save after a watch restart instead of appearing dismissible and losing its only local copy.
+- Retrying a save after a lost response or phone service restart no longer creates a duplicate history entry.
+- The workout timer now stops on the final set and keeps the same duration after recovery.
+- Values changed in Prepare now also update the upcoming set shown on the rest screen.
+- Session data stays available in memory if watch storage fails during a workout.
+
+### Added
+- Exact barbell plates, cable stacks and fixed weights are shown when the current gym equipment can load the requested weight.
+
+### Changed
+- Exercise-name matching now has one shared normalization rule across plans, history and gym equipment.
 
 ## [0.3.0] - 20 August 2026
 

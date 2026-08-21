@@ -219,7 +219,7 @@ test('the exercise details control is a labeled button without emoji', () => {
 
   assert.match(activeSet, /text: 'Info'/);
   assert.doesNotMatch(activeSet, /[🔥ℹ]/);
-  assert.doesNotMatch(source, /[🔥ℹ♥⏱▶]/);
+  assert.doesNotMatch(source, /[🔥ℹ⏱▶]/);
 });
 
 test('live button updates omit properties unsupported by setProperty', () => {
@@ -280,4 +280,40 @@ test('sets with RPE keep all three controls inside the design box', () => {
   assert.equal(layout.showRpe, true);
   assert.deepEqual(layout.rows.map((row) => row.key), ['weight', 'reps', 'rpe']);
   assert.ok(layout.actionY + layout.actionHeight <= 440);
+});
+
+test('discarding a restored workout reloads programs when no outline is in memory', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const handler = source.match(/function returnAfterDiscard\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+
+  assert.match(handler, /if \(outline\)/);
+  assert.match(handler, /loadPrograms\(\)/);
+  assert.match(handler, /createWorkoutSession\(\{ plan: null \}\)/);
+});
+
+test('a restored finished workout resumes saving instead of becoming dismissible', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+
+  assert.match(source, /if \(restoredState === SESSION_STATES\.FINISHED\) submitWorkout\(\)/);
+  assert.match(source, /const isSending = status\.status === 'SENDING'/);
+  assert.match(source, /if \(!isSending\)[\s\S]*text: canLeave \? 'Done' : 'Discard'/);
+});
+
+test('the rest preview shows the exact loading below the next target', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const restScreen = source.match(/function renderRestScreen\(view\) \{([\s\S]*?)\n\}/)?.[1] || '';
+
+  assert.match(
+    restScreen,
+    /formatLoadoutLabel\(\s*rest\.nextTargetWeight,\s*view\.pending\?\.loadingEquipment,\s*rest\.nextUnit\s*\)/,
+  );
+  assert.match(restScreen, /text:\s*nextLoadoutLabel/);
+});
+
+test('heart rate uses a monochrome heart instead of the HR abbreviation', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+
+  assert.match(source, /return `♥ \$\{hrVal\}`/);
+  assert.match(source, /text:\s*formatHeartRate\(liveHr\)/);
+  assert.doesNotMatch(source, /`HR \$\{liveHr\}`/);
 });

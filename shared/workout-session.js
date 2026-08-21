@@ -91,6 +91,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       id: exercise.id || `ex-${index + 1}`,
       name: exercise.name || `Exercise ${index + 1}`,
       equipment: exercise.equipment || null,
+      loadingEquipment: exercise.loadingEquipment || null,
       supersetGroup: exercise.supersetGroup || exercise.supersetTag || null,
       notes: exercise.notes || null,
       warmupSetsCount: warmups.length,
@@ -297,13 +298,12 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
         if (allSetsDone()) {
           state = SESSION_STATES.FINISHED;
+          workoutEndTime = event.timestamp;
           restInfo = null;
           break;
         }
 
         const restDuration = target?.restSeconds ?? null;
-        const next = describeNextSet();
-
         if (restDuration && restDuration > 0) {
           state = SESSION_STATES.REST;
           // The upcoming set's targets are loaded now rather than when rest
@@ -319,7 +319,6 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
             endsAt: event.timestamp + restDuration * 1000,
             isPaused: false,
             pausedRemaining: null,
-            ...next,
           };
         } else {
           restInfo = null;
@@ -410,55 +409,6 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     }
   }
 
-  function describeNextSet() {
-    const nextIdx = findNextExerciseIndex(currentExerciseIndex);
-    if (nextIdx === -1) {
-      return {
-        isTransitionToNextExercise: false,
-        nextExerciseName: null,
-        nextEquipment: null,
-        nextSetIndex: null,
-        nextTotalSets: null,
-        nextIsWarmup: false,
-        nextWarmupIndex: null,
-        nextTotalWarmups: 0,
-        nextWorkSetIndex: null,
-        nextTotalWorkSets: 0,
-        nextTargetWeight: null,
-        nextTargetReps: null,
-        nextTargetRepsMax: null,
-        nextTargetWeightPercent: null,
-        nextUnit: unit,
-        nextSupersetGroup: null,
-      };
-    }
-
-    const nextEx = exercises[nextIdx];
-    const nextProg = progress[nextIdx];
-    const nextSetIdx = nextProg.completedSets.length;
-    const nextTarget = nextEx.sets[nextSetIdx];
-
-    return {
-      isTransitionToNextExercise: nextIdx !== currentExerciseIndex,
-      nextExerciseName: nextEx.name,
-      nextExerciseNotes: nextEx.notes ?? null,
-      nextEquipment: nextEx.equipment ?? null,
-      nextSetIndex: nextSetIdx,
-      nextTotalSets: nextEx.sets.length,
-      nextIsWarmup: Boolean(nextTarget?.isWarmup),
-      nextWarmupIndex: nextTarget?.warmupIndex ?? null,
-      nextTotalWarmups: nextTarget?.totalWarmups ?? nextEx.warmupSetsCount ?? 0,
-      nextWorkSetIndex: nextTarget?.workSetIndex ?? null,
-      nextTotalWorkSets: nextTarget?.totalWorkSets ?? nextEx.workSetsCount ?? 0,
-      nextTargetWeight: nextTarget?.targetWeight ?? null,
-      nextTargetReps: nextTarget?.targetReps ?? null,
-      nextTargetRepsMax: nextTarget?.targetRepsMax ?? null,
-      nextTargetWeightPercent: nextTarget?.targetWeightPercent ?? null,
-      nextUnit: nextTarget?.unit || unit,
-      nextSupersetGroup: nextEx.supersetGroup ?? null,
-    };
-  }
-
   function advanceToNextSet({ keepAdjustments = false } = {}) {
     const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     if (nextIdx === -1) {
@@ -492,36 +442,19 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     if (!exercise || !prog) return null;
 
     const setIdx = state === SESSION_STATES.REST ? prog.completedSets.length : prog.currentSetIndex;
-    const target = exercise.sets[setIdx] || null;
-
     return {
       exerciseIndex: idx,
       exerciseName: exercise.name,
       exerciseNotes: exercise.notes ?? null,
+      equipment: exercise.equipment ?? null,
+      loadingEquipment: exercise.loadingEquipment ?? null,
       supersetGroup: exercise.supersetGroup ?? null,
       setIndex: setIdx,
       totalSets: exercise.sets.length,
       setsDots: exercise.sets.map((_, i) =>
         i < prog.completedSets.length ? 'completed' : i === setIdx ? 'active' : 'pending'
       ),
-      set: {
-        isWarmup: Boolean(target?.isWarmup),
-        warmupIndex: target?.warmupIndex ?? null,
-        totalWarmups: target?.totalWarmups ?? 0,
-        workSetIndex: target?.workSetIndex ?? null,
-        totalWorkSets: target?.totalWorkSets ?? exercise.workSetsCount,
-        targetWeightPercent: target?.targetWeightPercent ?? null,
-        supersetGroup: exercise.supersetGroup ?? null,
-        weight: prog.currentWeight,
-        reps: prog.currentReps,
-        rpe: prog.currentRpe,
-        targetWeight: target?.targetWeight ?? null,
-        targetReps: target?.targetReps ?? null,
-        targetRepsMax: target?.targetRepsMax ?? null,
-        targetRpe: target?.targetRpe ?? null,
-        isAmrap: Boolean(target?.isAmrap),
-        restSeconds: target?.restSeconds ?? null,
-      },
+      set: describeSet(exercise, prog, setIdx),
     };
   }
 
@@ -533,6 +466,29 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     return progress
       .flatMap((prog) => prog.completedSets)
       .sort((a, b) => a.completedAt - b.completedAt);
+  }
+
+  function describeSet(exercise, prog, setIdx) {
+    const target = exercise?.sets[setIdx] || null;
+    return {
+      isWarmup: Boolean(target?.isWarmup),
+      warmupIndex: target?.warmupIndex ?? null,
+      totalWarmups: target?.totalWarmups ?? 0,
+      workSetIndex: target?.workSetIndex ?? null,
+      totalWorkSets: target?.totalWorkSets ?? exercise?.workSetsCount ?? 0,
+      targetWeightPercent: target?.targetWeightPercent ?? null,
+      supersetGroup: exercise?.supersetGroup ?? null,
+      weight: prog?.currentWeight ?? null,
+      reps: prog?.currentReps ?? null,
+      rpe: prog?.currentRpe ?? null,
+      targetWeight: target?.targetWeight ?? null,
+      targetReps: target?.targetReps ?? null,
+      targetRepsMax: target?.targetRepsMax ?? null,
+      targetRpe: target?.targetRpe ?? null,
+      isAmrap: Boolean(target?.isAmrap),
+      restSeconds: target?.restSeconds ?? null,
+      unit: target?.unit || unit,
+    };
   }
 
   return {
@@ -562,6 +518,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
 
       let rest = null;
       if (restInfo) {
+        const pending = describePendingSet();
+        const pendingSet = pending?.set || null;
         const remaining = restInfo.isPaused
           ? (restInfo.pausedRemaining ?? 0)
           : Math.ceil((restInfo.endsAt - now) / 1000);
@@ -573,23 +531,24 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           isOvertime: !restInfo.isPaused && remaining <= 0,
           startedAt: restInfo.startedAt,
           endsAt: restInfo.endsAt,
-          isTransitionToNextExercise: Boolean(restInfo.isTransitionToNextExercise),
-          nextExerciseName: restInfo.nextExerciseName ?? null,
-          nextExerciseNotes: restInfo.nextExerciseNotes ?? null,
-          nextEquipment: restInfo.nextEquipment ?? null,
-          nextSetIndex: restInfo.nextSetIndex ?? null,
-          nextTotalSets: restInfo.nextTotalSets ?? null,
-          nextIsWarmup: Boolean(restInfo.nextIsWarmup),
-          nextWarmupIndex: restInfo.nextWarmupIndex ?? null,
-          nextTotalWarmups: restInfo.nextTotalWarmups ?? 0,
-          nextWorkSetIndex: restInfo.nextWorkSetIndex ?? null,
-          nextTotalWorkSets: restInfo.nextTotalWorkSets ?? 0,
-          nextTargetWeight: restInfo.nextTargetWeight ?? null,
-          nextTargetReps: restInfo.nextTargetReps ?? null,
-          nextTargetRepsMax: restInfo.nextTargetRepsMax ?? null,
-          nextTargetWeightPercent: restInfo.nextTargetWeightPercent ?? null,
-          nextUnit: restInfo.nextUnit ?? unit,
-          nextSupersetGroup: restInfo.nextSupersetGroup ?? null,
+          isTransitionToNextExercise:
+            pending ? pending.exerciseIndex !== currentExerciseIndex : false,
+          nextExerciseName: pending?.exerciseName ?? null,
+          nextExerciseNotes: pending?.exerciseNotes ?? null,
+          nextEquipment: pending?.equipment ?? null,
+          nextSetIndex: pending?.setIndex ?? null,
+          nextTotalSets: pending?.totalSets ?? null,
+          nextIsWarmup: Boolean(pendingSet?.isWarmup),
+          nextWarmupIndex: pendingSet?.warmupIndex ?? null,
+          nextTotalWarmups: pendingSet?.totalWarmups ?? 0,
+          nextWorkSetIndex: pendingSet?.workSetIndex ?? null,
+          nextTotalWorkSets: pendingSet?.totalWorkSets ?? 0,
+          nextTargetWeight: pendingSet?.weight ?? null,
+          nextTargetReps: pendingSet?.reps ?? null,
+          nextTargetRepsMax: pendingSet?.targetRepsMax ?? null,
+          nextTargetWeightPercent: pendingSet?.targetWeightPercent ?? null,
+          nextUnit: pendingSet?.unit ?? unit,
+          nextSupersetGroup: pending?.supersetGroup ?? null,
         };
       }
 
@@ -649,14 +608,13 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         };
       }
 
-      const target = exercise.sets[prog.currentSetIndex] || null;
-
       return {
         ...base,
         currentExerciseIndex,
         exerciseId: exercise.id,
         exerciseName: exercise.name,
         exerciseNotes: exercise.notes ?? null,
+        loadingEquipment: exercise.loadingEquipment ?? null,
         supersetGroup: exercise.supersetGroup,
         totalSets: exercise.sets.length,
         currentSetIndex: prog.currentSetIndex,
@@ -665,24 +623,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           if (setIdx === prog.currentSetIndex && state === SESSION_STATES.ACTIVE_SET) return 'active';
           return 'pending';
         }),
-        currentSet: {
-          isWarmup: Boolean(target?.isWarmup),
-          warmupIndex: target?.warmupIndex ?? null,
-          totalWarmups: target?.totalWarmups ?? 0,
-          workSetIndex: target?.workSetIndex ?? null,
-          totalWorkSets: target?.totalWorkSets ?? exercise.workSetsCount,
-          targetWeightPercent: target?.targetWeightPercent ?? null,
-          supersetGroup: exercise.supersetGroup ?? null,
-          weight: prog.currentWeight,
-          reps: prog.currentReps,
-          rpe: prog.currentRpe,
-          targetWeight: target?.targetWeight ?? null,
-          targetReps: target?.targetReps ?? null,
-          targetRepsMax: target?.targetRepsMax ?? null,
-          targetRpe: target?.targetRpe ?? null,
-          isAmrap: Boolean(target?.isAmrap),
-          restSeconds: target?.restSeconds ?? null,
-        },
+        currentSet: describeSet(exercise, prog, prog.currentSetIndex),
         completedSets: [...prog.completedSets],
         pending: describePendingSet(),
         rest,

@@ -32,10 +32,13 @@ test('dummy program service returns rich day plan with warmups and supersets', a
   assert.ok(squat);
   assert.equal(squat.warmupSets.length, 3);
   assert.equal(squat.sets.length, 5);
+  assert.equal(squat.loadingEquipment.multiplier, 2);
+  assert.ok(squat.loadingEquipment.plates.length > 0);
 
   const latPulldown = plan.exercises.find((e) => e.name === 'Lat Pulldown');
   assert.ok(latPulldown);
   assert.equal(latPulldown.supersetTag, 'A1');
+  assert.equal(latPulldown.loadingEquipment.multiplier, 1);
 
   const triceps = plan.exercises.find((e) => e.name === 'Triceps Rope Pushdown');
   assert.ok(triceps);
