@@ -52,7 +52,10 @@ export function createSideRouter({ programService = null, workoutAbandoner = nul
         case MESSAGE_TYPES.LIST_PROGRAMS:
           try {
             const programs = await programService.listPrograms();
-            return createReply(rawMessage, MESSAGE_TYPES.PROGRAMS_DATA, { programs });
+            return createReply(rawMessage, MESSAGE_TYPES.PROGRAMS_DATA, {
+              programs,
+              serviceMode: programService.mode || 'CLOUD',
+            });
           } catch (err) {
             return apiFailure(rawMessage, err);
           }

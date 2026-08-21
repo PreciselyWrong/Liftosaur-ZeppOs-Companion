@@ -1,3 +1,8 @@
+function isDemoApiKey(value) {
+  const key = String(value || '').trim().toLowerCase();
+  return !key || key === 'demo' || key === 'dummy';
+}
+
 AppSettingsPage({
   state: {
     apiKey: '',
@@ -6,8 +11,8 @@ AppSettingsPage({
   build(props) {
     this.getStorage(props);
 
-    const hasKey = Boolean(this.state.apiKey && this.state.apiKey.trim().length > 5);
     const trimmedKey = (this.state.apiKey || '').trim();
+    const hasKey = !isDemoApiKey(trimmedKey) && trimmedKey.length > 5;
     const maskedKey = hasKey
       ? `${trimmedKey.slice(0, 8)}••••${trimmedKey.slice(-4)}`
       : 'None';
@@ -97,7 +102,7 @@ AppSettingsPage({
                   },
                   hasKey
                     ? `✓ Status: Connected\n(${maskedKey})`
-                    : '● Status: Demo mode\nSample program, nothing is saved.\nAdd a key below to use your account.'
+                    : '● Status: Demo mode\nNo Liftosaur account is connected.\nSample workouts stay off Liftosaur.\nAdd an API key below for Cloud sync.'
                 ),
               ]
             ),
@@ -579,4 +584,3 @@ AppSettingsPage({
     this.state.defaultSupersetRest = parseRest('defaultSupersetRest', '90');
   },
 });
-

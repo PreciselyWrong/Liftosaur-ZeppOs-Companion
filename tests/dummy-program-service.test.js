@@ -5,6 +5,7 @@ import { createDummyProgramService } from '../app-side/dummy-program-service.js'
 
 test('dummy program service lists sample programs', async () => {
   const service = createDummyProgramService();
+  assert.equal(service.mode, 'DEMO');
   const programs = await service.listPrograms();
   assert.ok(Array.isArray(programs));
   assert.ok(programs.length >= 3);
