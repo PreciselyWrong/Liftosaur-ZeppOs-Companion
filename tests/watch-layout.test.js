@@ -191,6 +191,20 @@ test('modal gestures are registered directly and removed on teardown', () => {
   assert.match(source, /GESTURE_DOWN/);
 });
 
+test('session gestures mirror reversible rest and overview controls', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const handler = source.slice(source.indexOf('function handleGesture'), source.indexOf('function heartRateColor'));
+
+  assert.match(source, /GESTURE_UP/);
+  assert.match(handler, /session\.adjustRest\(-10\)/);
+  assert.match(handler, /session\.adjustRest\(10\)/);
+  assert.match(handler, /session\.toggleRestPause\(\)/);
+  assert.match(handler, /isRestMinimized = true/);
+  assert.match(handler, /isRestMinimized = false/);
+  assert.match(handler, /overviewPage = \(overviewPage [+-] 1/);
+  assert.match(handler, /isOverviewOpen = false/);
+});
+
 test('connection title uses the same marquee renderer as long program names', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const connection = source.slice(source.indexOf('function renderConnectionScreen'), source.indexOf('function renderHomeScreen'));

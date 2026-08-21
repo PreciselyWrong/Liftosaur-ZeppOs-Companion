@@ -8,6 +8,7 @@ import {
   offGesture,
   GESTURE_LEFT,
   GESTURE_RIGHT,
+  GESTURE_UP,
   GESTURE_DOWN,
 } from '@zos/interaction';
 import {
@@ -836,11 +837,63 @@ function renderNotesModal() {
   ensureModalControls(totalPages);
 }
 
+// Swipes mirror reversible controls only, so an accidental movement cannot
+// finish a set, discard a workout or write history.
 function handleGesture(gesture) {
-  if (!isNotesModalOpen) return false;
-  if (gesture === GESTURE_LEFT) moveNotesPage(1);
-  else if (gesture === GESTURE_RIGHT) moveNotesPage(-1);
-  else if (gesture === GESTURE_DOWN) closeTextModal();
+  if (isNotesModalOpen) {
+    if (gesture === GESTURE_LEFT) moveNotesPage(1);
+    else if (gesture === GESTURE_RIGHT) moveNotesPage(-1);
+    else if (gesture === GESTURE_DOWN) closeTextModal();
+    else return false;
+    return true;
+  }
+
+  if (screen !== SCREEN.SESSION) return false;
+
+  const view = session.view();
+  if (isOverviewOpen) {
+    const totalPages = Math.max(1, Math.ceil(view.overviewExercises.length / OVERVIEW_PAGE_SIZE));
+    if (gesture === GESTURE_LEFT) {
+      overviewPage = (overviewPage + 1) % totalPages;
+    } else if (gesture === GESTURE_RIGHT) {
+      overviewPage = (overviewPage - 1 + totalPages) % totalPages;
+    } else if (gesture === GESTURE_DOWN) {
+      isOverviewOpen = false;
+    } else {
+      return false;
+    }
+    renderUI();
+    return true;
+  }
+
+  if (view.state === SESSION_STATES.ACTIVE_SET && gesture === GESTURE_UP) {
+    overviewPage = Math.floor(view.currentExerciseIndex / OVERVIEW_PAGE_SIZE);
+    isOverviewOpen = true;
+    renderUI();
+    return true;
+  }
+
+  if (view.state !== SESSION_STATES.REST) return false;
+
+  if (isRestMinimized) {
+    if (gesture !== GESTURE_UP) return false;
+    isRestMinimized = false;
+    renderUI();
+    return true;
+  }
+
+  if (gesture === GESTURE_LEFT) {
+    persistAndRender(() => session.adjustRest(-10));
+  } else if (gesture === GESTURE_RIGHT) {
+    persistAndRender(() => session.adjustRest(10));
+  } else if (gesture === GESTURE_UP) {
+    persistAndRender(() => session.toggleRestPause());
+  } else if (gesture === GESTURE_DOWN) {
+    isRestMinimized = true;
+    renderUI();
+  } else {
+    return false;
+  }
   return true;
 }
 
