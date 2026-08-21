@@ -157,6 +157,8 @@ export function createProgramService({
   }
 
   return {
+    mode: 'CLOUD',
+
     /** The user's programs, active one flagged. No program is auto-selected. */
     async listPrograms() {
       const programs = await client.listPrograms();

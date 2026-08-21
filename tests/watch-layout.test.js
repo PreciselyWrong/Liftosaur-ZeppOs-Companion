@@ -41,6 +41,23 @@ test('the phone settings page has no tiny text', () => {
   assert.ok(Math.min(...sizes) >= 15);
 });
 
+test('demo mode is explicit in settings and on every watch screen', () => {
+  const settingsSource = fs.readFileSync(
+    path.join(root, 'setting', 'index.js'),
+    'utf8',
+  );
+  const watchSource = fs.readFileSync(
+    path.join(root, 'page', 'common', 'index.js'),
+    'utf8',
+  );
+
+  assert.match(settingsSource, /isDemoApiKey/);
+  assert.match(settingsSource, /No Liftosaur account is connected/);
+  assert.match(watchSource, /serviceMode === 'DEMO'/);
+  assert.match(watchSource, /function renderDemoBadge/);
+  assert.match(watchSource, /renderDemoBadge\(\)/);
+});
+
 test('dense screens show fewer readable rows instead of shrinking text', () => {
   assert.equal(LIST_PAGE_SIZE, 3);
   assert.equal(OVERVIEW_PAGE_SIZE, 3);
