@@ -142,9 +142,9 @@ npm test
 ```
 
 ### Running on Simulator or Real Device
-```bash
+```powershell
 # Preview on emulator
-zeus dev -t "Amazfit Active 2 (Round)"
+.\dev.ps1
 
 # Generate QR code for real device testing
 zeus preview -t "Amazfit Active 2 (Round)"
