@@ -25,6 +25,7 @@
 - The comments left on an exercise in past workouts (the `//` notes Liftosaur records in the history) are now shown under "Past sessions" in that exercise's notes, up to the three most recent. Exercises that had no notes at all now get the ℹ button as soon as a past comment exists.
 
 ### Fixed
+- Pausing an overtime rest now freezes the counter instead of resetting it to zero.
 - Exercise paging and Close remain visible and responsive after changing page, closing or reopening the details.
 - The steppers on the "Prepare" screen now work. They were rendered during rest but every tap was ignored, and they showed the set that had just been logged rather than the one coming up. Prepare now targets the upcoming set - including the superset partner when the next set belongs to another exercise - and what is set there is what the set starts with.
 - Warmup weights are now always loadable with the equipment you actually own. A warmup below the bar (15 kg asked on a 20 kg bar) came from a fallback that simply rounded the percentage to the nearest 2.5 kg whenever the gym's equipment could not be identified. That fallback is gone: the gym's bar and plates answer first, the exercise's own rounding step second, and if neither can, the percentage is shown rather than an unloadable number. Equipment identification also improved in two cases that caused most of these misses: custom exercises whose name contains a comma ("Romanian Deadlift, Barebell"), and exercises mapped to equipment in a single gym with no `default` entry.

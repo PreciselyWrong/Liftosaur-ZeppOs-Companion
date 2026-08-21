@@ -585,6 +585,27 @@ test('rest timer pause, resume, toggle, and adjustment (+/- 10s)', () => {
   assert.equal(session.view(90_000).rest.remaining, 100);
 });
 
+test('pausing an overtime rest preserves the displayed overtime', () => {
+  const session = createWorkoutSession({ plan: makePlan() });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1000 });
+
+  assert.equal(session.view(131_000).rest.remaining, -10);
+
+  session.pauseRest({ timestamp: 131_000 });
+
+  assert.equal(session.view(141_000).rest.remaining, -10);
+
+  const restored = createWorkoutSession({
+    plan: makePlan(),
+    initialJournal: session.getJournal(),
+  });
+  assert.equal(restored.view(141_000).rest.remaining, -10);
+
+  restored.resumeRest({ timestamp: 141_000 });
+  assert.equal(restored.view(146_000).rest.remaining, -15);
+});
+
 test('rest view includes next target weight, reps, unit and warmups', () => {
   const plan = {
     programId: 'p1',
