@@ -152,6 +152,7 @@ let isBusy = false;
 let listPage = 0;
 
 let programs = [];
+let serviceMode = 'UNKNOWN';
 let selectedProgram = null;
 let outline = null;
 let selectedWeek = null;
@@ -290,6 +291,7 @@ function loadPrograms() {
   send(MESSAGE_TYPES.LIST_PROGRAMS)
     .then((res) => {
       programs = res.payload?.programs || [];
+      serviceMode = res.payload?.serviceMode || 'CLOUD';
       listPage = 0;
 
       if (programs.length === 0) {
@@ -934,6 +936,23 @@ function renderClock() {
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: label,
+  });
+}
+
+function renderDemoBadge() {
+  const isDemoMode = serviceMode === 'DEMO';
+  if (!isDemoMode) return;
+  addLiveText('demo-badge', {
+    x: px(190),
+    y: px(8),
+    w: px(100),
+    h: px(24),
+    color: THEME.orange,
+    text_size: font('micro'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: 'DEMO',
   });
 }
 
@@ -2130,6 +2149,7 @@ function renderUI() {
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
   renderScreen();
+  renderDemoBadge();
   // Drawn last so it belongs to no screen in particular: every renderer below
   // returns early, and the clock has to survive all of them.
   renderClock();

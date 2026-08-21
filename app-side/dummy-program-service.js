@@ -223,6 +223,8 @@ export function createDummyProgramService() {
   };
 
   return {
+    mode: 'DEMO',
+
     async listPrograms() {
       return programs;
     },

@@ -43,6 +43,14 @@ test('returns the program list', async () => {
 
   assert.equal(res.type, MESSAGE_TYPES.PROGRAMS_DATA);
   assert.equal(res.payload.programs.length, 1);
+  assert.equal(res.payload.serviceMode, 'CLOUD');
+});
+
+test('identifies the demo program source explicitly', async () => {
+  const router = createSideRouter({ programService: fakeService({ mode: 'DEMO' }) });
+  const res = await router.handle(createMessage({ type: MESSAGE_TYPES.LIST_PROGRAMS }));
+
+  assert.equal(res.payload.serviceMode, 'DEMO');
 });
 
 test('requires a programId for an outline', async () => {

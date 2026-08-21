@@ -3,6 +3,7 @@
 ## [0.3.0] - 20 August 2026
 
 ### Changed
+- Demo mode is now unmistakable: the phone explains that no account is connected and nothing reaches Liftosaur, while a permanent `DEMO` label stays visible on the watch.
 - Every watch screen now uses one readable type scale, fewer rows and stronger contrast. Exercise lists, workout previews, set controls, rest details and sync results stay clear at real watch size.
 - The phone settings page now uses readable labels and controls, and the beta interface ships in English only.
 - Sets without an RPE target now use two larger controls for weight and reps. The RPE control appears only when the current set asks for it.
