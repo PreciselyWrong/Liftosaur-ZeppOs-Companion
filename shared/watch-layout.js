@@ -1,17 +1,27 @@
 /** Readable type sizes in the 480px watch design space. */
 export const TYPOGRAPHY = Object.freeze({
-  micro: 18,
-  caption: 20,
-  body: 22,
-  button: 24,
-  title: 26,
-  value: 34,
-  timer: 62,
+  micro: 20,
+  caption: 23,
+  body: 25,
+  button: 27,
+  title: 30,
+  value: 38,
+  timer: 66,
 });
 
 export const LIST_PAGE_SIZE = 3;
 export const OVERVIEW_PAGE_SIZE = 3;
-export const READY_PREVIEW_SIZE = 3;
+export const READY_PREVIEW_SIZE = 2;
+
+export function formatWorkoutPosition(week, dayInWeek) {
+  return `Week ${week} - Day ${dayInWeek}`;
+}
+
+export function formatMarqueeText(text, threshold = 22) {
+  const value = String(text ?? '').trim();
+  if (value.length <= threshold) return value;
+  return Array(4).fill(value).join('      ');
+}
 
 export const ACTIVE_SET_LAYOUT = Object.freeze({
   withRpe: Object.freeze({

@@ -18,6 +18,7 @@ test('dummy program service returns outline with weeks and days', async () => {
   assert.equal(outline.programId, 'dummy-gzclp');
   assert.ok(outline.weeks.length >= 3);
   assert.ok(outline.weeks[0].days.length >= 4);
+  assert.equal(outline.lastWorkout.dayInWeek, 1);
 });
 
 test('dummy program service returns rich day plan with warmups and supersets', async () => {
@@ -39,6 +40,19 @@ test('dummy program service returns rich day plan with warmups and supersets', a
   const triceps = plan.exercises.find((e) => e.name === 'Triceps Rope Pushdown');
   assert.ok(triceps);
   assert.equal(triceps.supersetTag, 'A2');
+});
+
+test('every demo exercise includes a description and its latest session note', async () => {
+  const service = createDummyProgramService();
+  const plans = [
+    await service.getDayPlan('dummy-gzclp', 1, 1),
+    await service.getDayPlan('dummy-gzclp', 1, 2),
+  ];
+
+  for (const exercise of plans.flatMap((plan) => plan.exercises)) {
+    assert.match(exercise.notes, /^Description\n.+/s, exercise.name);
+    assert.match(exercise.notes, /\n\nPast sessions\n• \d{4}-\d{2}-\d{2}: .+$/s, exercise.name);
+  }
 });
 
 test('dummy program service finishes workout cleanly', async () => {

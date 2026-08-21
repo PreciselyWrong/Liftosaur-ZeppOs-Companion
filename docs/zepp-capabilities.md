@@ -180,8 +180,8 @@ live.
 
 **`deleteWidget` + `createWidget` works** (P0-6 resolved, 2026-08-14): deleting the old
 `TEXT` widget and creating a fresh one in its place is confirmed by the emulator. The counter
-incremented correctly on each tap. `prop.VISIBLE` had already been ruled out (aborts `build()`
-if set before the widget is fully initialised).
+incremented correctly on each tap. Calling `prop.VISIBLE` before a widget is fully initialised
+aborts `build()`. Calling it later on a completed `BUTTON` is supported by the documented API.
 
 Consequence for phase 1: **all dynamic text must be rendered via delete + recreate**. Keep
 the widget reference in a module-level closure variable, never on `this`.
@@ -189,6 +189,41 @@ the widget reference in a module-level closure variable, never on `this`.
 A runtime error inside `build()` aborts the rest of it **silently** - the widgets already
 created stay on screen, so a half-built widget looks deliberate. Any unexplained missing
 element should be read as a crash, not a layout mistake.
+
+### Rebuilding after a button tap
+
+Tested on the Active 2 simulator on 21 August 2026. A native `BUTTON.click_func` works and can
+delete the outgoing widgets directly, as the official widget layout example also demonstrates.
+Wrapping every callback in `setTimeout(..., 0)` made the rendered controls inert.
+
+The official [`redraw()`](https://docs.zepp.com/docs/reference/device-app-api/newAPI/ui/redraw/)
+documentation identifies a `deleteWidget()` boundary case and requires a manual redraw when
+the view is not updated in time. The application commits the completed replacement tree:
+
+1. The native `click_func` runs the application action synchronously.
+2. `clearWidgets()` deletes the outgoing non-control widget tree.
+3. `renderUI()` creates every replacement widget.
+4. Page-lifetime modal controls are moved and toggled with `prop.MORE` and `prop.VISIBLE`.
+5. One `redraw()` commits the completed view and interaction tree.
+
+The modal previous, next and Close controls are deliberately excluded from `clearWidgets()`.
+Deleting the button that is currently executing its own callback can leave the native control
+inert. These controls are created once, hidden outside the modal and destroyed only in
+`onDestroy()`.
+
+Hit-area changes, `CLICK_DOWN` listeners, `setEnable(false)`, an extra modal Z layer and a
+deferred callback did not address the fault and were removed.
+
+Swipe navigation is separate from widget click dispatch. The standalone application can
+register one page-level handler through
+[`onGesture`](https://docs.zepp.com/docs/v2/reference/device-app-api/newAPI/interaction/onGesture/).
+The exercise modal uses left and right to change page and down to close. This does not apply
+to the Workout Extension constraints documented above.
+
+Only one `zeus dev` process may watch this project. Concurrent watchers all rebuild and
+refresh the same simulator, which makes an interaction test race against repeated app
+restarts. Diagnostic screenshots must be written outside the repository because Zeus also
+treats a new screenshot inside the project as a source change.
 
 The tap did nothing. The probe listener added on the status text threw at runtime, which
 aborted `build()` after the widgets were already drawn - so the screen looked correct while
@@ -205,6 +240,42 @@ Source: [simulator guide](https://docs.zepp.com/docs/guides/tools/simulator/).
 Consequences: the simulator cannot yet answer whether the extension is scoped to a sport,
 how it behaves as a data page, or whether taps work in a real workout. Those move to
 "needs the system Workout app", and P0-1 stays open.
+
+## Recording a native Zepp workout (research 2026-08-15)
+
+Question: can the app record the session as a Zepp activity, so it lands in the watch
+activity history with heart rate, calories and duration?
+
+**No public API lets a mini program create, start or stop a workout recording.** Every
+sport interface Zepp OS documents is read-only, and the only writer is the system Workout
+application itself.
+
+| Capability | Finding | Status | Source |
+| --- | --- | --- | --- |
+| `Workout` (`@zos/sensor`) | Read-only. `getStatus()` (VO2 max, training load, recovery), `getHistory()` (past records: `startTime`, `duration`), `getUserHrZoneSettings()` (4.2), `getWorkoutTrackNavInfo()` (4.2). API_LEVEL 3.0, permission `data:user.hd.workout`. **No start, stop or write method** | CONFIRMED | [Workout](https://docs.zepp.com/docs/reference/device-app-api/newAPI/sensor/Workout/) |
+| `getSportData` (`@zos/app-access`) | Reads live metrics of a workout **already running** (duration, calories, distance, cadence, and so on). Heart rate is absent from the type list. No start or stop | CONFIRMED | [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/) |
+| `launchApp` (`@zos/router`) | `launchApp({ appId: SYSTEM_APP_SPORT, native: true })` opens the system Workout app. API_LEVEL 2.0, `native` from 3.0. `params` is documented as reaching `app.js onCreate`, but **no sport type parameter is documented for system apps** | CONFIRMED | [launchApp](https://docs.zepp.com/docs/reference/device-app-api/newAPI/router/launchApp/) |
+| What happens to the caller | **Not documented.** Whether this app keeps running, is paused or is destroyed when the Workout app takes the foreground is unknown | UNKNOWN | - |
+| Workout Extension | The only supported way to run **inside** a native workout: the system app owns the recording, the extension only draws a data page | CONFIRMED | [intro](https://docs.zepp.com/docs/guides/workout-extension/intro/) |
+| `Time` (`@zos/sensor`) | `getFormatHour()`, `getMinutes()`, `getHours()`, `getHourFormat()` against `TIME_HOUR_FORMAT_12` / `TIME_HOUR_FORMAT_24`, `onPerMinute()`. API_LEVEL 2.1, no permission. Present in `@zeppos/device-types` under `declare module '@zos/sensor'` | CONFIRMED | [Time](https://docs.zepp.com/docs/reference/device-app-api/newAPI/sensor/Time/) |
+
+### The three possible paths
+
+1. **Companion workout (the only one that fits this app today).** A button starts the
+   system Workout app through `launchApp`, the user picks Strength Training, and the watch
+   records the activity while Lifto Companion carries the session. The session already
+   survives leaving and re-entering the app, so the round trip costs nothing structurally.
+   Three things stay unknown and are real-device questions: whether the native workout keeps
+   recording once it is in the background, whether this app can be reopened over it, and
+   whether `new HeartRate()` still reports while the system owns the sensor - the project
+   rule is that the app is the sole owner of the HR sensor.
+2. **Workout Extension.** Native recording for free, but it is a second app with its own
+   appId, capped at one widget, and its documented device list (T-Rex 3, Cheetah Pro,
+   Cheetah Round, Cheetah Square, T-Rex Ultra, Falcon) excludes both the Active 2 and the
+   Bip 6. The Strength Training `subType` code is still unknown (risk P0-1), and passing the
+   day plan across two appIds is unsolved. Out of scope for V1.
+3. **Nothing native.** Keep reading heart rate through `@zos/sensor` and describe the effort
+   in the Liftosaur record only. Zero risk, and no Zepp activity is created.
 
 ## Local storage (CONFIRMED)
 

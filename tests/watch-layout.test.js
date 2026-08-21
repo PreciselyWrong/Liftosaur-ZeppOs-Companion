@@ -11,12 +11,17 @@ import {
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
   READY_PREVIEW_SIZE,
+  formatWorkoutPosition,
+  formatMarqueeText,
 } from '../shared/watch-layout.js';
 
 const root = process.cwd();
 
 test('every typography role is readable at physical watch size', () => {
-  assert.equal(Math.min(...Object.values(TYPOGRAPHY)), 18);
+  assert.equal(Math.min(...Object.values(TYPOGRAPHY)), 20);
+  assert.equal(TYPOGRAPHY.body, 25);
+  assert.equal(TYPOGRAPHY.title, 30);
+  assert.equal(TYPOGRAPHY.value, 38);
   assert.ok(TYPOGRAPHY.title > TYPOGRAPHY.body);
   assert.ok(TYPOGRAPHY.value > TYPOGRAPHY.button);
   assert.ok(TYPOGRAPHY.timer > TYPOGRAPHY.value);
@@ -61,7 +66,176 @@ test('demo mode is explicit in settings and on every watch screen', () => {
 test('dense screens show fewer readable rows instead of shrinking text', () => {
   assert.equal(LIST_PAGE_SIZE, 3);
   assert.equal(OVERVIEW_PAGE_SIZE, 3);
-  assert.equal(READY_PREVIEW_SIZE, 3);
+  assert.equal(READY_PREVIEW_SIZE, 2);
+});
+
+test('ready-screen actions render above decorative labels', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'page', 'common', 'index.js'),
+    'utf8',
+  );
+  const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
+  assert.ok(renderUi.indexOf('renderClock()') < renderUi.indexOf('renderScreen()'));
+  assert.match(source, /function renderReadyScreen[\s\S]*?text_size:\s*font\('body'\)/);
+});
+
+test('button actions run in the native Zepp click callback', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const addWidget = source.slice(source.indexOf('function addActionWidget'), source.indexOf('function addLiveLabel'));
+
+  assert.doesNotMatch(source, /function deferAction\(clickFunc\)/);
+  assert.match(addWidget, /click_func: props\.click_func/);
+  assert.doesNotMatch(addWidget, /setEnable\(false\)/);
+  assert.match(source, /function addLiveButton[\s\S]*?addActionWidget\(fitted\)/);
+});
+
+test('the Zepp view is redrawn after the replacement tree is complete', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const clearWidgets = source.slice(source.indexOf('function clearWidgets()'), source.indexOf('function addRawWidget'));
+  const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
+
+  assert.match(source, /import \{[^}]*redraw[^}]*\} from '@zos\/ui'/);
+  assert.match(clearWidgets, /deleteWidget\(w\)/);
+  assert.doesNotMatch(clearWidgets, /redraw\(\)/);
+  assert.ok(renderUi.indexOf('renderScreen()') < renderUi.indexOf('redraw()'));
+});
+
+test('live labels use mutable buttons so timer ticks cannot recreate action targets', () => {
+  const source = fs.readFileSync(
+    path.join(root, 'page', 'common', 'index.js'),
+    'utf8',
+  );
+  const liveLabel = source.slice(source.indexOf('function addLiveLabel'), source.indexOf('function addLiveButton'));
+
+  assert.match(liveLabel, /addRawWidget\(widget\.BUTTON, fitted\)/);
+  assert.doesNotMatch(liveLabel, /addRawWidget\(widget\.TEXT, fitted\)/);
+});
+
+test('the workout preview opens its full exercise list instead of truncating it', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+
+  assert.match(source, /function openTextModal\(title, content\)/);
+  assert.match(source, /text: `\+ \$\{view\.totalExercises - READY_PREVIEW_SIZE\} more`/);
+  assert.match(source, /openTextModal\('Exercises', fullPreview\)/);
+});
+
+test('the ready preview keeps exercise text out of the more button', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
+
+  assert.match(ready, /visibleExercises\.forEach/);
+  assert.match(ready, /y: px\(108 \+ index \* 66\)/);
+  assert.match(ready, /h: px\(64\)/);
+  assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
+  assert.doesNotMatch(ready, /preview\.join/);
+});
+
+test('modal pages stay short enough to clear their controls', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  assert.match(source, /function paginateNotes\(text, maxCharsPerPage = 70, maxLinesPerPage = 5\)/);
+});
+
+test('modal actions use large central touch targets and ASCII labels', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const modal = source.slice(source.indexOf('function renderNotesModal'), source.indexOf('function heartRateColor'));
+  const controls = source.slice(source.indexOf('function ensureModalControls'), source.indexOf('function destroyModalControls'));
+
+  assert.match(modal, /h: px\(246\)/);
+  assert.match(controls, /x: px\(48\),[\s\S]*?w: px\(80\),[\s\S]*?text: '<'/);
+  assert.match(controls, /x: px\(166\),[\s\S]*?w: px\(80\),[\s\S]*?text: '>'/);
+  assert.match(controls, /text: '<'/);
+  assert.match(controls, /text: '>'/);
+  assert.doesNotMatch(controls, /[‹›]/);
+});
+
+test('modal controls persist across their own callbacks', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const clearWidgets = source.slice(source.indexOf('function clearWidgets()'), source.indexOf('function addRawWidget'));
+  const modal = source.slice(source.indexOf('function renderNotesModal'), source.indexOf('function handleGesture'));
+
+  assert.match(source, /let modalControls = null/);
+  assert.match(source, /function ensureModalControls\(totalPages\)/);
+  assert.match(source, /setProperty\(prop\.VISIBLE, visible\)/);
+  assert.match(modal, /ensureModalControls\(totalPages\)/);
+  assert.doesNotMatch(modal, /addWidget\(widget\.BUTTON/);
+  assert.doesNotMatch(clearWidgets, /modalControls/);
+});
+
+test('changing modal pages updates labels without rebuilding over persistent controls', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const movePage = source.slice(source.indexOf('function moveNotesPage'), source.indexOf('function renderNotesModal'));
+  const modal = source.slice(source.indexOf('function renderNotesModal'), source.indexOf('function handleGesture'));
+
+  assert.match(movePage, /updateLiveWidget\('modal-content'/);
+  assert.match(movePage, /updateLiveWidget\('modal-page'/);
+  assert.doesNotMatch(movePage, /renderUI\(\)/);
+  assert.match(modal, /addLiveLabel\('modal-content'/);
+  assert.match(modal, /addLiveLabel\('modal-page'/);
+});
+
+test('modal gestures are registered directly and removed on teardown', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+
+  assert.match(source, /onGesture\(\{ callback: handleGesture \}\)/);
+  assert.match(source, /offGesture\(\)/);
+  assert.match(source, /GESTURE_LEFT/);
+  assert.match(source, /GESTURE_RIGHT/);
+  assert.match(source, /GESTURE_DOWN/);
+});
+
+test('connection title uses the same marquee renderer as long program names', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const connection = source.slice(source.indexOf('function renderConnectionScreen'), source.indexOf('function renderHomeScreen'));
+
+  assert.match(source, /function renderMarqueeTitle\(text, color/);
+  assert.match(connection, /renderMarqueeTitle\('Phone connection needed', THEME\.orange\)/);
+});
+
+test('the exercise details control is a labeled button without emoji', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const activeSet = source.slice(source.indexOf('function renderActiveSetScreen'), source.indexOf('function renderStepper'));
+
+  assert.match(activeSet, /text: 'Info'/);
+  assert.doesNotMatch(activeSet, /[🔥ℹ]/);
+  assert.doesNotMatch(source, /[🔥ℹ♥⏱▶]/);
+});
+
+test('live button updates omit properties unsupported by setProperty', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const update = source.slice(source.indexOf('function updateLiveWidget'), source.indexOf('function persistSession'));
+
+  assert.match(source, /LIVE_WIDGET_MUTABLE_KEYS/);
+  assert.doesNotMatch(update, /setProperty\(prop\.MORE, entry\.props\)/);
+});
+
+test('workout position remains readable when a day name is long', () => {
+  assert.equal(formatWorkoutPosition(1, 1), 'Week 1 - Day 1');
+  assert.equal(formatWorkoutPosition(12, 4), 'Week 12 - Day 4');
+});
+
+test('long marquee text repeats with short gaps while short text stays still', () => {
+  assert.equal(formatMarqueeText('Short title'), 'Short title');
+  const marquee = formatMarqueeText('Day 2: Overhead Press & Deadlift');
+  assert.equal(marquee.match(/Day 2: Overhead Press & Deadlift/g)?.length, 4);
+  assert.match(marquee, /Deadlift {6}Day 2/);
+});
+
+test('the home screen separates the fixed workout position from the moving day name', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const home = source.slice(source.indexOf('function renderHomeScreen'), source.indexOf('function renderProgramsScreen'));
+
+  assert.match(home, /renderMarqueeTitle\(outline\.programName \|\| 'Liftosaur'\)/);
+  assert.match(home, /text: formatWorkoutPosition\(start\.week\.number, start\.day\.number\)/);
+  assert.match(home, /text: formatMarqueeText\(start\.day\.name\)/);
+  assert.doesNotMatch(home, /formatWorkoutButtonLabel/);
+});
+
+test('the home workout is one rounded card with flat text layers', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const home = source.slice(source.indexOf('function renderHomeScreen'), source.indexOf('function renderProgramsScreen'));
+
+  assert.match(home, /h: px\(148\),[\s\S]*?text: ''/);
+  assert.equal((home.match(/radius: px\(1\)/g) || []).length, 2);
 });
 
 test('RPE is shown only when the current set asks for it', () => {
