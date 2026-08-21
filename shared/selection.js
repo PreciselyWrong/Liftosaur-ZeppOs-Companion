@@ -15,6 +15,25 @@ export function suggestedProgramIndex(programs = []) {
 }
 
 /**
+ * A restored session retains the program identity in its persisted plan while
+ * picker state lives only in memory. Reconstruct the minimum safe selection
+ * from that server-provided identity before asking for a fresh outline.
+ */
+export function programForSavedPlan(selectedProgram, programs = [], plan = null) {
+  if (selectedProgram?.id === plan?.programId) return selectedProgram;
+
+  const listed = programs.find((program) => program.id === plan?.programId);
+  if (listed) return listed;
+
+  if (!plan?.programId) return null;
+  return {
+    id: plan.programId,
+    name: plan.programName || 'Program',
+    isCurrent: true,
+  };
+}
+
+/**
  * The week the last workout was in - or the one after it, when that workout was
  * the last day of its week.
  */

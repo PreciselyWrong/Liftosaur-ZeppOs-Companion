@@ -1,8 +1,15 @@
-import { createWidget, deleteWidget, widget, align, text_style, prop } from '@zos/ui';
+import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
 import { HeartRate, Time, TIME_HOUR_FORMAT_12, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
+import {
+  onGesture,
+  offGesture,
+  GESTURE_LEFT,
+  GESTURE_RIGHT,
+  GESTURE_DOWN,
+} from '@zos/interaction';
 import {
   setPageBrightTime,
   resetPageBrightTime,
@@ -17,12 +24,15 @@ import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-sessi
 import { createSessionStore } from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
+import { isTemporaryPhoneError } from '../../shared/connection-state.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
   READY_PREVIEW_SIZE,
   activeSetLayout,
+  formatWorkoutPosition,
+  formatMarqueeText,
 } from '../../shared/watch-layout.js';
 import {
   suggestedProgramIndex,
@@ -30,6 +40,7 @@ import {
   suggestedDayIndex,
   suggestedStart,
   withoutIndex,
+  programForSavedPlan,
 } from '../../shared/selection.js';
 
 // ── Liftosaur palette ────────────────────────────────────────────────────────
@@ -97,6 +108,7 @@ function font(role) {
 
 const SCREEN = {
   LOADING: 'LOADING',
+  CONNECTION: 'CONNECTION',
   SETUP: 'SETUP',
   HOME: 'HOME',
   PROGRAMS: 'PROGRAMS',
@@ -181,6 +193,7 @@ let lastRenderedClock = null;
 let lastRenderedSecond = null;
 let lastRenderedState = null;
 let activeWidgets = [];
+let modalControls = null;
 
 /**
  * Widgets whose text changes every second.
@@ -213,8 +226,150 @@ function addRawWidget(type, props) {
   return w;
 }
 
+function addActionWidget(props) {
+  return addRawWidget(widget.BUTTON, {
+    ...props,
+    click_func: props.click_func,
+  });
+}
+
 function addWidget(type, props) {
-  return addRawWidget(type, LAYOUT.fit(props));
+  const fitted = LAYOUT.fit(props);
+  if (type === widget.BUTTON && typeof fitted.click_func === 'function') {
+    return addActionWidget(fitted);
+  }
+  return addRawWidget(type, fitted);
+}
+
+function setModalControl(button, props, visible) {
+  const fitted = LAYOUT.fit(props);
+  button.setProperty(prop.VISIBLE, false);
+  button.setProperty(prop.MORE, fitted);
+  button.setProperty(prop.VISIBLE, visible);
+}
+
+function hideModalControls() {
+  if (!modalControls) return;
+  for (const button of Object.values(modalControls)) {
+    button.setProperty(prop.VISIBLE, false);
+  }
+}
+
+function ensureModalControls(totalPages) {
+  if (!modalControls) {
+    modalControls = {
+      previous: createWidget(
+        widget.BUTTON,
+        LAYOUT.fit({
+          x: px(48),
+          y: px(348),
+          w: px(80),
+          h: px(54),
+          radius: px(27),
+          normal_color: THEME.cardActive,
+          press_color: THEME.card,
+          text: '<',
+          text_size: font('button'),
+          click_func: () => {
+            if (isNotesModalOpen) moveNotesPage(-1);
+          },
+        }),
+      ),
+      next: createWidget(
+        widget.BUTTON,
+        LAYOUT.fit({
+          x: px(166),
+          y: px(348),
+          w: px(80),
+          h: px(54),
+          radius: px(27),
+          normal_color: THEME.cardActive,
+          press_color: THEME.card,
+          text: '>',
+          text_size: font('button'),
+          click_func: () => {
+            if (isNotesModalOpen) moveNotesPage(1);
+          },
+        }),
+      ),
+      close: createWidget(
+        widget.BUTTON,
+        LAYOUT.fit({
+          x: px(250),
+          y: px(348),
+          w: px(160),
+          h: px(54),
+          radius: px(27),
+          normal_color: THEME.primary,
+          press_color: THEME.primaryDeep,
+          text: 'Close',
+          text_size: font('button'),
+          click_func: () => {
+            if (isNotesModalOpen) closeTextModal();
+          },
+        }),
+      ),
+    };
+  }
+
+  const hasPaging = totalPages > 1;
+  setModalControl(
+    modalControls.previous,
+    {
+      x: px(48),
+      y: px(348),
+      w: px(80),
+      h: px(54),
+      radius: px(27),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      text: '<',
+      text_size: font('button'),
+    },
+    hasPaging,
+  );
+  setModalControl(
+    modalControls.next,
+    {
+      x: px(166),
+      y: px(348),
+      w: px(80),
+      h: px(54),
+      radius: px(27),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      text: '>',
+      text_size: font('button'),
+    },
+    hasPaging,
+  );
+  setModalControl(
+    modalControls.close,
+    {
+      x: hasPaging ? px(250) : px(140),
+      y: px(348),
+      w: hasPaging ? px(160) : px(200),
+      h: hasPaging ? px(54) : px(56),
+      radius: hasPaging ? px(27) : px(28),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      text: 'Close',
+      text_size: font('button'),
+    },
+    true,
+  );
+}
+
+function destroyModalControls() {
+  if (!modalControls) return;
+  for (const button of Object.values(modalControls)) {
+    try {
+      deleteWidget(button);
+    } catch (e) {
+      // The page teardown may already have removed the native widget.
+    }
+  }
+  modalControls = null;
 }
 
 /**
@@ -222,27 +377,38 @@ function addWidget(type, props) {
  * re-sends the whole property set, so design-space geometry would snap the
  * widget back off-screen on a fitted layout.
  */
-function addLiveText(key, props) {
-  const fitted = LAYOUT.fit(props);
-  const w = addRawWidget(widget.TEXT, fitted);
-  liveWidgets[key] = { widget: w, props: { ...fitted } };
-  return w;
-}
-
-function addLiveButton(key, props) {
+/**
+ * Zepp OS does not repaint a TEXT widget after setProperty. A label which
+ * changes during a session is therefore a button without a callback: BUTTON
+ * supports full geometry updates and avoids rebuilding every action target.
+ */
+function addLiveLabel(key, props) {
   const fitted = LAYOUT.fit(props);
   const w = addRawWidget(widget.BUTTON, fitted);
   liveWidgets[key] = { widget: w, props: { ...fitted } };
   return w;
 }
 
+function addLiveButton(key, props) {
+  const fitted = LAYOUT.fit(props);
+  const w = addActionWidget(fitted);
+  liveWidgets[key] = { widget: w, props: { ...fitted } };
+  return w;
+}
+
+const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius'];
+
 /** Returns false when the runtime refused the in-place update, so the caller can fall back. */
-function updateLiveText(key, changes) {
+function updateLiveWidget(key, changes) {
   const entry = liveWidgets[key];
   if (!entry) return true;
   try {
     Object.assign(entry.props, changes);
-    entry.widget.setProperty(prop.MORE, entry.props);
+    const mutableProps = {};
+    for (const property of LIVE_WIDGET_MUTABLE_KEYS) {
+      if (property in entry.props) mutableProps[property] = entry.props[property];
+    }
+    entry.widget.setProperty(prop.MORE, mutableProps);
     return true;
   } catch (err) {
     console.log('[liftosaur] in-place text update unavailable:', err?.message || String(err));
@@ -315,6 +481,14 @@ function loadPrograms() {
       loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
     })
     .catch((err) => {
+      if (isTemporaryPhoneError(err)) {
+        isBusy = false;
+        statusMessage = '';
+        errorMessage = '';
+        screen = SCREEN.CONNECTION;
+        renderUI();
+        return;
+      }
       screen = SCREEN.SETUP;
       failRequest(err);
     });
@@ -469,7 +643,7 @@ function formatSeconds(sec) {
 }
 
 function elapsedLabel(view) {
-  return `▶ ${formatSeconds(view.elapsedSeconds)}`;
+  return formatSeconds(view.elapsedSeconds);
 }
 
 function formatDots(dots) {
@@ -544,41 +718,56 @@ function formatNotesMarkdown(raw) {
     .trim();
 }
 
-function paginateNotes(text, maxCharsPerPage = 150) {
+function paginateNotes(text, maxCharsPerPage = 70, maxLinesPerPage = 5) {
   const formatted = formatNotesMarkdown(text);
-  if (formatted.length <= maxCharsPerPage) return [formatted];
+  const visualLines = [];
 
-  const paragraphs = formatted.split('\n');
-  const pages = [];
-  let currentPage = '';
-
-  for (const para of paragraphs) {
-    if ((currentPage + '\n' + para).trim().length > maxCharsPerPage) {
-      if (currentPage.trim()) {
-        pages.push(currentPage.trim());
-        currentPage = '';
-      }
-      if (para.length > maxCharsPerPage) {
-        const words = para.split(' ');
-        for (const word of words) {
-          if ((currentPage + ' ' + word).trim().length > maxCharsPerPage) {
-            pages.push(currentPage.trim());
-            currentPage = word;
-          } else {
-            currentPage = (currentPage + ' ' + word).trim();
-          }
-        }
-      } else {
-        currentPage = para;
-      }
-    } else {
-      currentPage = currentPage ? `${currentPage}\n${para}` : para;
+  for (const line of formatted.split('\n')) {
+    if (!line.trim()) {
+      visualLines.push('');
+      continue;
     }
+
+    let wrapped = '';
+    for (const word of line.split(' ')) {
+      const candidate = wrapped ? `${wrapped} ${word}` : word;
+      if (candidate.length > 28 && wrapped) {
+        visualLines.push(wrapped);
+        wrapped = word;
+      } else {
+        wrapped = candidate;
+      }
+    }
+    if (wrapped) visualLines.push(wrapped);
   }
-  if (currentPage.trim()) {
-    pages.push(currentPage.trim());
+
+  const pages = [];
+  let pageLines = [];
+  for (const line of visualLines) {
+    const candidate = [...pageLines, line].join('\n').trim();
+    if (pageLines.length >= maxLinesPerPage || (candidate.length > maxCharsPerPage && pageLines.length > 0)) {
+      pages.push(pageLines.join('\n').trim());
+      pageLines = [];
+    }
+    pageLines.push(line);
   }
+  if (pageLines.length > 0) pages.push(pageLines.join('\n').trim());
   return pages.length > 0 ? pages : [formatted];
+}
+
+function closeTextModal() {
+  isNotesModalOpen = false;
+  notesPage = 0;
+  renderUI();
+}
+
+function moveNotesPage(delta) {
+  const pages = paginateNotes(activeNotesContent);
+  const totalPages = pages.length;
+  notesPage = (notesPage + delta + totalPages) % totalPages;
+  updateLiveWidget('modal-content', { text: pages[notesPage] || 'No notes for this exercise.' });
+  updateLiveWidget('modal-page', { text: `${notesPage + 1}/${totalPages}` });
+  redraw();
 }
 
 function renderNotesModal() {
@@ -609,11 +798,14 @@ function renderNotesModal() {
     text: truncate(activeNotesTitle, 24),
   });
 
-  addWidget(widget.TEXT, {
+  addLiveLabel('modal-content', {
     x: px(56),
     y: px(88),
     w: px(368),
     h: px(246),
+    radius: px(1),
+    normal_color: THEME.card,
+    press_color: THEME.card,
     color: THEME.textSecondary,
     text_size: font('body'),
     align_h: align.CENTER_H,
@@ -623,27 +815,14 @@ function renderNotesModal() {
   });
 
   if (totalPages > 1) {
-    addWidget(widget.BUTTON, {
-      x: px(58),
+    addLiveLabel('modal-page', {
+      x: px(128),
       y: px(348),
-      w: px(58),
+      w: px(38),
       h: px(54),
-      radius: px(27),
-      normal_color: THEME.cardActive,
+      radius: px(1),
+      normal_color: THEME.card,
       press_color: THEME.card,
-      text: '‹',
-      text_size: font('button'),
-      click_func: () => {
-        notesPage = (notesPage - 1 + totalPages) % totalPages;
-        renderUI();
-      },
-    });
-
-    addWidget(widget.TEXT, {
-      x: px(118),
-      y: px(348),
-      w: px(60),
-      h: px(54),
       color: THEME.textSecondary,
       text_size: font('micro'),
       align_h: align.CENTER_H,
@@ -652,56 +831,17 @@ function renderNotesModal() {
       text: `${notesPage + 1}/${totalPages}`,
     });
 
-    addWidget(widget.BUTTON, {
-      x: px(180),
-      y: px(348),
-      w: px(58),
-      h: px(54),
-      radius: px(27),
-      normal_color: THEME.cardActive,
-      press_color: THEME.card,
-      text: '›',
-      text_size: font('button'),
-      click_func: () => {
-        notesPage = (notesPage + 1) % totalPages;
-        renderUI();
-      },
-    });
-
-    addWidget(widget.BUTTON, {
-      x: px(252),
-      y: px(348),
-      w: px(160),
-      h: px(54),
-      radius: px(27),
-      normal_color: THEME.primary,
-      press_color: THEME.primaryDeep,
-      text: 'Close',
-      text_size: font('button'),
-      click_func: () => {
-        isNotesModalOpen = false;
-        notesPage = 0;
-        renderUI();
-      },
-    });
-  } else {
-    addWidget(widget.BUTTON, {
-      x: px(140),
-      y: px(348),
-      w: px(200),
-      h: px(56),
-      radius: px(28),
-      normal_color: THEME.primary,
-      press_color: THEME.primaryDeep,
-      text: 'Close',
-      text_size: font('button'),
-      click_func: () => {
-        isNotesModalOpen = false;
-        notesPage = 0;
-        renderUI();
-      },
-    });
   }
+
+  ensureModalControls(totalPages);
+}
+
+function handleGesture(gesture) {
+  if (!isNotesModalOpen) return false;
+  if (gesture === GESTURE_LEFT) moveNotesPage(1);
+  else if (gesture === GESTURE_RIGHT) moveNotesPage(-1);
+  else if (gesture === GESTURE_DOWN) closeTextModal();
+  return true;
 }
 
 function heartRateColor(hrVal) {
@@ -925,7 +1065,7 @@ function renderClock() {
   const label = currentClockLabel();
   if (!label) return;
   lastRenderedClock = label;
-  addLiveText('clock', {
+  addLiveLabel('clock', {
     x: px(160),
     y: px(CLOCK_Y),
     w: px(160),
@@ -939,10 +1079,33 @@ function renderClock() {
   });
 }
 
+function renderMarqueeTitle(text, color = THEME.primaryLight) {
+  addWidget(widget.BUTTON, {
+    x: px(60),
+    y: px(38),
+    w: px(360),
+    h: px(32),
+    radius: px(1),
+    normal_color: THEME.bg,
+    press_color: THEME.bg,
+    color,
+    text_size: font('title'),
+    text: formatMarqueeText(text),
+  });
+}
+
+function openTextModal(title, content) {
+  notesPage = 0;
+  isNotesModalOpen = true;
+  activeNotesTitle = title;
+  activeNotesContent = content;
+  renderUI();
+}
+
 function renderDemoBadge() {
   const isDemoMode = serviceMode === 'DEMO';
   if (!isDemoMode) return;
-  addLiveText('demo-badge', {
+  addLiveLabel('demo-badge', {
     x: px(190),
     y: px(8),
     w: px(100),
@@ -1135,6 +1298,45 @@ function renderSetupScreen() {
   });
 }
 
+function renderConnectionScreen() {
+  renderMarqueeTitle('Phone connection needed', THEME.orange);
+
+  addWidget(widget.FILL_RECT, {
+    x: px(60),
+    y: px(110),
+    w: px(360),
+    h: px(150),
+    radius: px(20),
+    color: THEME.card,
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(82),
+    y: px(132),
+    w: px(316),
+    h: px(108),
+    color: THEME.textSecondary,
+    text_size: font('body'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.WRAP,
+    text: 'Open Zepp on your phone, then tap Retry.',
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(90),
+    y: px(300),
+    w: px(300),
+    h: px(76),
+    radius: px(38),
+    normal_color: THEME.primary,
+    press_color: THEME.primaryDeep,
+    text: 'Retry',
+    text_size: font('title'),
+    click_func: loadPrograms,
+  });
+}
+
 /**
  * One tap to carry on. The button names the day it will start, so the shortcut
  * is never a mystery, and the second button opens the full choice.
@@ -1147,8 +1349,10 @@ function renderHomeScreen() {
     return renderWeeksScreen();
   }
 
-  renderTitle(truncate(outline.programName || 'Liftosaur', 26));
+  renderMarqueeTitle(outline.programName || 'Liftosaur');
   renderSubtitle(errorMessage || 'Next workout', { isError: Boolean(errorMessage) });
+
+  const openWorkout = () => loadDayPlan(start.week, start.day);
 
   addWidget(widget.BUTTON, {
     x: px(62),
@@ -1159,9 +1363,36 @@ function renderHomeScreen() {
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
     color: THEME.textPrimary,
-    text: `${truncate(start.day.name, 18)}\n${truncate(start.week.name || `Week ${start.week.number}`, 20)}`,
-    text_size: font('value'),
-    click_func: () => loadDayPlan(start.week, start.day),
+    text: '',
+    click_func: openWorkout,
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(74),
+    y: px(112),
+    w: px(332),
+    h: px(54),
+    radius: px(1),
+    normal_color: THEME.primary,
+    press_color: THEME.primary,
+    color: THEME.textPrimary,
+    text: formatWorkoutPosition(start.week.number, start.day.number),
+    text_size: font('title'),
+    click_func: openWorkout,
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(74),
+    y: px(172),
+    w: px(332),
+    h: px(60),
+    radius: px(1),
+    normal_color: THEME.primary,
+    press_color: THEME.primary,
+    color: THEME.textPrimary,
+    text: formatMarqueeText(start.day.name),
+    text_size: font('title'),
+    click_func: openWorkout,
   });
 
   addWidget(widget.BUTTON, {
@@ -1318,7 +1549,7 @@ function renderDaysScreen() {
 }
 
 function renderReadyScreen(view) {
-  renderTitle(truncate(view.dayName || 'Workout', 26));
+  renderTitle(formatWorkoutPosition(view.week, view.dayInWeek));
   renderSubtitle(truncate(view.programName || '', 30));
 
   addWidget(widget.FILL_RECT, {
@@ -1330,25 +1561,56 @@ function renderReadyScreen(view) {
     color: THEME.card,
   });
 
-  const preview = view.overviewExercises
-    .slice(0, READY_PREVIEW_SIZE)
-    .map((ex) => `${truncate(ex.name, 18)}\n${ex.prescriptionSummary}`);
-  if (view.totalExercises > READY_PREVIEW_SIZE) {
-    preview.push(`+ ${view.totalExercises - READY_PREVIEW_SIZE} more`);
+  const visibleExercises = view.overviewExercises.slice(0, READY_PREVIEW_SIZE);
+  const fullPreview = view.overviewExercises
+    .map((ex) => `${ex.name}\n${ex.prescriptionSummary}`)
+    .join('\n\n');
+
+  if (visibleExercises.length === 0) {
+    addWidget(widget.TEXT, {
+      x: px(78),
+      y: px(118),
+      w: px(324),
+      h: px(54),
+      color: THEME.textPrimary,
+      text_size: font('caption'),
+      align_h: align.LEFT,
+      align_v: align.TOP,
+      text_style: text_style.WRAP,
+      text: 'This day has no exercises',
+    });
   }
 
-  addWidget(widget.TEXT, {
-    x: px(78),
-    y: px(118),
-    w: px(324),
-    h: px(168),
-    color: THEME.textPrimary,
-    text_size: font('caption'),
-    align_h: align.LEFT,
-    align_v: align.TOP,
-    text_style: text_style.WRAP,
-    text: preview.join('\n') || 'This day has no exercises',
+  visibleExercises.forEach((exercise, index) => {
+    addWidget(widget.TEXT, {
+      x: px(78),
+      y: px(108 + index * 66),
+      w: px(324),
+      h: px(64),
+      color: THEME.textPrimary,
+      text_size: font('caption'),
+      align_h: align.LEFT,
+      align_v: align.TOP,
+      text_style: text_style.WRAP,
+      text: `${truncate(exercise.name, 20)}\n${exercise.prescriptionSummary}`,
+    });
   });
+
+  if (view.totalExercises > READY_PREVIEW_SIZE) {
+    addWidget(widget.BUTTON, {
+      x: px(78),
+      y: px(244),
+      w: px(180),
+      h: px(44),
+      radius: px(16),
+      normal_color: THEME.cardActive,
+      press_color: THEME.primaryDark,
+      color: THEME.primaryPale,
+      text: `+ ${view.totalExercises - READY_PREVIEW_SIZE} more`,
+      text_size: font('caption'),
+      click_func: () => openTextModal('Exercises', fullPreview),
+    });
+  }
 
   addWidget(widget.TEXT, {
     x: px(62),
@@ -1356,7 +1618,7 @@ function renderReadyScreen(view) {
     w: px(356),
     h: px(24),
     color: THEME.textSecondary,
-    text_size: font('micro'),
+    text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
@@ -1412,7 +1674,7 @@ function renderTopBar(view, onBack) {
     click_func: onBack,
   });
 
-  addLiveText('elapsed', {
+  addLiveLabel('elapsed', {
     x: px(138),
     y: px(45),
     w: px(120),
@@ -1425,7 +1687,7 @@ function renderTopBar(view, onBack) {
     text: elapsedLabel(view),
   });
 
-  addLiveText('hr', {
+  addLiveLabel('hr', {
     x: px(252),
     y: px(45),
     w: px(120),
@@ -1435,7 +1697,7 @@ function renderTopBar(view, onBack) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `♥ ${liveHr}`,
+    text: `HR ${liveHr}`,
   });
 }
 
@@ -1612,7 +1874,7 @@ function renderActiveSetScreen(view) {
       press_color: THEME.cardActive,
       color: bannerColor,
       text_size: font('caption'),
-      text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
+      text: `Rest ${formatSeconds(view.rest.remaining)}`,
       click_func: () => {
         isRestMinimized = false;
         renderUI();
@@ -1640,23 +1902,17 @@ function renderActiveSetScreen(view) {
 
   if (exerciseNotes) {
     addWidget(widget.BUTTON, {
-      x: px(374),
-      y: px(88),
-      w: px(44),
-      h: px(36),
-      radius: px(18),
+      x: px(344),
+      y: px(84),
+      w: px(74),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.cardActive,
       press_color: THEME.card,
       color: THEME.primaryLight,
-      text: 'ℹ',
+      text: 'Info',
       text_size: font('caption'),
-      click_func: () => {
-        notesPage = 0;
-        isNotesModalOpen = true;
-        activeNotesTitle = exerciseName;
-        activeNotesContent = exerciseNotes;
-        renderUI();
-      },
+      click_func: () => openTextModal('Exercise details', `${exerciseName}\n\n${exerciseNotes}`),
     });
   }
 
@@ -1664,7 +1920,7 @@ function renderActiveSetScreen(view) {
   const ssBadge = supersetGroup ? ` (SS ${supersetGroup})` : '';
 
   const setLabel = set.isWarmup
-    ? `🔥 WARMUP ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
+    ? `WARMUP ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
     : `SET ${set.workSetIndex || setIndex + 1}/${set.totalWorkSets || totalSets}${ssBadge}`;
 
   addWidget(widget.TEXT, {
@@ -1839,7 +2095,7 @@ function renderRestScreen(view) {
     ? 'Paused'
     : (rest.isOvertime ? 'Overtime' : 'Rest');
 
-  addLiveText('restLabel', {
+  addLiveLabel('restLabel', {
     x: px(62),
     y: px(90),
     w: px(356),
@@ -1852,7 +2108,7 @@ function renderRestScreen(view) {
     text: labelText,
   });
 
-  addLiveText('restValue', {
+  addLiveLabel('restValue', {
     x: px(62),
     y: px(118),
     w: px(356),
@@ -1917,7 +2173,7 @@ function renderRestScreen(view) {
     const ssColor = supersetColor(rest.nextSupersetGroup);
     const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
     const setProg = rest.nextIsWarmup
-      ? `🔥 WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
+      ? `WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
       : `SET ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
 
     addWidget(widget.FILL_RECT, {
@@ -1944,23 +2200,17 @@ function renderRestScreen(view) {
 
     if (rest.nextExerciseNotes) {
       addWidget(widget.BUTTON, {
-        x: px(370),
-        y: px(242),
-        w: px(44),
-        h: px(30),
-        radius: px(15),
+        x: px(342),
+        y: px(238),
+        w: px(72),
+        h: px(38),
+        radius: px(19),
         normal_color: THEME.cardActive,
         press_color: THEME.card,
         color: THEME.primaryLight,
-        text: 'ℹ',
+        text: 'Info',
         text_size: font('caption'),
-        click_func: () => {
-          notesPage = 0;
-          isNotesModalOpen = true;
-          activeNotesTitle = rest.nextExerciseName;
-          activeNotesContent = rest.nextExerciseNotes;
-          renderUI();
-        },
+        click_func: () => openTextModal('Exercise details', `${rest.nextExerciseName}\n\n${rest.nextExerciseNotes}`),
       });
     }
 
@@ -2099,11 +2349,11 @@ function renderFinishedScreen(view) {
       listPage = 0;
       // Re-read the outline so the home shortcut points at the day after the
       // one just saved.
-      if (selectedProgram) {
-        loadOutline(selectedProgram, { nextScreen: SCREEN.HOME });
+      const finishedProgram = programForSavedPlan(selectedProgram, programs, dayPlan);
+      if (finishedProgram) {
+        loadOutline(finishedProgram, { nextScreen: SCREEN.HOME });
       } else {
-        screen = SCREEN.PROGRAMS;
-        renderUI();
+        loadPrograms();
       }
     },
   });
@@ -2144,19 +2394,22 @@ function renderLoadingScreen() {
 
 function renderUI() {
   clearWidgets();
+  if (!isNotesModalOpen) hideModalControls();
   // The backdrop is the one widget already in screen pixels: it must cover the
   // whole panel, fitted content included.
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  renderScreen();
+  // Decorative text is created first so Zepp never places it above a button's
+  // touch target, even on firmware whose widget hit testing ignores z-order.
   renderDemoBadge();
-  // Drawn last so it belongs to no screen in particular: every renderer below
-  // returns early, and the clock has to survive all of them.
   renderClock();
+  renderScreen();
+  redraw();
 }
 
 function renderScreen() {
   if (isNotesModalOpen) return renderNotesModal();
+  if (screen === SCREEN.CONNECTION) return renderConnectionScreen();
   if (screen === SCREEN.SETUP) return renderSetupScreen();
   if (screen === SCREEN.LOADING) return renderLoadingScreen();
   if (screen === SCREEN.HOME) {
@@ -2202,7 +2455,7 @@ function updateClock() {
   const label = currentClockLabel();
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
-  if (!updateLiveText('clock', { text: label })) renderUI();
+  if (!updateLiveWidget('clock', { text: label })) renderUI();
 }
 
 /**
@@ -2245,8 +2498,8 @@ function tick() {
   if (second === lastRenderedSecond) return;
   lastRenderedSecond = second;
 
-  let patched = updateLiveText('elapsed', { text: elapsedLabel(view) });
-  patched = updateLiveText('hr', { text: `♥ ${liveHr}`, color: heartRateColor(liveHr) }) && patched;
+  let patched = updateLiveWidget('elapsed', { text: elapsedLabel(view) });
+  patched = updateLiveWidget('hr', { text: `HR ${liveHr}`, color: heartRateColor(liveHr) }) && patched;
 
   if (view.rest) {
     const restColor = view.rest.isOvertime
@@ -2260,15 +2513,15 @@ function tick() {
       : (view.rest.isOvertime ? 'Overtime' : 'Rest');
 
     patched =
-      updateLiveText('restValue', { text: formatSeconds(view.rest.remaining), color: restColor }) && patched;
+      updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor }) && patched;
     patched =
-      updateLiveText('restLabel', {
+      updateLiveWidget('restLabel', {
         text: labelText,
         color: labelColor,
       }) && patched;
     patched =
-      updateLiveText('restBannerText', {
-        text: `⏱ Rest ${formatSeconds(view.rest.remaining)} ↗`,
+      updateLiveWidget('restBannerText', {
+        text: `Rest ${formatSeconds(view.rest.remaining)}`,
         color: restColor,
       }) && patched;
   }
@@ -2316,6 +2569,7 @@ Page(
 
     build() {
       hideSquareStatusBar();
+      onGesture({ callback: handleGesture });
 
       try {
         setPageBrightTime({ brightTime: 60000 });
@@ -2353,6 +2607,7 @@ Page(
 
     onDestroy() {
       stopClock();
+      offGesture();
       try {
         if (hrSensor && hrCallback) hrSensor.offCurrentChange(hrCallback);
       } catch (err) {
@@ -2366,6 +2621,7 @@ Page(
         console.log('[liftosaur] display reset:', err?.message || String(err));
       }
       clearWidgets();
+      destroyModalControls();
       pageInstance = null;
     },
   })

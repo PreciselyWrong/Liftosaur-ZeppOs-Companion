@@ -5,6 +5,10 @@
  * superset groups, and clean progression so every screen can be screenshotted.
  */
 
+function demoNotes(description, latestNote) {
+  return `Description\n${description}\n\nPast sessions\n• 2026-08-18: ${latestNote}`;
+}
+
 export function createDummyProgramService() {
   const programs = [
     {
@@ -29,7 +33,7 @@ export function createDummyProgramService() {
     programName: 'GZCLP 4-Day Strength',
     lastWorkout: {
       week: 1,
-      day: 1,
+      dayInWeek: 1,
       finishedAt: new Date(Date.now() - 86400000).toISOString(),
     },
     weeks: [
@@ -81,6 +85,10 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Barbell Squat',
+          notes: demoNotes(
+            'Keep your whole foot planted, brace before descending, and drive straight up.',
+            'Depth felt consistent. Keep the same stance next time.',
+          ),
           equipment: 'barbell',
           supersetGroup: null,
           supersetTag: null,
@@ -101,6 +109,10 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Bench Press',
+          notes: demoNotes(
+            'Set your shoulder blades, keep your feet planted, and touch the lower chest.',
+            'Bench at rack height 6. Left shoulder felt good.',
+          ),
           equipment: 'barbell',
           supersetGroup: null,
           supersetTag: null,
@@ -118,6 +130,10 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Lat Pulldown',
+          notes: demoNotes(
+            'Pull your elbows toward your ribs without leaning back or shrugging.',
+            'Use the medium neutral handle again.',
+          ),
           equipment: 'cable',
           supersetGroup: 'A',
           supersetTag: 'A1',
@@ -132,6 +148,10 @@ export function createDummyProgramService() {
           index: 4,
           id: 'ex-4',
           name: 'Triceps Rope Pushdown',
+          notes: demoNotes(
+            'Keep your elbows fixed and separate the rope at full extension.',
+            'Cable station 2 felt smoother.',
+          ),
           equipment: 'cable',
           supersetGroup: 'A',
           supersetTag: 'A2',
@@ -146,6 +166,10 @@ export function createDummyProgramService() {
           index: 5,
           id: 'ex-5',
           name: 'Hanging Leg Raise',
+          notes: demoNotes(
+            'Curl your pelvis toward your ribs and avoid swinging between repetitions.',
+            'Pause briefly at the top.',
+          ),
           equipment: null,
           supersetGroup: null,
           supersetTag: null,
@@ -172,6 +196,10 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Overhead Press',
+          notes: demoNotes(
+            'Brace your trunk, keep the bar close, and finish with your head through.',
+            'Grip one finger narrower. Bar path was cleaner.',
+          ),
           equipment: 'barbell',
           supersetGroup: null,
           supersetTag: null,
@@ -191,6 +219,10 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Deadlift',
+          notes: demoNotes(
+            'Brace before pulling, keep the bar against your legs, and push the floor away.',
+            'Use the flat platform. Mixed grip was secure.',
+          ),
           equipment: 'barbell',
           supersetGroup: null,
           supersetTag: null,
@@ -208,6 +240,10 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Dumbbell Row',
+          notes: demoNotes(
+            'Keep your torso still and pull the dumbbell toward your hip.',
+            'Use the adjustable bench at setting 3.',
+          ),
           equipment: 'dumbbell',
           supersetGroup: null,
           supersetTag: null,
