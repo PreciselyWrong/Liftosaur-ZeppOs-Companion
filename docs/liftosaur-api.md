@@ -55,7 +55,7 @@ official phone app's selected day.
 
 `POST /history` is **not idempotent and has no idempotency key**. A lost response means
 `UNKNOWN_COMMIT_STATE`: `GET /history` is searched for a record with the same `dayName`
-and a start time within two minutes before any retry.
+and the exact program, day and start time before any retry.
 
 The API links a record carrying `program`, `week` and `dayInWeek` to the matching program
 and resolves its numeric program day. It does not update `program.nextDay`. Consequently,

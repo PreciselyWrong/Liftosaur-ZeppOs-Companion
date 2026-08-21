@@ -22,9 +22,13 @@ import {
 import { BasePage } from '@zeppos/zml/base-page';
 
 import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-session.js';
-import { createSessionStore } from '../../shared/session-storage.js';
+import {
+  createFallbackStorageAdapter,
+  createSessionStore,
+} from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
+import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
 import {
   TYPOGRAPHY,
@@ -125,7 +129,6 @@ const SESSION_KEY = 'liftosaur.session';
  * it has not been exercised on the real watch yet. A failure degrades to an
  * in-memory store rather than breaking a workout.
  */
-let memoryFallback = null;
 let deviceStorage = null;
 try {
   deviceStorage = new LocalStorage();
@@ -144,17 +147,18 @@ try {
   console.log('[liftosaur] time sensor unavailable, clock hidden:', err?.message || String(err));
 }
 
-const localStoreAdapter = {
-  read: () => (deviceStorage ? deviceStorage.getItem(SESSION_KEY, null) : memoryFallback),
-  write: (data) => {
-    if (deviceStorage) deviceStorage.setItem(SESSION_KEY, data);
-    else memoryFallback = data;
-  },
-  remove: () => {
-    if (deviceStorage) deviceStorage.removeItem(SESSION_KEY);
-    else memoryFallback = null;
-  },
-};
+const deviceStorageAdapter = deviceStorage
+  ? {
+      read: () => deviceStorage.getItem(SESSION_KEY, null),
+      write: (data) => deviceStorage.setItem(SESSION_KEY, data),
+      remove: () => deviceStorage.removeItem(SESSION_KEY),
+    }
+  : null;
+const localStoreAdapter = createFallbackStorageAdapter(
+  deviceStorageAdapter,
+  undefined,
+  (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
+);
 const sessionStore = createSessionStore(localStoreAdapter);
 
 let pageInstance = null;
@@ -539,6 +543,7 @@ function loadDayPlan(week, day) {
 }
 
 function submitWorkout() {
+  if (finishState?.status === 'SENDING' || !dayPlan) return;
   const view = session.view();
   finishState = { status: 'SENDING', message: 'Saving to Liftosaur…' };
   renderUI();
@@ -551,6 +556,8 @@ function submitWorkout() {
     completedSets: session.getCompletedSets(),
     startedAt: view.startedAt,
     durationSeconds: view.elapsedSeconds,
+    programName: dayPlan.programName,
+    dayName: dayPlan.dayName,
   })
     .then((res) => {
       const payload = res.payload || {};
@@ -584,6 +591,23 @@ function abandonWorkout() {
     startedAt: view.startedAt,
     abandonedAt: Date.now(),
   }).catch((err) => console.log('[liftosaur] abandon notify failed:', err?.message));
+}
+
+function returnAfterDiscard() {
+  sessionStore.clear();
+  session.cancelWorkout();
+  session = createWorkoutSession({ plan: null });
+  dayPlan = null;
+  listPage = 0;
+
+  if (outline) {
+    screen = SCREEN.HOME;
+    renderUI();
+    return;
+  }
+
+  screen = SCREEN.LOADING;
+  loadPrograms();
 }
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1130,6 +1154,10 @@ function renderClock() {
     text_style: text_style.NONE,
     text: label,
   });
+}
+
+function formatHeartRate(hrVal) {
+  return `♥ ${hrVal}`;
 }
 
 function renderMarqueeTitle(text, color = THEME.primaryLight) {
@@ -1753,7 +1781,7 @@ function renderTopBar(view, onBack) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `HR ${liveHr}`,
+    text: formatHeartRate(liveHr),
   });
 }
 
@@ -1828,11 +1856,7 @@ function renderOverviewScreen(view) {
     click_func: () => {
       isOverviewOpen = false;
       abandonWorkout();
-      sessionStore.clear();
-      session.cancelWorkout();
-      screen = outline ? SCREEN.HOME : SCREEN.PROGRAMS;
-      listPage = 0;
-      renderUI();
+      returnAfterDiscard();
     },
   });
 
@@ -1897,6 +1921,7 @@ function renderActiveSetScreen(view) {
   const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
+  const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
   const controls = activeSetLayout(set);
 
   if (isResting) {
@@ -2026,7 +2051,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(controls.rows[0].y),
     height: px(controls.rowHeight),
-    label: view.unit.toUpperCase(),
+    label: formatLoadoutLabel(set.weight, loadingEquipment, view.unit) || view.unit.toUpperCase(),
     value: set.weight === null ? '-' : String(set.weight),
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
     onPlus: () => persistAndRender(() => session.adjustWeight(1)),
@@ -2228,6 +2253,11 @@ function renderRestScreen(view) {
   if (rest.nextExerciseName) {
     const ssColor = supersetColor(rest.nextSupersetGroup);
     const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
+    const nextLoadoutLabel = formatLoadoutLabel(
+      rest.nextTargetWeight,
+      view.pending?.loadingEquipment,
+      rest.nextUnit
+    );
     const setProg = rest.nextIsWarmup
       ? `WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
       : `SET ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
@@ -2296,6 +2326,21 @@ function renderRestScreen(view) {
       text: formatNextTargetSummary(rest),
     });
 
+    if (nextLoadoutLabel) {
+      addWidget(widget.TEXT, {
+        x: px(60),
+        y: px(326),
+        w: px(360),
+        h: px(22),
+        color: THEME.textSecondary,
+        text_size: font('micro'),
+        align_h: align.CENTER_H,
+        align_v: align.CENTER_V,
+        text_style: text_style.NONE,
+        text: nextLoadoutLabel,
+      });
+    }
+
   }
 
   // Action buttons
@@ -2362,6 +2407,9 @@ function renderFinishedScreen(view) {
   });
 
   const status = finishState || { status: 'IDLE', message: '' };
+  const isSending = status.status === 'SENDING';
+  const canLeave =
+    status.status === 'SAVED' || status.status === 'HISTORY_SAVED_PROGRAM_CONFLICT';
   const statusColor =
     status.status === 'SAVED'
       ? THEME.success
@@ -2386,33 +2434,40 @@ function renderFinishedScreen(view) {
 
   const needsRetry = status.status === 'FAILED' || status.status === 'BASE_PROGRAM_UNAVAILABLE';
 
-  addWidget(widget.BUTTON, {
-    x: needsRetry ? px(78) : px(120),
-    y: px(340),
-    w: needsRetry ? px(150) : px(240),
-    h: px(66),
-    radius: px(33),
-    normal_color: THEME.card,
-    press_color: THEME.cardActive,
-    color: THEME.textSecondary,
-    text: 'Done',
-    text_size: font('button'),
-    click_func: () => {
-      sessionStore.clear();
-      session = createWorkoutSession({ plan: null });
-      dayPlan = null;
-      finishState = null;
-      listPage = 0;
-      // Re-read the outline so the home shortcut points at the day after the
-      // one just saved.
-      const finishedProgram = programForSavedPlan(selectedProgram, programs, dayPlan);
-      if (finishedProgram) {
-        loadOutline(finishedProgram, { nextScreen: SCREEN.HOME });
-      } else {
-        loadPrograms();
-      }
-    },
-  });
+  if (!isSending) {
+    addWidget(widget.BUTTON, {
+      x: needsRetry ? px(78) : px(120),
+      y: px(340),
+      w: needsRetry ? px(150) : px(240),
+      h: px(66),
+      radius: px(33),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      color: canLeave ? THEME.textSecondary : THEME.error,
+      text: canLeave ? 'Done' : 'Discard',
+      text_size: font('button'),
+      click_func: () => {
+        if (!canLeave) {
+          abandonWorkout();
+          returnAfterDiscard();
+          return;
+        }
+
+        const finishedPlan = dayPlan;
+        const finishedProgram = programForSavedPlan(selectedProgram, programs, finishedPlan);
+        sessionStore.clear();
+        session = createWorkoutSession({ plan: null });
+        dayPlan = null;
+        finishState = null;
+        listPage = 0;
+        if (finishedProgram) {
+          loadOutline(finishedProgram, { nextScreen: SCREEN.HOME });
+        } else {
+          loadPrograms();
+        }
+      },
+    });
+  }
 
   if (needsRetry) {
     addWidget(widget.BUTTON, {
@@ -2555,7 +2610,7 @@ function tick() {
   lastRenderedSecond = second;
 
   let patched = updateLiveWidget('elapsed', { text: elapsedLabel(view) });
-  patched = updateLiveWidget('hr', { text: `HR ${liveHr}`, color: heartRateColor(liveHr) }) && patched;
+  patched = updateLiveWidget('hr', { text: formatHeartRate(liveHr), color: heartRateColor(liveHr) }) && patched;
 
   if (view.rest) {
     const restColor = view.rest.isOvertime
@@ -2654,9 +2709,10 @@ Page(
 
       // An interrupted session wins over the launch flow: it is resumed exactly
       // where it stopped, including the history record it was already writing.
-      if (!restoreSession()) {
+      const restoredState = restoreSession() ? session.view().state : null;
+      if (!restoredState) {
         loadPrograms();
-      }
+      } else if (restoredState === SESSION_STATES.FINISHED) submitWorkout();
       renderUI();
       startClock();
     },

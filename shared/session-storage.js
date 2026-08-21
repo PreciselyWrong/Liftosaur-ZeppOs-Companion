@@ -24,6 +24,49 @@ export function createMemoryStorageAdapter() {
   };
 }
 
+export function createFallbackStorageAdapter(
+  primary,
+  fallback = createMemoryStorageAdapter(),
+  onFallback = null
+) {
+  let fallbackActive = !primary;
+
+  function activateFallback(err) {
+    fallbackActive = true;
+    if (typeof onFallback === 'function') onFallback(err);
+  }
+
+  return {
+    read() {
+      if (fallbackActive) return fallback.read();
+      try {
+        return primary.read();
+      } catch (err) {
+        activateFallback(err);
+        return fallback.read();
+      }
+    },
+    write(data) {
+      if (fallbackActive) return fallback.write(data);
+      try {
+        return primary.write(data);
+      } catch (err) {
+        activateFallback(err);
+        return fallback.write(data);
+      }
+    },
+    remove() {
+      if (fallbackActive) return fallback.remove();
+      try {
+        return primary.remove();
+      } catch (err) {
+        activateFallback(err);
+        return fallback.remove();
+      }
+    },
+  };
+}
+
 export function createSessionStore(adapter) {
   return {
     /** Returns `{plan, journal, startedAt}` or null when there is nothing to resume. */

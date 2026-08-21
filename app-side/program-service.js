@@ -29,6 +29,7 @@ import {
   rewriteRecordHeader,
   collectExerciseNotes,
 } from '../shared/liftohistory.js';
+import { normalizeName } from '../shared/name.js';
 
 const PROBE_CEILING = 32;
 const PROBE_MAX_ATTEMPTS = 4;
@@ -68,6 +69,9 @@ export function createProgramService({
 
   /** Recent history, kept for the notes past workouts carry. Dropped on write. */
   let historyCache = null;
+
+  /** Concurrent retries share one operation. Cross-restart safety comes from history lookup. */
+  const finishRequests = new Map();
 
   async function loadRecentHistory({ limit = 20, force = false } = {}) {
     if (historyCache && !force) return historyCache;
@@ -294,16 +298,54 @@ export function createProgramService({
      * safe. The program write is skipped when the remote source changed since
      * the plan was fetched, so a program edited elsewhere is never overwritten.
      */
-    async finishWorkout({
-      programId,
-      programVersion: expectedVersion = null,
+    async finishWorkout(payload = {}) {
+      const key = finishRequestKey(payload);
+      if (key && finishRequests.has(key)) return finishRequests.get(key);
+
+      const request = finishWorkoutOnce(payload);
+      if (key) finishRequests.set(key, request);
+
+      try {
+        return await request;
+      } catch (err) {
+        throw err;
+      } finally {
+        if (key) finishRequests.delete(key);
+      }
+    },
+
+    /**
+     * `POST /history` carries no idempotency key, so a lost response leaves the
+     * commit state unknown. The record is searched for before any retry.
+     */
+    async commitHistory(recordText, startedAt = null) {
+      return commitHistory(recordText, startedAt);
+    },
+
+    invalidateProgram(programId) {
+      programCache.delete(programId);
+    },
+  };
+
+  async function finishWorkoutOnce({
+    programId,
+    programVersion: expectedVersion = null,
+    week,
+    day,
+    completedSets = [],
+    startedAt = null,
+    durationSeconds = null,
+    programName: plannedProgramName = null,
+    dayName: plannedDayName = null,
+  } = {}) {
+    let program = await loadProgram(programId);
+    const existingSession = await findExistingSession({
+      startedAt,
+      programName: plannedProgramName || program.name,
+      dayName: plannedDayName,
       week,
       day,
-      completedSets = [],
-      startedAt = null,
-      durationSeconds = null,
-    } = {}) {
-      let program = await loadProgram(programId);
+    });
 
       // The record is produced by replaying the session against the exact
       // program text the plan was built from. If that text is gone - the Side
@@ -313,6 +355,15 @@ export function createProgramService({
       if (expectedVersion && expectedVersion !== program.version) {
         const fresh = await loadProgram(programId, { force: true });
         if (expectedVersion !== fresh.version) {
+          if (existingSession) {
+            return {
+              status: 'HISTORY_SAVED_PROGRAM_CONFLICT',
+              historyId: existingSession.id,
+              alreadyExisted: true,
+              programUpdated: false,
+              message: 'History is saved, but progression state cannot be confirmed',
+            };
+          }
           return {
             status: 'BASE_PROGRAM_UNAVAILABLE',
             historyId: null,
@@ -370,30 +421,20 @@ export function createProgramService({
         }
       }
 
-      return {
+    return {
         status: conflict ? 'HISTORY_SAVED_PROGRAM_CONFLICT' : 'SAVED',
         historyId: created.id,
         alreadyExisted: created.alreadyExisted,
         programUpdated,
         recordText,
-      };
-    },
-
-    /**
-     * `POST /history` carries no idempotency key, so a lost response leaves the
-     * commit state unknown. The record is searched for before any retry.
-     */
-    async commitHistory(recordText, startedAt = null) {
-      return commitHistory(recordText, startedAt);
-    },
-
-    invalidateProgram(programId) {
-      programCache.delete(programId);
-    },
-  };
+    };
+  }
 
   async function commitHistory(recordText, startedAt) {
     historyCache = null; // A written workout makes the cached list stale.
+    const existing = await findExistingRecord(recordText, startedAt);
+    if (existing) return { id: existing.id, alreadyExisted: true };
+
     try {
       const created = await client.createHistoryRecord(recordText);
       return { id: created?.id ?? null, alreadyExisted: false };
@@ -410,6 +451,20 @@ export function createProgramService({
     const expected = parseLiftohistoryRecord(recordText);
     if (!expected) return null;
 
+    return findExistingSession({
+      startedAt: startedAt ?? expected.date,
+      programName: expected.programName,
+      dayName: expected.dayName,
+      week: expected.week,
+      day: expected.dayInWeek,
+    });
+  }
+
+  async function findExistingSession({ startedAt, programName, dayName = null, week, day }) {
+    const expectedTime =
+      typeof startedAt === 'number' ? Math.floor(startedAt / 1000) : toEpochSeconds(startedAt);
+    if (expectedTime === null) return null;
+
     let history;
     try {
       history = await client.listHistory({ limit: 10 });
@@ -417,15 +472,15 @@ export function createProgramService({
       return null;
     }
 
-    const expectedTime = startedAt ? Math.floor(startedAt / 1000) : toEpochSeconds(expected.date);
-
     for (const entry of history.records) {
       const record = parseLiftohistoryRecord(entry.text);
       if (!record) continue;
-      if (record.dayName !== expected.dayName) continue;
+      if (programName && record.programName !== programName) continue;
+      if (dayName && record.dayName !== dayName) continue;
+      if (Number.isFinite(week) && record.week !== week) continue;
+      if (Number.isFinite(day) && record.dayInWeek !== day) continue;
       const recordTime = toEpochSeconds(record.date);
-      if (expectedTime === null || recordTime === null) continue;
-      if (Math.abs(recordTime - expectedTime) <= 120) {
+      if (recordTime === expectedTime) {
         return entry;
       }
     }
@@ -434,11 +489,11 @@ export function createProgramService({
   }
 }
 
-function normalizeName(name) {
-  return String(name || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
+function finishRequestKey({ programId, week, day, startedAt } = {}) {
+  if (!programId || !Number.isFinite(week) || !Number.isFinite(day) || !Number.isFinite(startedAt)) {
+    return null;
+  }
+  return `${programId}:${week}:${day}:${startedAt}`;
 }
 
 function toEpochSeconds(dateString) {

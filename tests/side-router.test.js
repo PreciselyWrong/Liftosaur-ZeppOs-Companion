@@ -96,7 +96,7 @@ test('surfaces the API error code to the watch', async () => {
   assert.equal(res.payload.code, 'DAY_MISMATCH');
 });
 
-test('a retried finish returns the first result instead of committing twice', async () => {
+test('forwards finish retries to the authoritative program service', async () => {
   let calls = 0;
   const router = createSideRouter({
     programService: fakeService({
@@ -112,9 +112,29 @@ test('a retried finish returns the first result instead of committing twice', as
   const first = await router.handle(createMessage({ type: MESSAGE_TYPES.FINISH_WORKOUT, payload }));
   const second = await router.handle(createMessage({ type: MESSAGE_TYPES.FINISH_WORKOUT, payload }));
 
-  assert.equal(calls, 1);
+  assert.equal(calls, 2);
   assert.equal(first.payload.historyId, 1);
-  assert.deepEqual(second.payload, first.payload);
+  assert.equal(second.payload.historyId, 2);
+});
+
+test('refuses a finish without the durable session identity', async () => {
+  let calls = 0;
+  const router = createSideRouter({
+    programService: fakeService({
+      finishWorkout: async () => {
+        calls += 1;
+        return { status: 'SAVED' };
+      },
+    }),
+  });
+
+  const response = await router.handle(createMessage({
+    type: MESSAGE_TYPES.FINISH_WORKOUT,
+    payload: { programId: 'p1', week: 1, day: 1, completedSets: [] },
+  }));
+
+  assert.equal(response.type, MESSAGE_TYPES.ERROR);
+  assert.equal(calls, 0);
 });
 
 test('abandoning is local and needs no API key', async () => {

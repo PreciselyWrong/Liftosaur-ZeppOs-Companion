@@ -128,6 +128,14 @@ test('uses the equipment on the history line to break a name tie', async () => {
   assert.equal(reference.lookupExercise('Bench Press', 'Dumbbell').equipmentId, 'dumbbell');
 });
 
+test('returns the resolved equipment for the persisted workout plan', async () => {
+  const reference = createReferenceData({ client: createFakeClient() });
+  await reference.load();
+
+  assert.equal(reference.resolveEquipment('Bench Press', 'Barbell').id, 'barbell');
+  assert.equal(reference.resolveEquipment('Bench Press', null), null, 'ambiguous equipment is not guessed');
+});
+
 test('reports an unbreakable tie instead of picking one', async () => {
   const reference = createReferenceData({ client: createFakeClient() });
   await reference.load();

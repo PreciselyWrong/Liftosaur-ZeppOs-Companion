@@ -26,6 +26,8 @@
  * weight, a day or an exercise. Whatever the API did not state stays null.
  */
 
+import { normalizeName } from './name.js';
+
 const SET_GROUP_RE = new RegExp(
   '^' +
     '(?:([0-9]+)\\s*x\\s*)?' + //        1 set count
@@ -277,21 +279,14 @@ export function collectExerciseNotes(recordTexts, { maxPerExercise = 3 } = {}) {
     for (const exercise of record.exercises) {
       if (!exercise.note) continue;
       const entry = { date: record.date || null, note: exercise.note };
-      add(normalizeNoteKey(exercise.name), entry);
+      add(normalizeName(exercise.name), entry);
       if (exercise.fullName && exercise.fullName !== exercise.name) {
-        add(normalizeNoteKey(exercise.fullName), entry);
+        add(normalizeName(exercise.fullName), entry);
       }
     }
   }
 
   return byName;
-}
-
-function normalizeNoteKey(name) {
-  return String(name || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
 }
 
 export function formatDateForHistory(date) {

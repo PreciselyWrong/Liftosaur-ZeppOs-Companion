@@ -146,6 +146,7 @@ test('applyProgramMetadata attaches superset and resolved warmups when aligned',
 
   const fakeReference = {
     resolveWeight: (name, eq, target, unit) => ({ value: 30, resolved: true }),
+    resolveEquipment: () => ({ id: 'cable', multiplier: 1, bar: { kg: '5kg' }, plates: [] }),
   };
 
   applyProgramMetadata(plan, declared, { referenceData: fakeReference });
@@ -154,6 +155,7 @@ test('applyProgramMetadata attaches superset and resolved warmups when aligned',
   assert.equal(plan.exercises[0].warmupSets.length, 1);
   assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
   assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
+  assert.equal(plan.exercises[0].loadingEquipment.id, 'cable');
 
   assert.equal(plan.exercises[1].supersetGroup, 'A');
   assert.equal(plan.exercises[1].warmupSets.length, 1);

@@ -334,6 +334,52 @@ test('a lost history response with no matching record still fails', async () => 
   );
 });
 
+test('a repeated finish after Side Service recreation does not duplicate history', async () => {
+  const client = createFakeClient();
+  const firstService = createProgramService({ client });
+  const plan = await firstService.getDayPlan('prog-1', 1, 1);
+  const payload = {
+    programId: 'prog-1',
+    programVersion: plan.programVersion,
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    durationSeconds: 3600,
+    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 80, reps: 8, rpe: 8, unit: 'kg' }],
+  };
+
+  await firstService.finishWorkout(payload);
+  const retry = await createProgramService({ client }).finishWorkout(payload);
+
+  assert.equal(client.calls.createHistory.length, 1);
+  assert.equal(retry.historyId, 42);
+  assert.equal(retry.alreadyExisted, true);
+  assert.equal(retry.status, 'HISTORY_SAVED_PROGRAM_CONFLICT');
+});
+
+test('concurrent finish requests share one commit', async () => {
+  const client = createFakeClient();
+  const service = createProgramService({ client });
+  const plan = await service.getDayPlan('prog-1', 1, 1);
+  const payload = {
+    programId: 'prog-1',
+    programVersion: plan.programVersion,
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    durationSeconds: 3600,
+    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 80, reps: 8, rpe: 8, unit: 'kg' }],
+  };
+
+  const [first, second] = await Promise.all([
+    service.finishWorkout(payload),
+    service.finishWorkout(payload),
+  ]);
+
+  assert.equal(client.calls.createHistory.length, 1);
+  assert.deepEqual(second, first);
+});
+
 test('programVersion changes with the text and is stable for the same text', () => {
   assert.equal(programVersion(PROGRAM_TEXT), programVersion(PROGRAM_TEXT));
   assert.notEqual(programVersion(PROGRAM_TEXT), programVersion(`${PROGRAM_TEXT} `));

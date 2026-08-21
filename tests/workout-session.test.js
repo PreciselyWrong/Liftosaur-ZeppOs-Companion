@@ -108,6 +108,28 @@ test('finishes when the last set is completed', () => {
   assert.equal(session.isAllCompleted(), true);
 });
 
+test('finishing the last set freezes elapsed time across persistence replay', () => {
+  const plan = makePlan({
+    exercises: [
+      {
+        index: 1,
+        id: 'ex-1',
+        name: 'Decline Bench Press',
+        sets: [{ index: 1, targetWeight: 80, targetReps: 8, restSeconds: null }],
+      },
+    ],
+  });
+  const session = createWorkoutSession({ plan });
+
+  session.startWorkout({ timestamp: 1_000 });
+  session.completeSet({ timestamp: 6_000 });
+
+  assert.equal(session.view(60_000).elapsedSeconds, 5);
+
+  const restored = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+  assert.equal(restored.view(120_000).elapsedSeconds, 5);
+});
+
 test('skips the rest screen when the API prescribed no timer', () => {
   const plan = makePlan();
   plan.exercises[0].sets[0].restSeconds = null;
@@ -744,6 +766,8 @@ test('the Prepare screen edits the upcoming set, not the one just logged', () =>
   const adjusted = session.view(2000);
   assert.equal(adjusted.pending.set.weight, 77.5);
   assert.equal(adjusted.pending.set.reps, 6);
+  assert.equal(adjusted.rest.nextTargetWeight, 77.5);
+  assert.equal(adjusted.rest.nextTargetReps, 6);
   assert.equal(adjusted.completedSets[0].weight, 80, 'the logged set is untouched');
   assert.equal(adjusted.completedSets[0].reps, 8);
 
@@ -753,6 +777,27 @@ test('the Prepare screen edits the upcoming set, not the one just logged', () =>
   assert.equal(active.state, SESSION_STATES.ACTIVE_SET);
   assert.equal(active.currentSet.weight, 77.5);
   assert.equal(active.currentSet.reps, 6);
+});
+
+test('keeps loading equipment available for the current and pending set', () => {
+  const loadingEquipment = {
+    id: 'barbell',
+    bar: { kg: '20kg' },
+    multiplier: 2,
+    isFixed: false,
+    plates: [{ weight: '20kg', num: 2 }],
+    fixed: [],
+  };
+  const plan = makePlan({
+    exercises: makePlan().exercises.map((exercise) => ({ ...exercise, loadingEquipment })),
+  });
+  const session = createWorkoutSession({ plan });
+
+  session.startWorkout({ timestamp: 0 });
+  assert.equal(session.view(0).loadingEquipment.id, 'barbell');
+
+  session.completeSet({ timestamp: 1000 });
+  assert.equal(session.view(1000).pending.loadingEquipment.id, 'barbell');
 });
 
 test('preparing during rest edits the superset partner that comes next', () => {

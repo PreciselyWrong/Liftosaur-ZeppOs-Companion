@@ -1,7 +1,11 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSessionStore, createMemoryStorageAdapter } from '../shared/session-storage.js';
+import {
+  createSessionStore,
+  createMemoryStorageAdapter,
+  createFallbackStorageAdapter,
+} from '../shared/session-storage.js';
 
 const PLAN = {
   programId: 'p1',
@@ -74,4 +78,25 @@ test('survives an adapter that throws', () => {
   assert.equal(store.load(), null);
   assert.equal(store.save({ plan: PLAN, journal: JOURNAL }), false);
   store.clear();
+});
+
+test('keeps the current session in memory when device storage fails mid-workout', () => {
+  let writes = 0;
+  const primary = {
+    read: () => null,
+    write: () => {
+      writes += 1;
+      throw new Error('device storage full');
+    },
+    remove: () => {},
+  };
+  const store = createSessionStore(createFallbackStorageAdapter(primary));
+
+  assert.equal(store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000 }), true);
+  assert.equal(store.load().startedAt, 1000);
+  assert.equal(writes, 1, 'the broken primary is disabled after its first failure');
+
+  store.save({ plan: PLAN, journal: [...JOURNAL, { type: 'COMPLETE_SET', timestamp: 2000 }] });
+  assert.equal(writes, 1);
+  assert.equal(store.load().journal.length, 2);
 });

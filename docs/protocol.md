@@ -69,7 +69,8 @@ is worse than a refusal.
 | `HISTORY_SAVED_PROGRAM_CONFLICT` | written | untouched | The program changed on Liftosaur during the workout; the remote edit wins and the progression is not written |
 | `BASE_PROGRAM_UNAVAILABLE` | not written | untouched | The program text the plan was built from is gone, so the session cannot be replayed faithfully. The watch keeps the session and asks the user to pick the day again |
 
-`FINISH_WORKOUT` is deduplicated by `startedAt` in the router, so a retried message returns
+`FINISH_WORKOUT` requires `startedAt`. Concurrent attempts share one operation in the program
+service, and later retries search history by the exact session identity before any new write, so a retried message returns
 the first result instead of committing a second record.
 
 ## Ordering

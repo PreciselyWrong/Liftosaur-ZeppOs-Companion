@@ -9,9 +9,6 @@
 import { MESSAGE_TYPES, ERROR_CODES, validateEnvelope, createPong, createError, createReply } from '../shared/protocol.js';
 
 export function createSideRouter({ programService = null, workoutAbandoner = null } = {}) {
-  /** Guards against a retried FINISH_WORKOUT committing the same session twice. */
-  const finishedSessions = new Map();
-
   function notConfigured(message) {
     return createError(message, ERROR_CODES.NOT_CONFIGURED, 'No Liftosaur API key configured on the phone');
   }
@@ -87,13 +84,20 @@ export function createSideRouter({ programService = null, workoutAbandoner = nul
         case MESSAGE_TYPES.FINISH_WORKOUT:
           try {
             const payload = rawMessage.payload || {};
-            const key = String(payload.startedAt || rawMessage.sessionId || '');
-            if (key && finishedSessions.has(key)) {
-              return createReply(rawMessage, MESSAGE_TYPES.FINISH_WORKOUT_RESULT, finishedSessions.get(key));
+            if (
+              !payload.programId ||
+              !Number.isFinite(payload.week) ||
+              !Number.isFinite(payload.day) ||
+              !Number.isFinite(payload.startedAt) ||
+              !Array.isArray(payload.completedSets)
+            ) {
+              return createError(
+                rawMessage,
+                ERROR_CODES.INVALID_ENVELOPE,
+                'programId, week, day, startedAt and completedSets are required'
+              );
             }
-
             const result = await programService.finishWorkout(payload);
-            if (key) finishedSessions.set(key, result);
             return createReply(rawMessage, MESSAGE_TYPES.FINISH_WORKOUT_RESULT, result);
           } catch (err) {
             return apiFailure(rawMessage, err);

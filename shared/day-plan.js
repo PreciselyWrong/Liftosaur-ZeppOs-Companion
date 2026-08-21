@@ -12,13 +12,9 @@
  */
 
 import { parseLiftohistoryRecord, parseSetGroups, expandSetGroups } from './liftohistory.js';
+import { normalizeName } from './name.js';
 
-export function normalizeName(name) {
-  return String(name || '')
-    .replace(/\s+/g, ' ')
-    .trim()
-    .toLowerCase();
-}
+export { normalizeName } from './name.js';
 
 /**
  * Builds a day plan from a probe response: a playground run whose only purpose
@@ -157,6 +153,10 @@ export function applyProgramMetadata(
         ? referenceData.resolveNotes(ex.name)
         : null) ||
       null;
+    ex.loadingEquipment =
+      referenceData && typeof referenceData.resolveEquipment === 'function'
+        ? referenceData.resolveEquipment(ex.name, ex.equipment, ex.fullName)
+        : null;
     ex.warmupSets = [];
 
     if (meta.warmupText && meta.warmupText.toLowerCase() !== 'none') {
