@@ -1095,6 +1095,9 @@ function renderMarqueeTitle(text, color = THEME.primaryLight) {
 }
 
 function openTextModal(title, content) {
+  // Controls survive page changes, but not modal lifetimes: Zepp preserves a
+  // reused widget's old z-order, which would place it behind the new overlay.
+  destroyModalControls();
   notesPage = 0;
   isNotesModalOpen = true;
   activeNotesTitle = title;
