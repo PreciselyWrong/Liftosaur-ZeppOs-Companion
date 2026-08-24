@@ -4,6 +4,8 @@
 
 ### Fixed
 - The watch now keeps heart rate unavailable until the sensor reports a real measurement.
+- All three prescriptions in the workout preview now remain fully visible.
+- Fresh test-build QR codes can be generated again.
 - The app no longer draws a wrong round layout when the watch cannot report its screen size.
 - Warmup and superset rest times are now already filled in when Settings is opened for the first time.
 - A completed workout now resumes its save after a watch restart instead of appearing dismissible and losing its only local copy.
@@ -16,10 +18,11 @@
 - Exact barbell plates, cable stacks and fixed weights are shown when the current gym equipment can load the requested weight.
 
 ### Changed
-- The public test QR code now installs the latest beta on all 28 supported round and square watches until 28 August 2026.
+- The public test QR code now installs the latest beta on all 28 supported round and square watches until 31 August 2026 at 10:39 UTC.
 - Diagnostic logs no longer include workout names or completed-set counts.
 - Exercise-name matching now has one shared normalization rule across plans, history and gym equipment.
 - The workout preview now pages through three exercises at a time without leaving the screen.
+- Superset exercises now carry their group colour in the workout preview.
 
 ## [0.3.0] - 20 August 2026
 

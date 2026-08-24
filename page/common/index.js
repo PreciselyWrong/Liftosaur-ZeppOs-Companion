@@ -1672,17 +1672,43 @@ function renderReadyScreen(view) {
   }
 
   exercises.forEach((exercise, index) => {
+    const rowY = 108 + index * 58;
+
+    if (exercise.supersetGroup) {
+      addWidget(widget.FILL_RECT, {
+        x: px(68),
+        y: px(rowY + 3),
+        w: px(5),
+        h: px(48),
+        radius: px(3),
+        color: supersetColor(exercise.supersetGroup),
+      });
+    }
+
     addWidget(widget.TEXT, {
       x: px(78),
-      y: px(110 + index * 58),
+      y: px(rowY),
       w: px(324),
-      h: px(56),
+      h: px(28),
       color: THEME.textPrimary,
       text_size: font('caption'),
       align_h: align.LEFT,
       align_v: align.TOP,
-      text_style: text_style.WRAP,
-      text: `${truncate(exercise.name, 20)}\n${exercise.prescriptionSummary}`,
+      text_style: text_style.NONE,
+      text: truncate(exercise.name, 20),
+    });
+
+    addWidget(widget.TEXT, {
+      x: px(78),
+      y: px(rowY + 28),
+      w: px(324),
+      h: px(26),
+      color: THEME.textSecondary,
+      text_size: font('micro'),
+      align_h: align.LEFT,
+      align_v: align.TOP,
+      text_style: text_style.NONE,
+      text: exercise.prescriptionSummary,
     });
   });
 

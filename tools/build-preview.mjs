@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { execSync } from 'node:child_process';
 import fs from 'node:fs';
+import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 
 const DEVICES = [
@@ -57,36 +58,47 @@ function parseMatrix(text) {
     }
     rows.push(top, bottom);
   }
-  while (rows.length && rows[0].every((v) => !v)) rows.shift();
-  while (rows.length && rows[rows.length - 1].every((v) => !v)) rows.pop();
-  return { rows, width };
+  return rows;
 }
 
-function validate(rows, width) {
-  const sym = rows.slice(1, -1).map((r) => r.slice(1, width - 1));
-  const n = sym.length;
-  if (!n || sym[0].length !== n) {
-    throw new Error(`symbol is not square: ${sym[0]?.length}x${n}`);
+const FINDER = [
+  [1, 1, 1, 1, 1, 1, 1],
+  [1, 0, 0, 0, 0, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 1, 1, 1, 0, 1],
+  [1, 0, 0, 0, 0, 0, 1],
+  [1, 1, 1, 1, 1, 1, 1],
+];
+
+function trimLightBorder(matrix) {
+  let top = 0;
+  let bottom = matrix.length;
+  while (top < bottom && matrix[top].every((value) => !value)) top += 1;
+  while (bottom > top && matrix[bottom - 1].every((value) => !value)) bottom -= 1;
+
+  let left = 0;
+  let right = matrix[0]?.length || 0;
+  while (left < right && matrix.slice(top, bottom).every((row) => !row[left])) left += 1;
+  while (right > left && matrix.slice(top, bottom).every((row) => !row[right - 1])) right -= 1;
+
+  return matrix.slice(top, bottom).map((row) => row.slice(left, right));
+}
+
+function validateQrMatrix(matrix) {
+  const n = matrix.length;
+  if (!n || matrix.some((row) => row.length !== n)) {
+    throw new Error(`symbol is not square: ${matrix[0]?.length || 0}x${n}`);
   }
   const version = (n - 17) / 4;
   if (!Number.isInteger(version) || version < 1 || version > 40) {
     throw new Error(`${n}x${n} is not a legal QR size`);
   }
 
-  const dark = (y, x) => !sym[y][x];
-  const FINDER = [
-    [1, 1, 1, 1, 1, 1, 1],
-    [1, 0, 0, 0, 0, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 1, 1, 1, 0, 1],
-    [1, 0, 0, 0, 0, 0, 1],
-    [1, 1, 1, 1, 1, 1, 1],
-  ];
   const finderAt = (oy, ox) => {
     for (let y = 0; y < 7; y++) {
       for (let x = 0; x < 7; x++) {
-        if (dark(oy + y, ox + x) !== !FINDER[y][x]) return false;
+        if (matrix[oy + y][ox + x] !== Boolean(FINDER[y][x])) return false;
       }
     }
     return true;
@@ -96,12 +108,12 @@ function validate(rows, width) {
     'finder top right': finderAt(0, n - 7),
     'finder bottom left': finderAt(n - 7, 0),
     'horizontal timing': Array.from({ length: n - 16 }, (_, i) => i + 8).every(
-      (x) => dark(6, x) === (x % 2 === 0)
+      (x) => matrix[6][x] === (x % 2 === 0)
     ),
     'vertical timing': Array.from({ length: n - 16 }, (_, i) => i + 8).every(
-      (y) => dark(y, 6) === (y % 2 === 0)
+      (y) => matrix[y][6] === (y % 2 === 0)
     ),
-    'dark module': dark(n - 8, 8),
+    'dark module': matrix[n - 8][8],
   };
   const failed = Object.entries(checks)
     .filter(([, ok]) => !ok)
@@ -109,11 +121,43 @@ function validate(rows, width) {
   if (failed.length) {
     throw new Error(`invalid symbol, failed: ${failed.join(', ')}`);
   }
-  return { size: n, version };
 }
 
-function writePng(rows, width, scale, outPath) {
-  const modH = rows.length;
+export function normalizeQrMatrix(rows) {
+  const attempts = [
+    rows.map((row) => row.slice()),
+    rows.map((row) => row.map((value) => !value)),
+  ];
+  const failures = new Set();
+
+  for (const attempt of attempts) {
+    const trimmed = trimLightBorder(attempt);
+    const height = trimmed.length;
+    const width = trimmed[0]?.length || 0;
+    for (let size = Math.min(height, width); size >= 21; size--) {
+      if ((size - 17) % 4 !== 0) continue;
+      for (let top = 0; top <= height - size; top++) {
+        for (let left = 0; left <= width - size; left++) {
+          const matrix = trimmed
+            .slice(top, top + size)
+            .map((row) => row.slice(left, left + size));
+          try {
+            validateQrMatrix(matrix);
+            return matrix;
+          } catch (error) {
+            failures.add(error.message);
+          }
+        }
+      }
+    }
+  }
+
+  throw new Error(`invalid QR matrix: ${[...failures].join('; ')}`);
+}
+
+function writePng(matrix, scale, outPath) {
+  const modH = matrix.length;
+  const width = matrix[0].length;
   const pxW = (width + QUIET * 2) * scale;
   const pxH = (modH + QUIET * 2) * scale;
   const stride = pxW + 1;
@@ -121,7 +165,7 @@ function writePng(rows, width, scale, outPath) {
   for (let y = 0; y < pxH; y++) raw[y * stride] = 0;
   for (let my = 0; my < modH; my++) {
     for (let mx = 0; mx < width; mx++) {
-      if (rows[my][mx]) continue;
+      if (!matrix[my][mx]) continue;
       for (let dy = 0; dy < scale; dy++) {
         const y = (my + QUIET) * scale + dy;
         const start = y * stride + 1 + (mx + QUIET) * scale;
@@ -166,19 +210,24 @@ function writePng(rows, width, scale, outPath) {
   return { pxW, pxH };
 }
 
-console.log(`Building preview for ${DEVICES.length} devices...`);
-const rawOutput = execSync(`zeus preview -s -t "${DEVICES.join(',')}"`, {
-  encoding: 'utf8',
-  maxBuffer: 10 * 1024 * 1024,
-});
+function main() {
+  console.log(`Building preview for ${DEVICES.length} devices...`);
+  const rawOutput = execSync(`zeus preview -s -t "${DEVICES.join(',')}"`, {
+    encoding: 'utf8',
+    maxBuffer: 10 * 1024 * 1024,
+  });
 
-for (const line of rawOutput.split('\n')) {
-  if (line.includes('device sources') || line.includes('expire')) {
-    console.log(line.trim());
+  for (const line of rawOutput.split('\n')) {
+    if (line.includes('device sources') || line.includes('expire')) {
+      console.log(line.trim());
+    }
   }
+
+  const matrix = normalizeQrMatrix(parseMatrix(rawOutput));
+  const size = matrix.length;
+  const version = (size - 17) / 4;
+  const { pxW, pxH } = writePng(matrix, SCALE, OUT_PATH);
+  console.log(`${OUT_PATH}: QR version ${version} (${size}x${size} modules) -> ${pxW}x${pxH}px`);
 }
 
-const { rows, width } = parseMatrix(rawOutput);
-const { size, version } = validate(rows, width);
-const { pxW, pxH } = writePng(rows, width, SCALE, OUT_PATH);
-console.log(`${OUT_PATH}: QR version ${version} (${size}x${size} modules) -> ${pxW}x${pxH}px`);
+if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

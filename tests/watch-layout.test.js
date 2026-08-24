@@ -154,9 +154,20 @@ test('the ready preview shows three readable rows above fixed actions', () => {
   const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
 
   assert.match(ready, /exercises\.forEach/);
-  assert.match(ready, /y: px\(110 \+ index \* 58\)/);
-  assert.match(ready, /h: px\(56\)/);
+  assert.match(ready, /const rowY = 108 \+ index \* 58/);
+  assert.match(ready, /y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: truncate\(exercise\.name, 20\)/);
+  assert.match(ready, /y: px\(rowY \+ 28\)[\s\S]*?h: px\(26\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
+  assert.doesNotMatch(ready, /`\$\{truncate\(exercise\.name, 20\)\}\\n\$\{exercise\.prescriptionSummary\}`/);
   assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
+});
+
+test('the ready preview marks supersets with their existing group colour', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
+
+  assert.match(ready, /if \(exercise\.supersetGroup\)/);
+  assert.match(ready, /color: supersetColor\(exercise\.supersetGroup\)/);
+  assert.match(ready, /x: px\(68\)[\s\S]*?w: px\(5\)[\s\S]*?h: px\(48\)/);
 });
 
 test('ready-screen swipes mirror its paging buttons', () => {
