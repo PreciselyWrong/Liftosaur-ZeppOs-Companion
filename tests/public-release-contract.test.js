@@ -41,3 +41,13 @@ test('gitleaks exemptions cover only the two reviewed historical test fixtures',
     '5a1f04b19414b115e8b2bcf11b015ea0cd0a9878:tests/liftosaur-api-client.test.js:generic-api-key:54',
   ]);
 });
+
+test('the README test badge matches the published test suite', () => {
+  const testCount = fs
+    .readdirSync(path.join(root, 'tests'))
+    .filter((name) => name.endsWith('.test.js'))
+    .reduce((total, name) => total + (read(path.join('tests', name)).match(/^test\(/gm) || []).length, 0);
+  const readme = read('README.md');
+
+  assert.match(readme, new RegExp(`tests-${testCount}%20passing-brightgreen`));
+});

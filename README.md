@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-258%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-275%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -182,3 +182,6 @@ This project is an independent open-source client and is not affiliated with, ma
 ## License
 
 MIT
+
+The application icon is original artwork created specifically for this project. It does not
+reuse Liftosaur branding or assets and is distributed under the same MIT license.

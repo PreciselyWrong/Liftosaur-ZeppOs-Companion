@@ -19,6 +19,7 @@
 
 ### Changed
 - The public test QR code now installs the latest beta on all 28 supported round and square watches until 31 August 2026 at 10:39 UTC.
+- The app now has its own watch-and-barbell icon, independent from Liftosaur branding.
 - Diagnostic logs no longer include workout names or completed-set counts.
 - Exercise-name matching now has one shared normalization rule across plans, history and gym equipment.
 - The workout preview now pages through three exercises at a time without leaving the screen.
