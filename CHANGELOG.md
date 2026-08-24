@@ -19,6 +19,7 @@
 - The public test QR code now installs the latest beta on all 28 supported round and square watches until 28 August 2026.
 - Diagnostic logs no longer include workout names or completed-set counts.
 - Exercise-name matching now has one shared normalization rule across plans, history and gym equipment.
+- The workout preview now pages through three exercises at a time without leaving the screen.
 
 ## [0.3.0] - 20 August 2026
 

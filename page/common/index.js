@@ -34,8 +34,8 @@ import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
-  READY_PREVIEW_SIZE,
   activeSetLayout,
+  readyExercisePage,
   formatWorkoutPosition,
   formatMarqueeText,
 } from '../../shared/watch-layout.js';
@@ -173,6 +173,7 @@ let dayPlan = null;
 let session = createWorkoutSession({ plan: null });
 let isOverviewOpen = false;
 let overviewPage = 0;
+let readyPage = 0;
 
 let finishState = null; // { status, message }
 
@@ -531,6 +532,7 @@ function loadDayPlan(week, day) {
       finishState = null;
       isOverviewOpen = false;
       overviewPage = 0;
+      readyPage = 0;
       screen = SCREEN.SESSION;
       renderUI();
     })
@@ -870,6 +872,16 @@ function handleGesture(gesture) {
   if (screen !== SCREEN.SESSION) return false;
 
   const view = session.view();
+  if (view.state === SESSION_STATES.READY) {
+    const { totalPages } = readyExercisePage(view.overviewExercises, readyPage);
+    if (totalPages === 1) return false;
+    if (gesture === GESTURE_LEFT) readyPage += 1;
+    else if (gesture === GESTURE_RIGHT) readyPage -= 1;
+    else return false;
+    renderUI();
+    return true;
+  }
+
   if (isOverviewOpen) {
     const totalPages = Math.max(1, Math.ceil(view.overviewExercises.length / OVERVIEW_PAGE_SIZE));
     if (gesture === GESTURE_LEFT) {
@@ -1631,21 +1643,20 @@ function renderReadyScreen(view) {
   renderTitle(formatWorkoutPosition(view.week, view.dayInWeek));
   renderSubtitle(truncate(view.programName || '', 30));
 
+  const ready = readyExercisePage(view.overviewExercises, readyPage);
+  const { exercises, page, totalPages } = ready;
+  readyPage = page;
+
   addWidget(widget.FILL_RECT, {
     x: px(62),
     y: px(104),
     w: px(356),
-    h: px(196),
+    h: px(184),
     radius: px(20),
     color: THEME.card,
   });
 
-  const visibleExercises = view.overviewExercises.slice(0, READY_PREVIEW_SIZE);
-  const fullPreview = view.overviewExercises
-    .map((ex) => `${ex.name}\n${ex.prescriptionSummary}`)
-    .join('\n\n');
-
-  if (visibleExercises.length === 0) {
+  if (exercises.length === 0) {
     addWidget(widget.TEXT, {
       x: px(78),
       y: px(118),
@@ -1660,12 +1671,12 @@ function renderReadyScreen(view) {
     });
   }
 
-  visibleExercises.forEach((exercise, index) => {
+  exercises.forEach((exercise, index) => {
     addWidget(widget.TEXT, {
       x: px(78),
-      y: px(108 + index * 66),
+      y: px(110 + index * 58),
       w: px(324),
-      h: px(64),
+      h: px(56),
       color: THEME.textPrimary,
       text_size: font('caption'),
       align_h: align.LEFT,
@@ -1675,33 +1686,55 @@ function renderReadyScreen(view) {
     });
   });
 
-  if (view.totalExercises > READY_PREVIEW_SIZE) {
+  if (totalPages > 1) {
     addWidget(widget.BUTTON, {
-      x: px(78),
-      y: px(244),
-      w: px(180),
-      h: px(44),
-      radius: px(16),
+      x: px(62),
+      y: px(294),
+      w: px(54),
+      h: px(40),
+      radius: px(20),
       normal_color: THEME.cardActive,
-      press_color: THEME.primaryDark,
+      press_color: THEME.card,
       color: THEME.primaryPale,
-      text: `+ ${view.totalExercises - READY_PREVIEW_SIZE} more`,
-      text_size: font('caption'),
-      click_func: () => openTextModal('Exercises', fullPreview),
+      text: '<',
+      text_size: font('button'),
+      click_func: () => {
+        readyPage -= 1;
+        renderUI();
+      },
+    });
+
+    addWidget(widget.BUTTON, {
+      x: px(364),
+      y: px(294),
+      w: px(54),
+      h: px(40),
+      radius: px(20),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      color: THEME.primaryPale,
+      text: '>',
+      text_size: font('button'),
+      click_func: () => {
+        readyPage += 1;
+        renderUI();
+      },
     });
   }
 
   addWidget(widget.TEXT, {
-    x: px(62),
-    y: px(306),
-    w: px(356),
-    h: px(24),
+    x: px(120),
+    y: px(294),
+    w: px(240),
+    h: px(40),
     color: THEME.textSecondary,
-    text_size: font('caption'),
+    text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${view.totalExercises} exercises · week ${view.week} day ${view.dayInWeek}`,
+    text: totalPages > 1
+      ? `${page + 1}/${totalPages} · ${view.totalExercises} exercises`
+      : `${view.totalExercises} exercises`,
   });
 
   addWidget(widget.BUTTON, {
