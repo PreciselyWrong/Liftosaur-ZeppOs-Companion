@@ -51,3 +51,9 @@ test('the README test badge matches the published test suite', () => {
 
   assert.match(readme, new RegExp(`tests-${testCount}%20passing-brightgreen`));
 });
+
+test('published icon assets stay below the repository audit threshold', () => {
+  for (const relativePath of ['assets/common.r/icon.png', 'assets/square.s/icon.png']) {
+    assert.ok(fs.statSync(path.join(root, relativePath)).size <= 500 * 1024, `${relativePath} exceeds 500 KB`);
+  }
+});
