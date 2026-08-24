@@ -11,7 +11,19 @@ export const TYPOGRAPHY = Object.freeze({
 
 export const LIST_PAGE_SIZE = 3;
 export const OVERVIEW_PAGE_SIZE = 3;
-export const READY_PREVIEW_SIZE = 2;
+export const READY_PREVIEW_SIZE = 3;
+
+export function readyExercisePage(exercises = [], requestedPage = 0) {
+  const totalPages = Math.max(1, Math.ceil(exercises.length / READY_PREVIEW_SIZE));
+  const page = ((requestedPage % totalPages) + totalPages) % totalPages;
+  const start = page * READY_PREVIEW_SIZE;
+
+  return {
+    exercises: exercises.slice(start, start + READY_PREVIEW_SIZE),
+    page,
+    totalPages,
+  };
+}
 
 export function formatWorkoutPosition(week, dayInWeek) {
   return `Week ${week} - Day ${dayInWeek}`;

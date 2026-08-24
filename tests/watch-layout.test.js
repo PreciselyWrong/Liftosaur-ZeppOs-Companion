@@ -11,6 +11,7 @@ import {
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
   READY_PREVIEW_SIZE,
+  readyExercisePage,
   formatWorkoutPosition,
   formatMarqueeText,
 } from '../shared/watch-layout.js';
@@ -66,7 +67,32 @@ test('demo mode is explicit in settings and on every watch screen', () => {
 test('dense screens show fewer readable rows instead of shrinking text', () => {
   assert.equal(LIST_PAGE_SIZE, 3);
   assert.equal(OVERVIEW_PAGE_SIZE, 3);
-  assert.equal(READY_PREVIEW_SIZE, 2);
+  assert.equal(READY_PREVIEW_SIZE, 3);
+});
+
+test('ready exercise pages preserve order and wrap in both directions', () => {
+  const exercises = ['Squat', 'Bench', 'Deadlift', 'Row', 'Curl', 'Press', 'Carry'];
+
+  assert.deepEqual(readyExercisePage(exercises, 0), {
+    exercises: ['Squat', 'Bench', 'Deadlift'],
+    page: 0,
+    totalPages: 3,
+  });
+  assert.deepEqual(readyExercisePage(exercises, 1), {
+    exercises: ['Row', 'Curl', 'Press'],
+    page: 1,
+    totalPages: 3,
+  });
+  assert.equal(readyExercisePage(exercises, 3).page, 0);
+  assert.equal(readyExercisePage(exercises, -1).page, 2);
+});
+
+test('an empty ready exercise page remains stable without controls', () => {
+  assert.deepEqual(readyExercisePage([], 4), {
+    exercises: [],
+    page: 0,
+    totalPages: 1,
+  });
 });
 
 test('ready-screen actions render above decorative labels', () => {
@@ -111,23 +137,34 @@ test('live labels use mutable buttons so timer ticks cannot recreate action targ
   assert.doesNotMatch(liveLabel, /addRawWidget\(widget\.TEXT, fitted\)/);
 });
 
-test('the workout preview opens its full exercise list instead of truncating it', () => {
-  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
-
-  assert.match(source, /function openTextModal\(title, content\)/);
-  assert.match(source, /text: `\+ \$\{view\.totalExercises - READY_PREVIEW_SIZE\} more`/);
-  assert.match(source, /openTextModal\('Exercises', fullPreview\)/);
-});
-
-test('the ready preview keeps exercise text out of the more button', () => {
+test('the workout preview pages its exercise list without opening a modal', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
 
-  assert.match(ready, /visibleExercises\.forEach/);
-  assert.match(ready, /y: px\(108 \+ index \* 66\)/);
-  assert.match(ready, /h: px\(64\)/);
+  assert.match(ready, /readyExercisePage\(view\.overviewExercises, readyPage\)/);
+  assert.match(ready, /text: '<'/);
+  assert.match(ready, /text: '>'/);
+  assert.match(ready, /`\$\{page \+ 1\}\/\$\{totalPages\}.*\$\{view\.totalExercises\} exercises`/);
+  assert.doesNotMatch(ready, /openTextModal/);
+  assert.doesNotMatch(ready, /more/);
+});
+
+test('the ready preview shows three readable rows above fixed actions', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
+
+  assert.match(ready, /exercises\.forEach/);
+  assert.match(ready, /y: px\(110 \+ index \* 58\)/);
+  assert.match(ready, /h: px\(56\)/);
   assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
-  assert.doesNotMatch(ready, /preview\.join/);
+});
+
+test('ready-screen swipes mirror its paging buttons', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const handler = source.slice(source.indexOf('function handleGesture'), source.indexOf('function heartRateColor'));
+
+  assert.match(handler, /view\.state === SESSION_STATES\.READY/);
+  assert.match(handler, /readyPage [+-]= 1/);
 });
 
 test('modal pages stay short enough to clear their controls', () => {
