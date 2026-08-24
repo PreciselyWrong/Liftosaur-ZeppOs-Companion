@@ -37,8 +37,8 @@ test('gitleaks exemptions cover only the two reviewed historical test fixtures',
     .filter(Boolean);
 
   assert.deepEqual(entries, [
-    'ca4425c2d2036635c8f9842773a0880ee7ccdfbe:tests/liftosaur-api-client.test.js:generic-api-key:36',
-    'ca4425c2d2036635c8f9842773a0880ee7ccdfbe:tests/liftosaur-api-client.test.js:generic-api-key:54',
+    'fd22091c9cdccb45f5b26f511d05dfeff7346bbe:tests/liftosaur-api-client.test.js:generic-api-key:36',
+    'fd22091c9cdccb45f5b26f511d05dfeff7346bbe:tests/liftosaur-api-client.test.js:generic-api-key:54',
   ]);
 });
 
