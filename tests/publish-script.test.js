@@ -31,8 +31,9 @@ test('publish.ps1 plan is side effect free and describes GitHub publication', ()
   );
   const after = spawnSync('git', ['status', '--porcelain=v1'], { cwd: root, encoding: 'utf8' }).stdout;
 
+  const packageJson = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
   assert.equal(result.status, 0, result.stderr);
-  assert.match(result.stdout, /Version : 0\.3\.0/);
+  assert.match(result.stdout, new RegExp(`Version : ${packageJson.version.replaceAll('.', '\\.')}`));
   assert.match(result.stdout, /GitHub/);
   assert.match(result.stdout, /npm test/);
   assert.match(result.stdout, /zeus build/);

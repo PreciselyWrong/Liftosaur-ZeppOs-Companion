@@ -1,6 +1,6 @@
 # Changelog
 
-## [0.3.1] - 21 August 2026
+## [0.3.1] - 25 August 2026
 
 ### Fixed
 - Warmup sets defined with percentages now calculate and display their target weight even when gym equipment resolution falls back to default increments.
