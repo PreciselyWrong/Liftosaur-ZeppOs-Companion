@@ -3,6 +3,7 @@
 ## [0.3.1] - 21 August 2026
 
 ### Fixed
+- Warmup sets defined with percentages now calculate and display their target weight even when gym equipment resolution falls back to default increments.
 - The watch now keeps heart rate unavailable until the sensor reports a real measurement.
 - All three prescriptions in the workout preview now remain fully visible.
 - Fresh test-build QR codes can be generated again.
