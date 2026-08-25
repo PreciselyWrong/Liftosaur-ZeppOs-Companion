@@ -21,7 +21,7 @@ You need:
   <img src="test-build-qr.png" width="220" alt="Test build QR code" />
 </p>
 
-This code expires on **2026-08-31 at 10:39 UTC** (12:39 Central European Summer Time).
+This code expires on **2026-09-01 at 10:02 UTC** (12:02 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
