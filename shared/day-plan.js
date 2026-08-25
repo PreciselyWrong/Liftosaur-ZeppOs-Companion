@@ -162,7 +162,8 @@ export function applyProgramMetadata(
     if (meta.warmupText && meta.warmupText.toLowerCase() !== 'none') {
       const warmupGroups = parseSetGroups(meta.warmupText);
       const rawWarmupSets = expandSetGroups(warmupGroups);
-      const firstWorkSetWeight = ex.sets[0]?.targetWeight ?? null;
+      const firstWorkSet = ex.sets.find((s) => Number.isFinite(s.targetWeight) && s.targetWeight > 0);
+      const firstWorkSetWeight = firstWorkSet?.targetWeight ?? (ex.sets[0]?.targetWeight ?? null);
 
       for (let wIdx = 0; wIdx < rawWarmupSets.length; wIdx++) {
         const wSet = rawWarmupSets[wIdx];
@@ -179,10 +180,12 @@ export function applyProgramMetadata(
                 plan.unit,
                 ex.fullName
               );
-              // No fallback rounding on purpose: a percentage of the work set is
-              // not a loadable weight, and a 15kg prescription on a 20kg bar is
-              // worse than showing the percentage and letting the lifter decide.
               targetWeight = resolved.resolved ? resolved.value : null;
+            }
+            if (targetWeight === null) {
+              const step = plan.unit === 'lb' ? 5 : 2.5;
+              const rounded = Math.round((rawTarget / step) + 1e-9) * step;
+              targetWeight = Math.round(rounded * 100000) / 100000;
             }
           }
         } else {

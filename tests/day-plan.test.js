@@ -176,11 +176,10 @@ test('applyProgramMetadata leaves plan untouched when alignment fails', () => {
   assert.deepEqual(plan.exercises[0].warmupSets, []);
 });
 
-test('applyProgramMetadata shows no warmup weight when referenceData cannot resolve it, and defaults rest to 60s', () => {
+test('applyProgramMetadata calculates fallback warmup weight when referenceData cannot resolve it, and defaults rest to 60s', () => {
   const plan = buildDayPlan(PROBE_RESPONSE);
-  // Lat Pulldown first work set is 60kg, so 50% is 30kg on paper - but without
-  // the gym's equipment nothing says 30kg can be loaded (a 20kg bar cannot make
-  // 15kg). The percentage is shown instead of an unloadable number.
+  // Lat Pulldown first work set is 60kg, so 50% is 30kg. When referenceData cannot
+  // resolve against specific gym equipment, fallback step rounding calculates 30kg.
   const declared = [
     { name: 'Lat Pulldown', equipment: null, warmupText: '1x8 50%', supersetTag: null },
     { name: 'Incline Curl', equipment: null, warmupText: '1x5 10kg', supersetTag: null },
@@ -193,7 +192,7 @@ test('applyProgramMetadata shows no warmup weight when referenceData cannot reso
 
   applyProgramMetadata(plan, declared, { referenceData: unresolvingRef });
 
-  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, null);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
   assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
   assert.equal(plan.exercises[0].warmupSets[0].restSeconds, 60);
   assert.equal(plan.exercises[1].warmupSets[0].restSeconds, 60);
@@ -268,5 +267,28 @@ test('disables timer when setting is Off (0 or null)', () => {
   assert.equal(plan.exercises[0].sets[0].restSeconds, null);
   assert.equal(plan.exercises[0].warmupSets[0].restSeconds, null);
 });
+
+test('calculates warmup percentage ladders with fallback step rounding', () => {
+  const SQUAT_PROBE = `2026-08-14 12:00:00 +00:00 / program: "Custom" / dayName: "Day 1" / week: 1 / dayInWeek: 1 / exercises: {
+  Squat / 1x5 100kg / target: 3x5 100kg
+}`;
+
+  const plan = buildDayPlan(SQUAT_PROBE);
+  const declared = [
+    { name: 'Squat', equipment: null, warmupText: '1x5 50%, 1x3 70%, 1x2 85%', supersetTag: null },
+  ];
+
+  applyProgramMetadata(plan, declared);
+
+  assert.equal(plan.exercises[0].warmupSets.length, 3);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 50);
+  assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
+  assert.equal(plan.exercises[0].warmupSets[1].targetWeight, 70);
+  assert.equal(plan.exercises[0].warmupSets[1].targetWeightPercent, 70);
+  assert.equal(plan.exercises[0].warmupSets[2].targetWeight, 85);
+  assert.equal(plan.exercises[0].warmupSets[2].targetWeightPercent, 85);
+});
+
+
 
 
