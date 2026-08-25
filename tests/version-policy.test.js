@@ -34,3 +34,9 @@ test('public version labels match the package version', () => {
   assert.match(readme, new RegExp(`\\*\\*Version:\\*\\* Lifto Companion ${packageJson.version.replaceAll('.', '\\.')}\\b`));
   assert.match(storeListing, new RegExp(`\\| Version \\| ${packageJson.version.replaceAll('.', '\\.')}[,|]`));
 });
+
+test('latest changelog version matches package.json and app.json', () => {
+  const match = changelog.match(/^## \[(\d+\.\d+\.\d+)\]/m);
+  assert.ok(match, 'Changelog has no release heading');
+  assert.equal(match[1], packageJson.version, 'Latest changelog version does not match package.json');
+});

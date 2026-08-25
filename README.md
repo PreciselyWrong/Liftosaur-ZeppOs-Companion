@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-277%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-278%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -45,7 +45,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 > will refuse to install whatever you scan. That is not a bug, so please do not
 > report it as one.
 
-**Version:** Lifto Companion 0.3.0
+**Version:** Lifto Companion 0.3.1
 
 You also need a [Liftosaur](https://www.liftosaur.com) account with at least one
 program, and Developer Mode enabled in the Zepp app. Full walkthrough, phone
