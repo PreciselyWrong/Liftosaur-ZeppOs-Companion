@@ -19,7 +19,7 @@
 - Exact barbell plates, cable stacks and fixed weights are shown when the current gym equipment can load the requested weight.
 
 ### Changed
-- The public test QR code now installs the latest beta on all 28 supported round and square watches until 31 August 2026 at 10:39 UTC.
+- The public test QR code now installs the latest beta on all 28 supported round and square watches until 1 September 2026 at 10:02 UTC.
 - The app now has its own orange dinosaur lifting a barbell and wearing a watch, independent from Liftosaur branding.
 - Diagnostic logs no longer include workout names or completed-set counts.
 - Exercise-name matching now has one shared normalization rule across plans, history and gym equipment.
