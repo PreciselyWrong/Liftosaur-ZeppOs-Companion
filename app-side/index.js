@@ -3,6 +3,9 @@ import { createSideRouter } from './router.js';
 import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 import { createProgramService } from './program-service.js';
 import { createReferenceData } from './reference-data.js';
+import { createDummyProgramService } from './dummy-program-service.js';
+import { getOrCreateClientIdentity } from './client-identity.js';
+import { createWorkoutService } from './workout-service.js';
 
 let sideServiceInstance = null;
 
@@ -42,6 +45,16 @@ function getEffectiveApiKey() {
   return null;
 }
 
+function getEffectiveStorage() {
+  const storage = (typeof settings !== 'undefined' && settings?.settingsStorage)
+    ? settings.settingsStorage
+    : (sideServiceInstance?.settings?.settingsStorage || sideServiceInstance?.settings);
+  if (storage && typeof storage.getItem === 'function' && typeof storage.setItem === 'function') {
+    return storage;
+  }
+  return null;
+}
+
 function getEffectiveSettings() {
   const apiKey = getEffectiveApiKey();
   let standardRest = 120;
@@ -49,9 +62,10 @@ function getEffectiveSettings() {
   let supersetRest = 90;
 
   try {
-    const storage = (typeof settings !== 'undefined' && settings?.settingsStorage)
-      ? settings.settingsStorage
-      : sideServiceInstance?.settings;
+    const storage = getEffectiveStorage();
+    if (!storage) {
+      throw new Error('Persistent phone storage unavailable');
+    }
 
     if (storage) {
       const readVal = (key, defaultVal) => {
@@ -90,37 +104,66 @@ function getEffectiveSettings() {
   };
 }
 
-/**
- * A new service is built per request so a key entered in the Zepp app takes
- * effect without restarting the watch app. The program text cache lives in the
- * service, so it is kept across requests for as long as the key is unchanged.
- */
-import { createDummyProgramService } from './dummy-program-service.js';
-
 let cachedKey = null;
-let cachedService = null;
+let cachedDeviceId = null;
+let cachedProgramService = null;
+let cachedWorkoutService = null;
 
-function getProgramService() {
+function getServices() {
   const effective = getEffectiveSettings();
   const apiKey = effective.apiKey;
-  if (!apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo') {
-    if (!cachedService || cachedKey !== 'dummy') {
+  const isDemo = !apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo';
+
+  if (isDemo) {
+    if (!cachedProgramService || cachedKey !== 'dummy') {
       cachedKey = 'dummy';
-      cachedService = createDummyProgramService();
+      cachedDeviceId = null;
+      cachedProgramService = createDummyProgramService();
+      cachedWorkoutService = null;
     }
-    return cachedService;
+    return {
+      programService: cachedProgramService,
+      workoutService: cachedWorkoutService,
+    };
   }
-  if (apiKey !== cachedKey || !cachedService) {
+
+  const storage = getEffectiveStorage();
+  let deviceId = null;
+  try {
+    deviceId = storage ? getOrCreateClientIdentity(storage) : null;
+  } catch (err) {
+    console.log('[liftosaur-side] device identity unavailable');
+  }
+
+  if (
+    apiKey !== cachedKey ||
+    deviceId !== cachedDeviceId ||
+    !cachedProgramService ||
+    !cachedWorkoutService
+  ) {
     cachedKey = apiKey;
-    const client = createLiftosaurApiClient({ apiKey });
+    cachedDeviceId = deviceId;
+    const client = createLiftosaurApiClient({
+      apiKey,
+      deviceId,
+      clientName: 'liftosaur-zepp-os/0.3.2',
+    });
     const referenceData = createReferenceData({ client });
-    cachedService = createProgramService({
+    cachedProgramService = createProgramService({
       client,
       referenceData,
       getSettings: getEffectiveSettings,
     });
+    cachedWorkoutService = createWorkoutService({
+      client,
+      catalogService: cachedProgramService,
+    });
   }
-  return cachedService;
+
+  return {
+    programService: cachedProgramService,
+    workoutService: cachedWorkoutService,
+  };
 }
 
 AppSideService(
@@ -134,15 +177,19 @@ AppSideService(
       console.log('[liftosaur-side] settings changed:', key);
       sideServiceInstance = this;
       cachedKey = null;
-      cachedService = null;
+      cachedDeviceId = null;
+      cachedProgramService = null;
+      cachedWorkoutService = null;
     },
 
     onRequest(req, res) {
       sideServiceInstance = this;
       console.log('[liftosaur-side] request', req?.type);
 
+      const { programService, workoutService } = getServices();
       const router = createSideRouter({
-        programService: getProgramService(),
+        programService,
+        workoutService,
         workoutAbandoner: async () => {
           console.log('[liftosaur-side] workout abandoned');
           return { status: 'abandoned' };

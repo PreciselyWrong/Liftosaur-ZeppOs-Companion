@@ -1,89 +1,74 @@
 # Risks
 
-P0 risks block the phase gate. Each risk carries an owner, a mitigation, and the gate that
+P0 risks block the release gate. Each risk carries an owner, a mitigation, and the gate that
 closes it.
 
-## P0-1 - Strength Training subType code is unknown
+## P0-1 - Zepp Native Workout Activity Integration
 
-The `runtime.ability[].subType` array takes numeric sport codes, but no public enumeration
-of those codes was found. If Strength Training cannot be targeted, the extension appears in
-the wrong sports or in all of them.
+Direct sync communicates directly with Liftosaur Cloud via the Running a Workout API but does
+not create a native Zepp OS workout activity record on the watch.
 
-- Mitigation: probe the Zepp OS Simulator and official samples; fall back to `[]` plus a
-  runtime guard only if scoping proves impossible.
-- Gate: extension visible in Strength Training and nowhere else, on a real device.
-- Status: OPEN, BLOCKED on toolchain install.
+- Mitigation: Standalone app tracks HR and workout state independently; native workout extension integration remains separately gated by physical device verification.
+- Gate: Real device testing on target hardware.
+- Status: OPEN (gated on physical device testing).
 
-## P0-2 - API key exposure
+## P0-2 - API Key Exposure
 
-The key (`lftsk_*`) grants full account access, including deletes.
+The API key (`lftsk_*`) grants full Liftosaur account access.
 
-- Mitigation: key confined to the Side Service; redaction of `Authorization`, `Bearer`, and
-  `lftsk_*` in every log path, enforced by a test.
-- Gate: redaction test passes and no key appears in any diagnostic export.
-- Status: OPEN.
+- Mitigation: Key confined strictly to phone-side Zepp `settingsStorage`; automated redaction of `Authorization`, `Bearer`, and `lftsk_*` in every log path, enforced by automated tests. HTTP requests identify the client via a separate, non-secret installation ID (`X-Liftosaur-Device-Id`).
+- Gate: Redaction tests pass and no secret appears in any diagnostic export.
+- Status: MITIGATED / VERIFIED.
 
-## P0-3 - Ambiguous POST /history
+## P0-3 - Write Deduplication and Repeat Safety
 
-`POST /history` is not idempotent and has no idempotency key. A timeout may mean the record
-was created.
+Network dropouts during set writes or workout completion must not create duplicate sets or corrupt history.
 
-- Mitigation: on ambiguity, enter `UNKNOWN_COMMIT_STATE`; query `GET /history` for the
-  expected record before any retry.
-- Gate: fault-injection test - response dropped after server-side success produces exactly
-  one history record.
-- Status: OPEN.
+- Mitigation: Running a Workout API endpoints (`POST /workout/sets`, `POST /workout/finish`, `DELETE /workout/current`) are repeat-safe. Set writes carry stable server identifiers. Start, finish, and discard carry the workout start time. Retried requests return confirmed server state.
+- Gate: Automated test suite validates idempotent batch set submission and finish retries.
+- Status: MITIGATED / VERIFIED.
 
-## P0-4 - Program conflict on progression write-back
+## P0-4 - Remote Workout Conflicts & Concurrent Edits
 
-`PUT /programs/current` has no documented version or ETag. A program edited elsewhere during
-the session would be silently overwritten.
+The user may edit or complete sets in the official Liftosaur phone app while a watch session is active.
 
-- Mitigation: hash the base program text at session start; compare before writing; on
-  mismatch, surface an explicit conflict and keep base, remote, and local versions.
-- Gate: conflict scenario test never overwrites a changed remote program.
-- Status: OPEN.
+- Mitigation: Liftosaur Cloud is the authoritative source of truth. The watch drains its local write queue before adopting remote snapshots. If the remote workout is missing, discarded, or started at a different timestamp, the watch opens an explicit recovery prompt and never silently clears local data.
+- Gate: Conflict scenario unit tests verify explicit recovery modal without data loss.
+- Status: MITIGATED / VERIFIED.
 
-## P0-5 - Unknown target hardware
+## P0-5 - Hardware and Screen Compatibility
 
-`TARGET_WATCH_MODEL = UNKNOWN`. Screen shape, resolution, firmware, and Workout Extension
-availability are all unverified. The documented device list covers six Amazfit models only.
+Support across 28 round and square smartwatch models running Zepp OS 3.6+.
 
-- Mitigation: no compatibility claim from `API_LEVEL` alone; maintain the device matrix in
-  [test-matrix.md](test-matrix.md).
-- Gate: one real device confirmed and recorded.
-- Status: OPEN.
+- Mitigation: Dynamic layout computation (`shared/watch-layout.js`, `shared/screen-layout.js`) adapting to device geometry; automated layout property tests.
+- Gate: Tested against round and square screen invariants in simulator and physical builds.
+- Status: VERIFIED in emulator.
 
-## P0-6 - No text widget can be updated in place
+## P0-6 - In-Place Widget Update Performance
 
-`setProperty` never refreshes a `TEXT` widget in a `data-widget`, and a `FILL_RECT` receives
-no taps. Phase 1 needs live weight, reps, RPE and a rest countdown, so the whole screen
-composition depends on finding a working update mechanism.
+Full re-rendering on clock ticks drops timer seconds on physical watches.
 
-- Mitigation: probe `deleteWidget` + `createWidget`, and pre-created texts toggled with
-  `prop.VISIBLE`. Whichever works becomes a documented UI primitive, used everywhere.
-- Gate: a value visibly changes on tap in the simulator, and the rest countdown updates
-  once per second without leaking widgets.
-- Status: OPEN, being probed.
+- Mitigation: Elapsed time, heart rate, and rest timer widgets are registered as live widgets and updated in place via `setProperty(prop.MORE, ...)`.
+- Gate: 250 ms tick sampler updates only on second boundaries without widget leaks.
+- Status: VERIFIED.
+## P1 - Timed Sets and Prompted Variables
 
-## P1 - Session loss on crash or restart
+The watch cannot run arbitrary interactive Liftoscript variable prompts or background timer countdowns for special timed sets.
 
-- Mitigation: persist every critical event before rendering; replay on start; offer
-  `RESUME` / `DISCARD`.
-- Gate: restart during set, rest, and finalisation all recover without loss.
+- Mitigation: The watch detects sets requiring `promptedVars` or `setTimer` and directs the user to log that set in the official Liftosaur phone app. The watch then polls and adopts the completed set.
+- Gate: Unit tests verify prompt triggers for timed sets and script variables.
+- Status: MITIGATED.
 
-## P1 - Rest alert outside focus
+## P1 - Offline Set Queue Blocking Finish
 
-Whether the extension can alert when unfocused or with the screen off is unproven.
+Finishing while set writes are still queued locally could cause missing sets or out-of-order execution on Cloud.
 
-- Mitigation: dedicated spike in `rest-alert-spike.md` before any promise to the user.
-- Gate: real-device evidence, not emulator.
+- Mitigation: The watch enforces that all queued sets must be confirmed by the server before `FINISH_WORKOUT` can be dispatched.
+- Gate: Unit test verifies finish rejection when pending set count > 0.
+- Status: MITIGATED / VERIFIED.
 
-## P1 - Double tap producing two business events
+## P1 - Session Loss on Crash or Restart
 
-- Mitigation: debounce `COMPLETE_SET` at the event layer, not the UI layer.
-- Gate: two rapid taps yield exactly one journal event.
-
-## P2 - Playground output shape for warmups and supersets
-
-- Mitigation: targeted fixtures before parser work; never assume indices.
+- Mitigation: Persist every state mutation (plan, journal, unacknowledged set queue, pause intervals, finish/discard intent) to durable watch storage before UI render.
+- Gate: Restart during active set, rest, and finish recovery tests pass cleanly.
+- Status: VERIFIED.

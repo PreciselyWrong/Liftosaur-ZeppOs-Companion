@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-278%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-300%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -45,7 +45,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 > will refuse to install whatever you scan. That is not a bug, so please do not
 > report it as one.
 
-**Version:** Lifto Companion 0.3.1
+**Version:** Lifto Companion 0.3.2
 
 You also need a [Liftosaur](https://www.liftosaur.com) account with at least one
 program, and Developer Mode enabled in the Zepp app. Full walkthrough, phone
@@ -55,27 +55,31 @@ only and no computer required: **[docs/tester-guide.md](docs/tester-guide.md)**.
 
 ## The API decides, the watch asks
 
-Every workout fact comes from Liftosaur Cloud. The watch runs no Liftoscript and filters no
-exercise by name. It suggests the day after your most recent workout, but you still pick a
-program, a week and a day; the
-[Playground endpoint](https://www.liftosaur.com/doc/api) returns the exercises, sets, reps,
-weights, RPE targets and rest timers; and when you finish, the same endpoint computes the
-progression that gets written back.
+Liftosaur Cloud is the shared current-workout source of truth using the official Liftosaur
+Running a Workout API. The watch runs no Liftoscript and filters no exercise by name.
+`GET /workout/next` previews either your official upcoming workout or an explicit selection
+(program, week, day); `POST /workout/start` creates the shared active session with the
+watch's real start time; `POST /workout/sets` syncs completed sets with authoritative server
+evaluation; and `POST /workout/finish` atomically records history, progression, 1RM updates,
+and advances the official next-workout pointer.
 
-A session logged on the watch appears in Liftosaur with its progression applied. Program
-edits made in Liftosaur are also visible on the watch.
+A session started or modified on the watch or in the official Liftosaur phone app can be
+continued on either device via `GET /workout/current`.
 
 ## Features
 
-- **Explicit selection**: program, week and day are chosen by you, from lists the API returns. Your most recent workout is shown so you can see where you left off.
-- **Real prescriptions**: exercises, sets, rep ranges, AMRAP markers, weights, RPE targets and rest timers all come from the Playground, in your program's unit.
-- **Faithful write-back**: at finish, the session is replayed to Liftosaur as playground commands, so the saved record is exactly what you did. Progressions - including custom `progress:` scripts and `used: none` templates - are computed by Liftosaur, never re-implemented here.
-- **Never overwrites a remote edit**: the program text is fingerprinted when the plan is built and re-checked before writing. If the program changed meanwhile, the workout is still saved and the progression is skipped.
+- **Direct Cloud sync**: Liftosaur Cloud is the shared source of truth for active workouts.
+- **Official next workout & explicit selection**: preview the scheduled workout or pick an explicit program, week, and day via `GET /workout/next`.
+- **Cross-device continuation**: continue active workouts started on the watch or the official phone app (`GET /workout/current`).
+- **Full prescriptions**: warmup sets, calculated plate combinations, user rest defaults, weights, rep targets, and superset sequences come pre-resolved from Liftosaur Cloud without watch-side guessing.
+- **Authoritative set logging**: `POST /workout/sets` drains queued sets in order; responses apply server update scripts immediately.
+- **Atomic finalisation**: `POST /workout/finish` sends start time, end time, and pause intervals, atomically saving history, progression, and the official phone next-day pointer.
+- **Repeat-safe synchronization**: set writes and workout finish are safe to repeat; duplicate requests return confirmed server state.
 - **Live heart rate** via `@zos/sensor`, with zone colouring.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.
 - **Display wake lock** during active workouts (`@zos/display`).
-- **Crash-proof sessions**: the plan and the journal are stored on the watch after every set, so an app killed mid-workout resumes on the same set. A lost `POST /history` response is resolved by searching before any retry.
-- **Mobile settings app**: your Liftosaur API key (`lftsk_...`) is entered in the Zepp app and never leaves the phone.
+- **Crash-proof sessions**: the plan, journal, write queue, pause intervals, and finish intent are persisted locally. An interrupted app resumes on the exact active set.
+- **Mobile settings & privacy**: your Liftosaur API key (`lftsk_...`) stays on the phone. Writes identify the client using a stable installation ID in phone settings storage and `X-Liftosaur-Client`.
 
 ---
 
@@ -85,27 +89,26 @@ edits made in Liftosaur are also visible on the watch.
 ┌─────────────────────────────────────────────────────────┐
 │                      Amazfit Watch                      │
 │                                                         │
-│  page/common/index.js      program / week / day pickers │
-│       │                    then the workout screens     │
+│  page/common/index.js      workout UI & direct sync     │
+│       │                    polling, queues & recovery   │
 │       ▼                                                 │
 │  shared/workout-session.js pure state machine + journal │
 │       │                                                 │
-│       ▼                                                 │
-│  shared/session-storage.js local journal persistence    │
+│  shared/session-storage.js local storage persistence    │
 └───────────────────────────┬─────────────────────────────┘
-                            │ BLE / ZML protocol v2
+                            │ BLE / ZML protocol v3
 ┌───────────────────────────▼─────────────────────────────┐
 │                    Mobile Side Service                  │
 │                                                         │
-│  app-side/router.js             message dispatch        │
-│  app-side/program-service.js    the only orchestrator   │
+│  app-side/router.js             message dispatch (v3)   │
+│  app-side/workout-service.js    running workout adapter │
 │  app-side/liftosaur-api-client.js  the only HTTP client │
 │  setting/index.js               API key entry           │
 └───────────────────────────┬─────────────────────────────┘
                             │ HTTPS / REST
 ┌───────────────────────────▼─────────────────────────────┐
 │                    Liftosaur Cloud                      │
-│  /programs  /playground  /history   source of truth     │
+│  Running a Workout API (/workout/*)   source of truth   │
 └─────────────────────────────────────────────────────────┘
 ```
 
@@ -113,26 +116,18 @@ Shared, platform-independent modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `shared/liftohistory.js` | Read the documented Liftohistory text format |
-| `shared/liftoscript-outline.js` | Read only the `#` week and `##` day headers of a program |
-| `shared/day-plan.js` | Turn `target:` sections into a plan, and a journal into playground commands |
-| `shared/workout-session.js` | The session state machine |
-| `shared/protocol.js` | The device ↔ phone message envelope |
+| `shared/workout-api-plan.js` | Map official `data.workout` objects into the local day plan |
+| `shared/workout-session.js` | The session state machine, set journal, and pause intervals |
+| `shared/weight-rounding.js` | Loadable-weight plate math and weight string parsing |
+| `shared/protocol.js` | The device <-> phone Protocol v3 envelope |
+| `shared/liftohistory.js` | Parse and format Liftohistory text (legacy & diagnostics) |
+| `shared/liftoscript-outline.js` | Read `#` week and `##` day headers (catalog fallback) |
 
-### Known limits
+### Known limits & notes
 
-Liftosaur's public API saves the workout and updated program, but it does not expose the
-official phone app's private day pointer. After a watch workout, the phone app day pointer
-does not advance even though the history and progression are correct. The watch independently
-suggests the next day from the latest history record. Updating the phone pointer needs an
-upstream Liftosaur API change.
-
-Warmup sets and superset grouping are absent from the Playground response - confirmed by
-test. They are not absent from the API: both are named fields in the Liftoscript source
-that `GET /programs/:id` returns. Reading them back is planned; resolving a percentage
-warmup (`1x8 40%`) additionally needs Liftosaur's loadable-weight rounding. Until then the
-watch shows working sets in program order, and you can run exercises in any order from the
-overview list. See [docs/liftosaur-api.md](docs/liftosaur-api.md).
+- **Timed sets & prompted variables**: sets with a prescribed timer countdown or arbitrary prompted script variables currently ask the user to complete that set in the official Liftosaur phone app. The watch polls and adopts the completed result.
+- **Native workout activity**: direct sync does not create a Zepp native workout activity. Native workout integration remains separately gated by real-device testing.
+- **Legacy REST flow**: the older Playground replay and raw `/history` + `/programs` write flow remains only for one-time recovery of version 1 local snapshots. In that legacy flow, the official phone app day pointer does not advance. Under the Running a Workout API, the phone pointer advances automatically on finish.
 
 ---
 

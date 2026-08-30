@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createWorkoutSession, SESSION_STATES, weightStepFor } from '../shared/workout-session.js';
@@ -40,7 +40,6 @@ test('a session with no plan needs one', () => {
   assert.equal(view.state, SESSION_STATES.NO_PLAN);
   assert.equal(view.totalExercises, 0);
 });
-
 test('starts on the first set with the API targets loaded', () => {
   const session = createWorkoutSession({ plan: makePlan() });
   assert.equal(session.view().state, SESSION_STATES.READY);
@@ -55,7 +54,6 @@ test('starts on the first set with the API targets loaded', () => {
   assert.equal(view.currentSet.rpe, 8);
   assert.equal(view.currentSet.restSeconds, 120);
 });
-
 test('rests for the duration the API prescribed', () => {
   const session = createWorkoutSession({ plan: makePlan() });
   session.startWorkout({ timestamp: 0 });
@@ -856,3 +854,451 @@ test('an untouched Prepare screen still loads the plan targets', () => {
   session.nextSet({ timestamp: 2000 });
   assert.equal(session.view(2000).currentSet.weight, 80);
 });
+
+describe('Workout API set-write journal support', () => {
+  test('session retains server identifiers, metadata and exposes them in views and describeSet', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          id: 'bench_press_barbell',
+          entryId: 'bench_press_barbell',
+          exerciseId: 'bench_press',
+          name: 'Bench Press',
+          hasUpdateScript: true,
+          promptedVars: ['rpe'],
+          warmupSets: [
+            {
+              setId: 'w1',
+              serverIndex: 0,
+              targetReps: 10,
+              targetWeight: 40,
+              originalWeight: '40kg',
+              plates: { '20kg': 1 },
+              logRpe: false,
+              askWeight: false,
+              isUnilateral: false,
+              restSeconds: 60,
+              setTimer: null,
+              completed: null,
+            },
+          ],
+          sets: [
+            {
+              setId: 's1',
+              serverIndex: 1,
+              targetReps: 8,
+              targetWeight: 80,
+              originalWeight: '80kg',
+              plates: { '20kg': 2 },
+              logRpe: true,
+              askWeight: true,
+              isUnilateral: true,
+              restSeconds: 120,
+              setTimer: 45,
+              completed: null,
+            },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+
+    const view = session.view(0);
+    assert.equal(view.exerciseId, 'bench_press');
+    assert.equal(view.entryId, 'bench_press_barbell');
+    assert.equal(view.currentSet.setId, 'w1');
+    assert.equal(view.currentSet.serverIndex, 0);
+    assert.equal(view.currentSet.originalWeight, '40kg');
+    assert.deepEqual(view.currentSet.plates, { '20kg': 1 });
+    assert.equal(view.currentSet.logRpe, false);
+    assert.equal(view.currentSet.askWeight, false);
+    assert.equal(view.currentSet.isUnilateral, false);
+
+    session.completeSet({ timestamp: 1000 });
+    const pendingSet = session.view(1000).pending.set;
+    assert.equal(pendingSet.setId, 's1');
+    assert.equal(pendingSet.serverIndex, 1);
+    assert.equal(pendingSet.originalWeight, '80kg');
+    assert.deepEqual(pendingSet.plates, { '20kg': 2 });
+    assert.equal(pendingSet.logRpe, true);
+    assert.equal(pendingSet.askWeight, true);
+    assert.equal(pendingSet.isUnilateral, true);
+    assert.equal(pendingSet.setTimer, 45);
+  });
+
+  test('completeSet emits stable payload in journal and completed records expose all server fields', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          id: 'bench_press_barbell',
+          entryId: 'bench_press_barbell',
+          exerciseId: 'bench_press',
+          name: 'Bench Press',
+          warmupSets: [
+            { setId: 'w1', targetReps: 10, targetWeight: 40, restSeconds: 60 },
+          ],
+          sets: [
+            { setId: 's1', targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: 120, setTimer: 45 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+
+    // Complete warmup
+    session.completeSet({ timestamp: 1000 });
+    session.nextSet({ timestamp: 2000 });
+
+    // Adjust and complete work set
+    session.adjustWeight(1, { timestamp: 2500 }); // 82.5kg
+    session.adjustReps(-1, { timestamp: 2500 }); // 7 reps
+    session.adjustRpe(0.5, { timestamp: 2500 }); // 8.5 RPE
+    session.completeSet({
+      timestamp: 3000,
+      repsLeft: 6,
+      setTimer: 42,
+      userVars: { effort: 9 },
+    });
+
+    const journal = session.getJournal();
+    const completeEvents = journal.filter((e) => e.type === 'COMPLETE_SET');
+    assert.equal(completeEvents.length, 2);
+
+    assert.deepEqual(completeEvents[0].payload, {
+      exerciseIndex: 1,
+      setIndex: 1,
+      entryId: 'bench_press_barbell',
+      setId: 'w1',
+      weight: 40,
+      reps: 10,
+      rpe: null,
+      repsLeft: null,
+      setTimer: null,
+      userVars: null,
+      unit: 'kg',
+    });
+
+    assert.deepEqual(completeEvents[1].payload, {
+      exerciseIndex: 1,
+      setIndex: 2,
+      entryId: 'bench_press_barbell',
+      setId: 's1',
+      weight: 82.5,
+      reps: 7,
+      rpe: 8.5,
+      repsLeft: 6,
+      setTimer: 42,
+      userVars: { effort: 9 },
+      unit: 'kg',
+    });
+
+    // Verify completed records in view
+    const completed = session.view().allCompletedSets;
+    assert.equal(completed.length, 2);
+    assert.equal(completed[1].entryId, 'bench_press_barbell');
+    assert.equal(completed[1].setId, 's1');
+    assert.equal(completed[1].weight, 82.5);
+    assert.equal(completed[1].reps, 7);
+    assert.equal(completed[1].rpe, 8.5);
+    assert.equal(completed[1].repsLeft, 6);
+    assert.equal(completed[1].setTimer, 42);
+    assert.deepEqual(completed[1].userVars, { effort: 9 });
+  });
+
+  test('getWorkoutSetWrites and getLastWorkoutSetWrite return exact API payloads in completion order', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          id: 'bench_press_barbell',
+          entryId: 'bench_press_barbell',
+          name: 'Bench Press',
+          warmupSets: [
+            { setId: 'w1', targetReps: 10, targetWeight: 40, restSeconds: 60 },
+          ],
+          sets: [
+            { setId: 's1', targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: 120, setTimer: 45 },
+            { setId: null, targetReps: 8, targetWeight: 80, restSeconds: 120 }, // legacy set with no setId
+          ],
+        },
+        {
+          index: 2,
+          id: 'pullup',
+          entryId: 'pullup',
+          name: 'Pull Up',
+          warmupSets: [],
+          sets: [
+            { setId: 'p1', targetReps: 5, targetWeight: 0, restSeconds: 60 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    assert.equal(session.getLastWorkoutSetWrite(), null);
+    assert.deepEqual(session.getWorkoutSetWrites(), []);
+
+    session.startWorkout({ timestamp: 0 });
+
+    // 1. Complete warmup with setId 'w1'
+    session.completeSet({ timestamp: 1000 });
+    const write1 = session.getLastWorkoutSetWrite();
+    assert.deepEqual(write1, {
+      entryId: 'bench_press_barbell',
+      setId: 'w1',
+      completed: {
+        reps: 10,
+        weight: '40kg',
+      },
+    });
+
+    // 2. Next set -> work set with setId 's1'
+    session.nextSet({ timestamp: 1060 });
+    session.adjustWeight(1, { timestamp: 1100 }); // 82.5kg
+    session.completeSet({ timestamp: 2000, setTimer: 43 });
+
+    const write2 = session.getLastWorkoutSetWrite();
+    assert.deepEqual(write2, {
+      entryId: 'bench_press_barbell',
+      setId: 's1',
+      completed: {
+        reps: 8,
+        weight: '82.5kg',
+        rpe: 8,
+        setTimer: 43,
+      },
+    });
+
+    // 3. Next set -> legacy set without setId (must be omitted from writes)
+    session.nextSet({ timestamp: 2120 });
+    session.completeSet({ timestamp: 3000 });
+    // getLastWorkoutSetWrite still returns the last valid write with setId ('s1')
+    assert.equal(session.getLastWorkoutSetWrite().setId, 's1');
+
+    // 4. Next set -> Pull Up with 0kg weight (0 must be preserved)
+    session.nextSet({ timestamp: 3120 });
+    session.completeSet({ timestamp: 4000 });
+
+    const write4 = session.getLastWorkoutSetWrite();
+    assert.deepEqual(write4, {
+      entryId: 'pullup',
+      setId: 'p1',
+      completed: {
+        reps: 5,
+        weight: '0kg',
+      },
+    });
+
+    // Check full list in completion order
+    const allWrites = session.getWorkoutSetWrites();
+    assert.equal(allWrites.length, 3);
+    assert.deepEqual(allWrites, [
+      {
+        entryId: 'bench_press_barbell',
+        setId: 'w1',
+        completed: { reps: 10, weight: '40kg' },
+      },
+      {
+        entryId: 'bench_press_barbell',
+        setId: 's1',
+        completed: { reps: 8, weight: '82.5kg', rpe: 8, setTimer: 43 },
+      },
+      {
+        entryId: 'pullup',
+        setId: 'p1',
+        completed: { reps: 5, weight: '0kg' },
+      },
+    ]);
+  });
+
+  test('replaying new and legacy journals reconstructs identical state and set writes', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          id: 'bench_press_barbell',
+          entryId: 'bench_press_barbell',
+          name: 'Bench Press',
+          sets: [
+            { setId: 's1', targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: null },
+            { setId: 's2', targetReps: 8, targetWeight: 80, targetRpe: 8, restSeconds: null },
+          ],
+        },
+      ],
+    };
+
+    // Replay new journal with payload
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    session.adjustWeight(1, { timestamp: 10 });
+    session.completeSet({ timestamp: 100 });
+    session.completeSet({ timestamp: 200 });
+
+    const newJournal = session.getJournal();
+    const restoredNew = createWorkoutSession({ plan, initialJournal: newJournal });
+    assert.deepEqual(restoredNew.getWorkoutSetWrites(), session.getWorkoutSetWrites());
+    assert.equal(restoredNew.view(200).state, SESSION_STATES.FINISHED);
+
+    // Replay legacy journal without payload on COMPLETE_SET
+    const legacyJournal = [
+      { type: 'START_WORKOUT', timestamp: 0 },
+      { type: 'ADJUST_WEIGHT', payload: { delta: 2.5 }, timestamp: 10 },
+      { type: 'COMPLETE_SET', timestamp: 100 },
+      { type: 'COMPLETE_SET', timestamp: 200 },
+    ];
+    const restoredLegacy = createWorkoutSession({ plan, initialJournal: legacyJournal });
+    assert.deepEqual(restoredLegacy.getWorkoutSetWrites(), session.getWorkoutSetWrites());
+    assert.equal(restoredLegacy.view(200).state, SESSION_STATES.FINISHED);
+  });
+
+  test('does not report a timed-set target as an actual held duration', () => {
+    const session = createWorkoutSession({
+      plan: {
+        unit: 'kg',
+        exercises: [{
+          entryId: 'plank',
+          name: 'Plank',
+          sets: [{ setId: 'timed1', targetReps: 1, targetWeight: 0, setTimer: 60 }],
+        }],
+      },
+    });
+
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 30000 });
+
+    assert.deepEqual(session.getLastWorkoutSetWrite(), {
+      entryId: 'plank',
+      setId: 'timed1',
+      completed: { reps: 1, weight: '0kg' },
+    });
+  });
+
+  test('continues an active server workout on the first unfinished set', () => {
+    const session = createWorkoutSession({
+      plan: {
+        source: 'WORKOUT_API',
+        isCurrent: true,
+        startTime: 1000,
+        unit: 'kg',
+        exercises: [{
+          entryId: 'squat',
+          name: 'Squat',
+          sets: [
+            {
+              setId: 'setone',
+              targetReps: 5,
+              targetWeight: 100,
+              completed: { reps: 4, weight: 95, unit: 'kg', rpe: 9 },
+            },
+            { setId: 'settwo', targetReps: 5, targetWeight: 100, completed: null },
+          ],
+        }],
+      },
+    });
+
+    const view = session.view(5000);
+    assert.equal(view.state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(view.startedAt, 1000);
+    assert.equal(view.currentSet.setId, 'settwo');
+    assert.equal(view.totalCompletedSetsCount, 1);
+    assert.deepEqual(session.getWorkoutSetWrites()[0], {
+      entryId: 'squat',
+      setId: 'setone',
+      completed: { reps: 4, weight: '95kg', rpe: 9 },
+    });
+    assert.deepEqual(session.getJournal(), []);
+  });
+
+  test('builds finish intervals from durable pause and resume events', () => {
+    const session = createWorkoutSession({
+      plan: {
+        unit: 'kg',
+        exercises: [{
+          entryId: 'squat',
+          name: 'Squat',
+          sets: [
+            { setId: 'setone', targetReps: 5, targetWeight: 100, restSeconds: 60 },
+            { setId: 'settwo', targetReps: 5, targetWeight: 100 },
+          ],
+        }],
+      },
+    });
+
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+    session.pauseRest({ timestamp: 3000 });
+    session.resumeRest({ timestamp: 5000 });
+    session.nextSet({ timestamp: 6000 });
+    session.completeSet({ timestamp: 8000 });
+
+    assert.equal(session.view(9000).endedAt, 8000);
+    assert.deepEqual(session.getWorkoutIntervals(), [[1000, 3000], [5000, 8000]]);
+  });
+
+  test('current server workout intervals always begin at the server startTime', () => {
+    const session = createWorkoutSession({
+      plan: {
+        source: 'WORKOUT_API',
+        isCurrent: true,
+        startTime: 1000,
+        unit: 'kg',
+        exercises: [{
+          entryId: 'squat',
+          name: 'Squat',
+          sets: [{ setId: 'one', targetReps: 5, targetWeight: 100 }],
+        }],
+      },
+    });
+
+    assert.deepEqual(session.getWorkoutIntervals(5000), [[1000, 5000]]);
+  });
+
+  test('current superset resumes at the partner with fewer completed sets', () => {
+    const session = createWorkoutSession({
+      plan: {
+        source: 'WORKOUT_API',
+        isCurrent: true,
+        startTime: 1000,
+        unit: 'kg',
+        exercises: [
+          {
+            entryId: 'a',
+            name: 'A',
+            supersetGroup: '1',
+            sets: [
+              { setId: 'a1', targetReps: 5, targetWeight: 100, completed: { reps: 5, weight: 100 } },
+              { setId: 'a2', targetReps: 5, targetWeight: 100 },
+            ],
+          },
+          {
+            entryId: 'b',
+            name: 'B',
+            supersetGroup: '1',
+            sets: [
+              { setId: 'b1', targetReps: 8, targetWeight: 50 },
+              { setId: 'b2', targetReps: 8, targetWeight: 50 },
+            ],
+          },
+        ],
+      },
+    });
+
+    assert.equal(session.view().entryId, 'b');
+    assert.equal(session.view().currentSet.setId, 'b1');
+  });
+});
+// Server resume scenarios stay here because they exercise state reconstruction.

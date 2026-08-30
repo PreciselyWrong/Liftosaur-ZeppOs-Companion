@@ -1,178 +1,140 @@
 # Architecture
 
-## Components and boundaries
+## Components and Boundaries
 
 | Component | Runs on | Owns | Never owns |
 | --- | --- | --- | --- |
-| Standalone app (mini program) | Watch | The Liftosaur UI, its touch state machine and the HR sensor via `@zos/sensor` | Liftoscript evaluation, network |
-| Device App storage | Watch | Durable local event journal, current session state | API key, HTTP |
-| Side Service | Phone | API key, HTTPS to Liftosaur, retries, conflict detection | UI, session truth, workout content |
-| Liftosaur Cloud | Remote | Programs, weeks and days, prescriptions, history, Liftoscript evaluation, progression | Anything local |
+| Standalone App (mini program) | Watch | Liftosaur UI, touch state machine, HR sensor via `@zos/sensor`, local journal and write queue | Direct HTTP, raw secret keys |
+| Device App Storage | Watch | Durable local event journal, active session state, pending set queue, pause intervals, finish/discard intent | Server-wide progression state |
+| Side Service | Phone | API key, stable installation identity (`X-Liftosaur-Device-Id`), HTTPS communication to Liftosaur Cloud | UI rendering, watch sensor state |
+| Liftosaur Cloud | Remote | Shared active workout state, programs, history, exercise update scripts, progression, 1RM calculations, and `nextDay` pointer | Local UI / device state |
 
-Single-ownership rule: each datum has exactly one owner. The app is the sole owner of the
-heart-rate sensor and never starts a second one.
+Single-ownership rule: each datum has exactly one authoritative owner. The app is the sole owner
+of the watch heart-rate sensor. Liftosaur Cloud is the sole source of truth for active workout
+prescriptions and progression.
 
-## Who decides what
+---
 
-The watch decides nothing about the content of a workout. It asks, the API answers:
+## Who Decides What
+
+The watch decides nothing about workout prescriptions or progressions. It asks, and Liftosaur Cloud answers:
 
 | Question | Answered by |
 | --- | --- |
-| Which programs exist? | `GET /programs` |
-| Which weeks and days does a program have? | The program's `#` / `##` headers, verified against the playground's `week` / `dayInWeek` echo |
-| Which day am I doing? | **The user**, by tapping it |
-| Which exercises, sets, reps, weights, RPE, rest? | `POST /playground`, `target:` sections |
-| What does this session change in my program? | `POST /playground` with `finish_workout()` |
-| Where is the workout stored? | `POST /history` |
+| Which programs exist? | `GET /programs` (or cached outline) |
+| Which workout is next? | `GET /workout/next` (official Cloud schedule) |
+| Which day am I doing? | **The user**, by confirming the next day or selecting an explicit program/week/day |
+| Which exercises, sets, reps, weights, RPE, rest, plates, warmups, supersets? | `GET /workout/next` or `GET /workout/current` (pre-resolved by Cloud) |
+| What changes when a set completes? | `POST /workout/sets` (server executes update scripts and returns new state) |
+| What does this session change in my program progression and history? | `POST /workout/finish` (atomic server-side progression, 1RM, and `nextDay` update) |
 
-There is no local Liftoscript evaluation and no name-based filtering of days or exercises.
-[`shared/liftoscript-outline.js`](../../shared/liftoscript-outline.js)
-reads two grammar tokens - `# week` and `## day` - and nothing else.
+---
 
-## Selection flow
+## Selection and Launch Flow
 
-The launch path fetches the active program's outline immediately, so the home screen can
-offer its next day behind a single button. The full picker sits one tap away.
+On startup in Cloud mode, the watch queries `GET_SETTINGS`, `GET_WORKOUT_CURRENT`, and `GET_WORKOUT_NEXT`:
 
+```text
+Launch
+  │
+  ├──▶ GET_WORKOUT_CURRENT (active workout exists?)
+  │       │
+  │       ├──▶ Yes ──▶ Open the shared workout (cross-device continuity)
+  │       │
+  │       └──▶ No ──▶ GET_WORKOUT_NEXT ──▶ Home screen shows scheduled next day
+  │                                                │
+  │                                                └──▶ Or open Program / Week / Day picker
+  ▼                                                               │
+START_WORKOUT (POST /workout/start) ◀─────────────────────────────┘
+  ▼
+READY ──▶ ACTIVE_SET ⇄ REST ──▶ FINISHING
+  ▼
+SYNC_WORKOUT_SETS (POST /workout/sets, repeat-safe queue drain)
+  ▼
+FINISH_WORKOUT (POST /workout/finish, atomic Cloud history + progression + pointer)
 ```
-LIST_PROGRAMS ──▶ GET_PROGRAM_OUTLINE (active program) ──▶ home: start next day
-        │                                                        │
-        └──▶ user taps a program ──────────────────────────────┐ │
-        ▼                                                      ▼ │
-GET_PROGRAM_OUTLINE ──▶ user taps a week ──▶ user taps a day ◀───┘
-        ▼
-GET_DAY_PLAN  (probe: playground reports the exercise count, then its targets)
-        ▼
-READY → ACTIVE_SET → REST → … → FINISHED
-        ▼
-FINISH_WORKOUT  (playground replay + finish_workout, then POST /history, then PUT /programs)
-```
 
-Each picker features one entry - the active program, the week of the most recent
-`GET /history` record, the day after the one it names - large and first, with the rest of
-the list one page below. [`shared/selection.js`](../../shared/selection.js) computes those
-indices from account data only. A featured entry is still a button: it suggests, it never
-selects. This history-based suggestion is independent of the official phone app's private
-day pointer, which the public API does not expose or advance. When the history points
-nowhere the list is shown flat.
+In the legacy v1 REST flow (now retained only for legacy snapshot recovery), a
+history-based suggestion was independent of the official phone app day pointer because raw REST
+writes did not advance it. Under the Running a Workout API (Protocol v3), `GET /workout/next`
+provides the official scheduled workout directly, and `POST /workout/finish` advances the official
+phone pointer automatically.
 
-## Rendering the clock
+---
 
-A full re-render tears down and rebuilds every widget, which takes long enough on the watch
-that a once-a-second redraw drops ticks - the countdown then jumps two seconds at a time.
-The elapsed, heart-rate and rest-timer texts are therefore registered as live widgets and
-patched in place with `setProperty(prop.MORE, …)`, re-sending their complete property set
-so geometry is not lost. The tick samples every 250 ms and writes only when the displayed
-second changes; a state change still triggers a full render, and a refused in-place update
-falls back to one.
+## Rendering the Clock and Metrics
 
-## Data flow
+A full re-render tears down and rebuilds widgets, which on physical hardware can drop seconds
+during active countdowns. The elapsed time, heart rate, and rest timer widgets are registered
+as live widgets and patched in place using `setProperty(prop.MORE, ...)`, re-sending geometry
+safely. The timer samples every 250 ms and updates the display only when the displayed second
+changes.
 
-```
-Watch UI  ──tap──▶  event journal (persist first)
+---
+
+## Data Flow & Synchronization
+
+```text
+Watch UI  ──tap──▶  Local Journal & Set Queue (persist first)
         │                  │
         │                  ▼
-        │            UI update
+        │            UI update (instant feedback)
         ▼
-Device ↔ Side Service protocol v2 (BLE/ZML)
+Device <-> Side Service Protocol v3 (BLE / ZML)
         ▼
-Side Service ──HTTPS──▶ Liftosaur Cloud (LiftosaurApiClient)
+Side Service ──HTTPS (with X-Liftosaur-Device-Id)──▶ Liftosaur Cloud (/workout/*)
 ```
 
-The ordering is fixed: **persist, then render, then sync.** A gesture is never allowed to
-wait on BLE or HTTP.
+The ordering is strictly: **persist locally -> render UI -> sync asynchronously.**
 
-## Session model
+A user tap never blocks on BLE or HTTP.
 
-The session is an append-only event journal. Replaying the journal reconstructs the session
-exactly. Completed sets are determined by the journal alone; at finish time the journal is
-translated into playground commands (`change_weight`, `change_reps`, `complete_set`,
-`change_rpe`) and Liftosaur computes the record and the progression from them.
+---
 
-State machine: `NO_PLAN → READY → ACTIVE_SET → REST → ACTIVE_SET → … → FINISHED`.
-Invalid transitions are rejected, not coerced. A set with no prescribed rest timer skips
-`REST` entirely rather than inventing a default.
+## Active Workout Synchronization & Queuing
 
-Rest is absolute-time based: `restStartedAt`, `restDuration`, `restEndsAt`. Remaining time
-is always derived from the clock, never from a tick counter, so pause, screen-off, and
-lifecycle churn cannot skew it.
+1. **Set Logging**: Completing a set immediately persists the record in the watch journal and queues the set write.
+2. **Queue Draining**: `POST /workout/sets` drains queued sets in order.
+3. **Repeat-Safe**: Set writes carry stable set identifiers. Start, finish, and discard carry the workout start time, making retries safe.
+4. **Snapshot Adoption**: When the local set queue is empty, the watch adopts the authoritative server snapshot returned by `POST /workout/sets` or `GET /workout/current`. Dynamic script updates (`hasUpdateScript`) and phone-side edits are applied cleanly.
+5. **Polling**: The watch polls `GET /workout/current` during active workouts at a controlled rate (minimum 15-second interval). If an active workout is modified on the phone, the watch adopts the state once its local write queue is empty.
+6. **Conflict Handling**: If a remote workout is missing or reports a conflicting start time, the watch opens an explicit user recovery dialog and never silently deletes local session data.
 
-## Network states
-
-- `ONLINE` - Side Service reachable and last call succeeded.
-- `DEGRADED` - Side Service reachable, calls failing or timing out; queue and retry.
-- `OFFLINE` - no Side Service link; session continues fully locally.
-
-The watch is usable in all three. Only synchronisation degrades.
+---
 
 ## Finalisation
 
-Finishing is a non-atomic, persisted transaction with distinct steps: replay the session
-through the playground, post the record it returns to the history, then write the program
-progression the same run produced.
+Finishing a workout is an atomic cloud transaction:
+- `POST /workout/finish` sends the real `startTime`, `endTime`, and preserved pause `intervals`.
+- Liftosaur Cloud atomically commits the history record, updates program progression, recalculates 1RM values, advances `nextDay`, and clears the active session.
+- A non-empty local set queue blocks finish submission until all sets are confirmed synced.
+- Discarding a workout (`DELETE /workout/current`) requires explicit user action.
 
-History goes first because it is append-only and therefore always safe. The program write
-is skipped whenever the remote source changed since the plan was fetched, so a program
-edited in the Liftosaur app during a workout is never overwritten. A lost `POST /history`
-response ends in `UNKNOWN_COMMIT_STATE`, which triggers a verification read before any
-retry. A finished-but-unsynced session is kept and offered as `RETRY`; it is never deleted
-automatically.
+---
 
-## The account is written once, at finish
+## Durability and Crash Recovery
 
-Nothing reaches Liftosaur while a workout runs. The finish replays the journal through the
-playground, writes the record it returns to the history, then saves the progression.
+- **Watch Persistence**: Every state change (plan, completed sets, queued sync items, pause intervals, finish/discard intent) is persisted to watch storage before rendering.
+- **App Restart**: If the watch app is killed or restarts mid-session, `restoreSession()` restores the exact active set, elapsed time, and unacknowledged sync queue.
+- **Network Resilience**: The watch functions fully offline. Sets accumulate safely in the local queue and sync when connectivity returns.
 
-An earlier version wrote the session to `/history` after every set and updated the same
-record as it grew. It worked, and it is not coming back, because of this:
+---
 
-```ts
-export function Progress_isCurrent(progress: IHistoryRecord | undefined): boolean {
-  return progress?.id === 0;
-}
-```
+## Known Limits & Notes
 
-An in-progress workout lives in `storage.progress` and is identified by `id === 0`.
-`POST /api/v1/history` writes into `storage.history`, and the Liftohistory deserializer
-assigns `id: startTime` - a timestamp, never `0`. **A record created through the public API
-is a finished workout by construction.** Omitting `duration:` only leaves `endTime`
-undefined; `isCurrent` never looks at `endTime`. So a live session appeared in the history
-as one already finished, and no field could change that.
+- **Timed Sets & Prompted Variables**: Sets with live timer countdowns (`setTimer`) or custom interactive script variables (`promptedVars`) ask the user to complete that set on the official Liftosaur phone app. The watch then polls and adopts the completed set.
+- **Native Workout Activity**: Direct sync does not create a Zepp native workout activity. Native workout integration remains separately gated by real-device testing.
+- **Legacy Replay & Fallbacks**: The old Playground replay and raw `/history` + `/programs` write flow remains only for one-time recovery of v1 local snapshots.
 
-Durability is therefore local: the plan and the journal are stored together via
-`@zos/storage` on every critical event, so an app killed mid-workout resumes on the same
-set. What is lost is only the case where the watch itself is destroyed mid-session.
+---
 
-## Cross-device resume
+## Key Handling & Identity
 
-A session finished anywhere is visible everywhere. Continuing a half-finished workout **on
-another device** is not offered by the public API: the Liftosaur app and web page share
-in-progress state through `storage.progress` in Liftosaur's own private sync, and the REST
-API exposes no route to it.
+- The Liftosaur API key (`lftsk_...`) is entered in the phone Settings App and remains strictly in phone storage. It is never sent over BLE or logged.
+- The phone generates a random, stable installation ID stored in phone `settingsStorage` (`liftosaurDeviceId`). This identifier is sent in the `X-Liftosaur-Device-Id` HTTP header to coordinate running workout sync.
 
-Resuming therefore works on the watch itself - after a crash, a reboot, or the app being
-killed - and not across devices.
-
-## Known API limits
-
-Warmup sets and superset grouping are absent from the **playground** output - verified, see
-[liftosaur-api.md](liftosaur-api.md). They are not absent from the API: both are named
-fields in the Liftoscript source that `GET /programs/:id` returns, and `warmup:` is part of
-the Liftohistory grammar. Reading them back means parsing the day's block in the program
-text, and resolving a percentage warmup additionally requires reproducing
-`Weight_calculatePlates` from `GET /exercise-data` and `GET /gyms/:gymId/equipment`.
-
-Until that lands, the watch shows working sets in program order. Exercises can be run in any
-order from the overview list.
-
-## Key handling
-
-The Liftosaur API key is entered in the phone Settings App and stays in the Side Service.
-It is never sent over BLE, never stored on the watch, and is redacted from every log.
+---
 
 ## Status
 
-Implemented and unit-tested against recorded API shapes. The API contract in
-[liftosaur-api.md](liftosaur-api.md) is confirmed against a live account. Watch-side
-assumptions still depend on the open questions in
-[zepp-capabilities.md](zepp-capabilities.md).
+Implemented and unit-tested against recorded and live Running a Workout API contracts (Protocol v3).

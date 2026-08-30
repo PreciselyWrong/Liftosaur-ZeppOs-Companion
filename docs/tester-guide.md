@@ -47,7 +47,7 @@ The application downloads to your phone and transfers to the watch over Bluetoot
 
 ## Step 3: settings and Liftosaur account (optional)
 
-**You can skip this step.** With no API key, Lifto Companion runs in **demo mode** on sample workouts: every screen, timer, note and transition works, and nothing is saved anywhere. You do not need a Liftosaur subscription to test the interface.
+**You can skip this step.** With no API key, Lifto Companion runs in **demo mode** on sample workouts: every screen, timer, note, and transition works, and nothing is saved to any cloud account. You do not need a Liftosaur subscription to test the watch interface.
 
 To sync with your own Liftosaur account, you need a Liftosaur Premium subscription (the cloud API is a Premium feature). Configure it **right after installing**:
 
@@ -63,9 +63,17 @@ To sync with your own Liftosaur account, you need a Liftosaur Premium subscripti
 2. Open the **Mini Program** tab.
 3. Next to **Lifto Companion**, tap **Settings**.
 4. Paste your key into the API Key box.
-5. Optional: adjust your default rest timers for standard sets, supersets and warmups.
+5. Optional: customize your default rest timers for standard sets, supersets, and warmups.
 
-The settings save automatically.
+The settings save automatically on your phone.
+
+### How Direct Sync works
+
+Once configured, the watch connects directly to Liftosaur Cloud:
+- **Live Sync**: Workouts start on Liftosaur Cloud. Completed sets are synced in real time.
+- **Cross-device Continuity**: You can view or continue the same workout on your watch or in the official Liftosaur phone app.
+- **Automatic Progression**: Finishing on the watch automatically updates your history, progression rules, 1RM records, and advances to the next scheduled day.
+- **Special Sets**: For timed sets (countdown timer) or custom prompted variables, the watch prompts you to log that set on the phone app; the watch then automatically adopts the result.
 
 ## Step 4: start the application
 

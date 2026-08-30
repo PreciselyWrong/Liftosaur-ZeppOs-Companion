@@ -1,6 +1,6 @@
 {
   "name": "liftosaur-zepp-os",
-  "version": "0.3.1",
+  "version": "0.3.2",
   "releaseStage": "beta",
   "description": "Standalone Liftosaur Cloud client for Zepp OS watches",
   "main": "app.js",

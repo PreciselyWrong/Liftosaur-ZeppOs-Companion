@@ -27,28 +27,20 @@ function loadSettings(initial = {}) {
   return { state: context.state, writes };
 }
 
-test('prefills missing rest timer settings with persisted defaults', () => {
+test('loads only the Liftosaur API key without creating duplicate timer settings', () => {
   const { state, writes } = loadSettings();
 
-  assert.equal(state.defaultStandardRest, '120');
-  assert.equal(state.defaultWarmupRest, '60');
-  assert.equal(state.defaultSupersetRest, '90');
-  assert.deepEqual(writes, [
-    ['defaultStandardRest', '120'],
-    ['defaultWarmupRest', '60'],
-    ['defaultSupersetRest', '90'],
-  ]);
+  assert.deepEqual(state, { apiKey: '' });
+  assert.deepEqual(writes, []);
 });
 
-test('keeps saved rest timer settings including Off', () => {
-  const { state, writes } = loadSettings({
-    defaultStandardRest: '180',
-    defaultWarmupRest: '0',
-    defaultSupersetRest: '30',
-  });
+test('the settings page explains that Liftosaur owns rest defaults', () => {
+  assert.match(source, /Rest timers follow your Liftosaur settings/);
+  assert.doesNotMatch(source, /defaultStandardRest|defaultWarmupRest|defaultSupersetRest/);
+});
 
-  assert.equal(state.defaultStandardRest, '180');
-  assert.equal(state.defaultWarmupRest, '0');
-  assert.equal(state.defaultSupersetRest, '30');
+test('keeps a stored API key without writing it during load', () => {
+  const { state, writes } = loadSettings({ apiKey: 'lftsk_example' });
+  assert.equal(state.apiKey, 'lftsk_example');
   assert.deepEqual(writes, []);
 });

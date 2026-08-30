@@ -9,7 +9,7 @@
  * watch it is backed by `@zos/storage`.
  */
 
-const SNAPSHOT_VERSION = 1;
+const SNAPSHOT_VERSION = 2;
 
 export function createMemoryStorageAdapter() {
   let memoryData = null;
@@ -82,12 +82,17 @@ export function createSessionStore(adapter) {
 
       try {
         const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        if (!parsed || parsed.version !== SNAPSHOT_VERSION) return null;
+        if (!parsed || (parsed.version !== 1 && parsed.version !== SNAPSHOT_VERSION)) return null;
         if (!parsed.plan || !Array.isArray(parsed.journal)) return null;
         return {
           plan: parsed.plan,
           journal: parsed.journal,
           startedAt: parsed.startedAt ?? null,
+          sync: parsed.version === 1
+            ? { mode: 'LEGACY' }
+            : (parsed.sync || {
+                mode: parsed.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY',
+              }),
         };
       } catch (err) {
         console.log('[session-store] snapshot unreadable:', err?.message || String(err));
@@ -95,10 +100,16 @@ export function createSessionStore(adapter) {
       }
     },
 
-    save({ plan, journal, startedAt = null }) {
+    save({ plan, journal, startedAt = null, sync = null }) {
       if (!plan || !Array.isArray(journal)) return false;
       try {
-        adapter.write(JSON.stringify({ version: SNAPSHOT_VERSION, plan, journal, startedAt }));
+        adapter.write(JSON.stringify({
+          version: SNAPSHOT_VERSION,
+          plan,
+          journal,
+          startedAt,
+          sync: sync || { mode: plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY' },
+        }));
         return true;
       } catch (err) {
         console.log('[session-store] write failed:', err?.message || String(err));

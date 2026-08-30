@@ -11,7 +11,7 @@ installation with no API key does by default.
 | App ID | 1123411 |
 | App name | Lifto Companion |
 | Vendor | Sni3rs |
-| Version | 0.3.1, code 22 |
+| Version | 0.3.2, code 23 |
 | Category | Health and fitness |
 | Privacy policy URL | published `docs/privacy-policy.md` (raw or Pages URL of the public repository) |
 | Support | issue tracker of the public repository |
@@ -22,26 +22,22 @@ the non-affiliation disclaimer is repeated in the listing.
 
 ## Short description (en-US)
 
-Track your Liftosaur workouts from your wrist, set by set, with automatic rest timers.
+Track your Liftosaur workouts directly from your wrist, set by set, with live cloud sync and rest timers.
 
 ## Full description (en-US)
 
 Lifto Companion is an unofficial, open-source client for Liftosaur, the workout tracking
-service. Pick your program, week and day on the watch, log every set as you do it, and let
-Liftosaur compute the progression exactly as it would in its own app.
+service. Connect directly to Liftosaur Cloud with shared active-workout synchronization.
 
-- Your program, your weeks, your days, read live from your Liftosaur account.
-- One tap per set, with the prescribed reps and weight on screen.
-- Automatic rest timer with a vibration when it ends, including your own default timers for
-  standard sets, warmups and supersets.
-- Live heart rate during the session.
-- Crash proof: the session is written to the watch after every set, so an interrupted
-  workout resumes on the same set.
-- The finished workout is written straight back to your Liftosaur history, with the
-  progression computed by Liftosaur itself.
+- Direct Cloud sync: preview your next scheduled workout or pick any program, week, and day.
+- Seamless cross-device continuity: continue the same active session on watch or in the official Liftosaur phone app.
+- Full prescriptions: warmups, calculated plate combinations, rep targets, weights, and supersets pre-resolved from your account.
+- One tap per set, with live heart rate and Liftosaur rest timers with haptic vibration alerts.
+- Crash-proof durability: the plan and journal are stored locally on the watch after every set, resuming seamlessly if interrupted.
+- Atomic finish: finishing on the watch automatically updates your history, progression rules, 1RM records, and advances to the next workout day.
 
-Try it without an account: with no API key the application runs in demo mode on a sample
-program, so you can see exactly how it works before subscribing to anything.
+Try it without an account: with no API key the application runs in demo mode on sample
+programs, so you can test the full interface before connecting an account.
 
 Normal use requires a Liftosaur account with an active Premium subscription and an API key,
 which you paste once into the settings page in the Zepp app. The key stays on your phone: it
@@ -52,7 +48,7 @@ Liftosaur or its author.
 
 ## Language
 
-The beta interface and store listing are available in English only.
+The interface and store listing are available in English only.
 
 ## Assets
 
@@ -61,16 +57,12 @@ The beta interface and store listing are available in English only.
 | Icon (`icon.png`, round and square variants) | present in `assets/common.r` and `assets/square.s` |
 | Store screenshots | **TODO**, capture from a real Amazfit Active 2 and an Amazfit Bip 6 |
 
-Screenshots to capture, in this order, because they tell the story a reviewer needs:
-
-1. Program picker
-2. Week and day picker
-3. Active set screen with the prescription visible
-4. Rest timer running
-5. Session finished with the summary
-
-The console imposes its own dimensions and count per screen shape. Read the form before
-capturing, `docs/screenshots/` holds the working copies.
+Screenshots to capture:
+1. Home screen / scheduled next workout preview
+2. Program and week/day selection
+3. Active set screen with prescription, plates, and heart rate
+4. Rest timer countdown with overtime
+5. Session summary and completion
 
 ## Notes for the reviewer
 
@@ -78,8 +70,8 @@ Paste this into the review notes field. It needs no credentials.
 
 > **No account is needed to review this application.**
 >
-> It is a client for the third party service Liftosaur (https://www.liftosaur.com), but an
-> installation with no API key runs in **demo mode**: it serves a built-in sample program
+> It is a client for the third-party service Liftosaur (https://www.liftosaur.com), but an
+> installation with no API key runs in **demo mode**: it serves built-in sample programs
 > and lets you run a complete workout, so the whole application can be reviewed without
 > signing up for anything.
 >
@@ -87,36 +79,27 @@ Paste this into the review notes field. It needs no credentials.
 > settings page in the Zepp app shows "Status: Demo mode" to confirm it. Nothing is sent to
 > any server in this mode, and nothing is saved to any account.
 >
-> A real Liftosaur account with an active Premium subscription is required only for the
-> normal use of the application, because the public Liftosaur API is a Premium feature.
-> This is stated in the description.
+> A real Liftosaur account with an active Premium subscription is required only for normal
+> use, because the public Liftosaur API is a Premium feature.
 >
-> Privacy: the API key, when a user enters one, is stored only in the phone side settings
-> storage and is sent only to https://www.liftosaur.com as an Authorization header. It is
-> never transmitted to the watch. Heart rate is displayed on the watch during a session and
-> is never transmitted anywhere. Full details: <privacy policy URL>.
+> Privacy: the API key, when a user enters one, is stored only in phone settings storage and
+> is sent only to https://www.liftosaur.com as an Authorization header. It is never transmitted
+> to the watch. An anonymous installation ID is stored locally to coordinate cloud sync. Heart
+> rate is displayed on the watch during a session and is never transmitted anywhere.
 
 ## Demo mode
 
 Implemented by [`app-side/dummy-program-service.js`](../app-side/dummy-program-service.js)
 and selected in [`app-side/index.js`](../app-side/index.js). It engages when the stored API
-key is empty, or is literally `dummy` or `demo`. It serves three sample programs, a full
-day plan and a fake finish response, and performs no HTTP request at all.
-
-This is what a reviewer, and any tester without a Premium subscription, sees. It is also
-what the store screenshots are captured from, so no personal workout data ends up in the
-listing.
-
-Before submitting, run one full demo session end to end on a real watch: pick a program,
-pick a week and a day, complete every set, finish. The reviewer's first run must not be the
-first run ever.
+key is empty, or is literally `dummy` or `demo`. It serves sample programs, a full
+day plan and a simulated finish response, performing no HTTP requests.
 
 ## Submission checklist
 
 - [ ] Demo mode run end to end on a real watch, no key stored
 - [ ] Privacy policy published at a public URL
 - [ ] Screenshots captured for every targeted screen shape
-- [x] Descriptions written for every declared locale
+- [x] Descriptions written for declared locale
 - [ ] `version.code` higher than the last submitted version
 - [ ] `npm test` green
 - [ ] `/public-release-audit` passed, no credentials in the repository
