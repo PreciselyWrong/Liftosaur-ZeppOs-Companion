@@ -1,18 +1,17 @@
-# Device ↔ Side Service protocol
+# Device <-> Side Service Protocol
 
-Version **2**. Implemented by [`shared/protocol.js`](../../shared/protocol.js).
+Version **3**. Implemented by [`shared/protocol.js`](../shared/protocol.js).
 
-A version 1 envelope is rejected, not coerced: the two versions disagree about who chooses
-the workout, so silently accepting an old message would reintroduce the guessing that
-version 2 exists to remove.
+Version 3 adds the shared running-workout lifecycle. Version 2 is an intentionally rejected legacy
+protocol: the two versions disagree about workout lifecycle ownership and data contracts.
 
 ## Envelope
 
 ```json
 {
-  "protocolVersion": 2,
+  "protocolVersion": 3,
   "messageId": "m3k9x1-a7b2c9d",
-  "type": "GET_DAY_PLAN",
+  "type": "GET_WORKOUT_NEXT",
   "sessionId": null,
   "replyToId": null,
   "payload": {}
@@ -23,57 +22,77 @@ Every response carries `replyToId` set to the request's `messageId`.
 
 ## Messages
 
-| Request | Payload | Response | Payload |
-| --- | --- | --- | --- |
-| `PING` | anything | `PONG` | `{serverTime, echo}` |
-| `LIST_PROGRAMS` | - | `PROGRAMS_DATA` | `{programs: [{id, name, isCurrent}]}` |
-| `GET_PROGRAM_OUTLINE` | `{programId}` | `PROGRAM_OUTLINE_DATA` | `{programId, programName, programVersion, totalWeeks, totalDays, weeks[], lastWorkout}` |
-| `GET_DAY_PLAN` | `{programId, week, day}` | `DAY_PLAN_DATA` | `{programId, programName, programVersion, week, dayInWeek, dayName, unit, exercises[], outlineNameMatches}` |
-| `FINISH_WORKOUT` | `{programId, programVersion, week, day, completedSets[], startedAt, durationSeconds}` | `FINISH_WORKOUT_RESULT` | `{status, historyId, alreadyExisted, programUpdated}` |
-| `ABANDON_WORKOUT` | `{dayName, startedAt, abandonedAt}` | `ABANDON_WORKOUT_RESPONSE` | `{abandoned: true}` |
+| Request | Payload | Response | Payload | Purpose |
+| --- | --- | --- | --- | --- |
+| `PING` | anything | `PONG` | `{ serverTime, echo }` | Link heartbeat and time check |
+| `GET_SETTINGS` | - | `SETTINGS_DATA` | `{ units, timers: { warmup, workout, superset } }` | Retrieve user default units and rest timers |
+| `LIST_PROGRAMS` | - | `PROGRAMS_DATA` | `{ programs: [{ id, name, isCurrent }], serviceMode }` | List user programs from catalog |
+| `GET_PROGRAM_OUTLINE` | `{ programId }` | `PROGRAM_OUTLINE_DATA` | `{ programId, programName, programVersion, totalWeeks, totalDays, weeks[], lastWorkout }` | Header-based program outline |
+| `GET_WORKOUT_NEXT` | `{ week?, dayInWeek?, programId? }` | `WORKOUT_NEXT_DATA` | `{ workout }` | Preview next scheduled or selected day workout |
+| `GET_WORKOUT_CURRENT` | - | `WORKOUT_CURRENT_DATA` | `{ workout }` | Poll or resume active running workout |
+| `START_WORKOUT` | `{ programId?, week?, dayInWeek?, startTime }` | `START_WORKOUT_DATA` | `{ workout }` | Start active workout on Cloud with watch's real start time |
+| `SYNC_WORKOUT_SETS` | `{ sets: [{ entryId, setId, completed, append? }] }` | `SYNC_WORKOUT_SETS_RESULT` | `{ workout }` | Drain a batch of locally completed sets in order |
+| `FINISH_WORKOUT` | `{ startTime, endTime, intervals?, notes? }` | `FINISH_WORKOUT_RESULT` | `{ workout }` | Atomically finish workout, apply progression, update 1RM and `nextDay` |
+| `DISCARD_WORKOUT` | `{ startTime }` | `DISCARD_WORKOUT_RESULT` | `{ deleted: true }` | Explicitly discard active Cloud session |
+| `GET_DAY_PLAN` (legacy) | `{ programId, week, day }` | `DAY_PLAN_DATA` | `{ ... }` | Legacy playground day plan probe (demo mode only) |
+| `ABANDON_WORKOUT` (legacy) | `{ dayName, startedAt, abandonedAt }` | `ABANDON_WORKOUT_RESPONSE` | `{ abandoned: true }` | Local session discard (demo mode only) |
 
-The account is written **once**, at finish. Nothing reaches Liftosaur before that, so a
-session in progress exists only on the watch, where it is stored after every set and
-survives the app being killed. `ABANDON_WORKOUT` is therefore purely local: there is no
-remote record to remove.
+---
 
-That is a deliberate reversal. Writing each set to `/history` as it happened did work, but
-a record created through the public API is a *finished* workout by construction - see
-[architecture.md](architecture.md) - so a live session showed up as an already-finished one.
-A clean history was worth more than server-side durability mid-session.
+## Direct Synchronization Semantics
+
+### Workout Discovery & Launch
+
+On launch in Cloud mode, the watch requests `GET_SETTINGS`, then `GET_WORKOUT_CURRENT`:
+- If `GET_WORKOUT_CURRENT` returns an active workout (`workout !== null`), the watch opens that shared session immediately.
+- Otherwise, the watch requests `GET_WORKOUT_NEXT`. It returns the official scheduled workout, displayed directly on the home screen without requiring history inference.
+- If the user selects a custom program, week, or day, `GET_WORKOUT_NEXT` is called with `{ programId, week, dayInWeek }` to preview that specific day.
+
+### Workout Start
+
+`START_WORKOUT` sends the watch's real timestamp as `startTime`. The Cloud creates the shared
+active workout, returning the initial server snapshot.
+
+### Set Synchronization
+
+1. Completing a set persists the event to local storage immediately and queues the set write.
+2. `SYNC_WORKOUT_SETS` submits queued sets in order via `POST /workout/sets`.
+3. Set writes are repeat-safe: retrying a set write does not create duplicate entries.
+4. When `SYNC_WORKOUT_SETS_RESULT` returns, the server response contains updated state including results of any exercise update scripts (`hasUpdateScript`).
+5. The watch adopts the server snapshot only when all local queued sets have been acknowledged.
+
+### Polling Interval Guard
+
+The watch polls `GET_WORKOUT_CURRENT` during active workouts to support cross-device continuation
+(e.g., set logged on phone app). Polling is throttled to no faster than once every 15 seconds.
+Server snapshots received via polling are adopted only when the local write queue is empty.
+
+### Finalisation & Discard
+
+- `FINISH_WORKOUT` sends `startTime`, `endTime`, and preserved pause `intervals`. The server atomically commits history, updates progression, recalculates 1RM, and advances the phone `nextDay` pointer.
+- A non-empty set queue blocks `FINISH_WORKOUT` until all sets are confirmed synced.
+- `DISCARD_WORKOUT` is issued only after explicit user confirmation, deleting the remote active workout via `DELETE /workout/current`.
+
+---
 
 ## Errors
 
-Any request may answer with `ERROR` carrying `{code, message}`.
+Any request may respond with `ERROR` carrying `{ code, message }`.
 
 | Code | Meaning |
 | --- | --- |
-| `INVALID_ENVELOPE` | Wrong protocol version, missing id, unknown type, or a missing required field |
-| `UNSUPPORTED_TYPE` | Known envelope, unhandled message type |
-| `NOT_CONFIGURED` | No Liftosaur API key on the phone |
-| `NO_API_KEY`, `NETWORK`, `BAD_JSON` | Raised by the API client |
-| `DAY_NOT_IN_PROGRAM` | The requested week and day are not in the program |
-| `DAY_MISMATCH` | The playground answered about a different day than the one requested |
-| `PLAN_UNREADABLE` | The playground returned no readable record |
-| `PROGRAM_UNAVAILABLE` | The program carries no source text |
-| `API_FAILED` | Anything else the API reported |
+| `INVALID_ENVELOPE` | Unsupported protocol version, missing messageId, unknown type, or malformed payload |
+| `UNSUPPORTED_TYPE` | Valid envelope, unhandled message type |
+| `NOT_CONFIGURED` | No Liftosaur API key configured in phone settings |
+| `API_FAILED` | Upstream Liftosaur API error (maps HTTP 400, 401, 403, 404, 409, 422) |
 
-A `DAY_MISMATCH` is reported rather than displayed as a workout: a plausible wrong workout
-is worse than a refusal.
+---
 
-## `FINISH_WORKOUT` statuses
+## Ordering and Durability
 
-| Status | History | Program | Meaning |
-| --- | --- | --- | --- |
-| `SAVED` | written | written when it changed | Normal path |
-| `HISTORY_SAVED_PROGRAM_CONFLICT` | written | untouched | The program changed on Liftosaur during the workout; the remote edit wins and the progression is not written |
-| `BASE_PROGRAM_UNAVAILABLE` | not written | untouched | The program text the plan was built from is gone, so the session cannot be replayed faithfully. The watch keeps the session and asks the user to pick the day again |
+The invariant order is: **persist locally -> render UI -> sync across BLE / HTTP.**
 
-`FINISH_WORKOUT` requires `startedAt`. Concurrent attempts share one operation in the program
-service, and later retries search history by the exact session identity before any new write, so a retried message returns
-the first result instead of committing a second record.
-
-## Ordering
-
-Persist locally, render, then sync. A tap never waits on BLE or HTTP. The only blocking
-calls are the three explicit selection steps, each of which shows its own loading state.
+A user tap never blocks on BLE or HTTP. All active workout state (plan, journal, unacknowledged set
+queue, pause intervals, finish/discard intent) is written to durable watch storage before network
+transmission. If the watch crashes or reboots, local state is fully recovered and pending operations
+are safely resumed or retried.

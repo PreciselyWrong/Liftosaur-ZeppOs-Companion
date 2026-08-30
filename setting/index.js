@@ -237,7 +237,7 @@ AppSettingsPage({
           ].filter(Boolean)
         ),
 
-        // Default Rest Timers Card
+        // Rest Timers Info Card
         View(
           {
             style: {
@@ -267,7 +267,7 @@ AppSettingsPage({
                   textAlign: 'center',
                 },
               },
-              'DEFAULT REST TIMERS'
+              'REST TIMERS'
             ),
             Text(
               {
@@ -278,219 +278,10 @@ AppSettingsPage({
                   width: '100%',
                   fontSize: '16px',
                   color: '#4B5563',
-                  marginBottom: '14px',
                   textAlign: 'center',
                 },
               },
-              'Used when a program or exercise does not define an explicit timer (e.g. standard GZCLP T1/T2):'
-            ),
-            // Standard Rest Input & Presets
-            View(
-              {
-                style: {
-                  width: '100%',
-                  marginBottom: '16px',
-                },
-              },
-              [
-                TextInput({
-                  label: 'Standard Set Rest (seconds)',
-                  labelStyle: {
-                    color: '#111827',
-                    fontSize: '17px',
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    width: '100%',
-                  },
-                  placeholder: '120 (0 = Off)',
-                  value: this.state.defaultStandardRest || '120',
-                  settingsKey: 'defaultStandardRest',
-                  description: `Current: ${this.state.defaultStandardRest === '0' ? 'Off' : (this.state.defaultStandardRest || '120') + 's'}`,
-                  onChange: (val) => {
-                    const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
-                    this.state.defaultStandardRest = clean;
-                    props.settingsStorage.setItem('defaultStandardRest', clean);
-                  },
-                }),
-                View(
-                  {
-                    style: {
-                      display: 'flex',
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginTop: '6px',
-                      flexWrap: 'wrap',
-                    },
-                  },
-                  [
-                    Button({
-                      label: '60s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultStandardRest = '60'; props.settingsStorage.setItem('defaultStandardRest', '60'); },
-                    }),
-                    Button({
-                      label: '90s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultStandardRest = '90'; props.settingsStorage.setItem('defaultStandardRest', '90'); },
-                    }),
-                    Button({
-                      label: '120s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultStandardRest = '120'; props.settingsStorage.setItem('defaultStandardRest', '120'); },
-                    }),
-                    Button({
-                      label: '180s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultStandardRest = '180'; props.settingsStorage.setItem('defaultStandardRest', '180'); },
-                    }),
-                    Button({
-                      label: 'Off',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultStandardRest = '0'; props.settingsStorage.setItem('defaultStandardRest', '0'); },
-                    }),
-                  ]
-                ),
-              ]
-            ),
-
-            // Warmup Rest Input & Presets
-            View(
-              {
-                style: {
-                  width: '100%',
-                  marginBottom: '16px',
-                },
-              },
-              [
-                TextInput({
-                  label: 'Warmup Set Rest (seconds)',
-                  labelStyle: {
-                    color: '#111827',
-                    fontSize: '17px',
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    width: '100%',
-                  },
-                  placeholder: '60 (0 = Off)',
-                  value: this.state.defaultWarmupRest || '60',
-                  settingsKey: 'defaultWarmupRest',
-                  description: `Current: ${this.state.defaultWarmupRest === '0' ? 'Off' : (this.state.defaultWarmupRest || '60') + 's'}`,
-                  onChange: (val) => {
-                    const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
-                    this.state.defaultWarmupRest = clean;
-                    props.settingsStorage.setItem('defaultWarmupRest', clean);
-                  },
-                }),
-                View(
-                  {
-                    style: {
-                      display: 'flex',
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginTop: '6px',
-                      flexWrap: 'wrap',
-                    },
-                  },
-                  [
-                    Button({
-                      label: '30s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultWarmupRest = '30'; props.settingsStorage.setItem('defaultWarmupRest', '30'); },
-                    }),
-                    Button({
-                      label: '45s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultWarmupRest = '45'; props.settingsStorage.setItem('defaultWarmupRest', '45'); },
-                    }),
-                    Button({
-                      label: '60s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultWarmupRest = '60'; props.settingsStorage.setItem('defaultWarmupRest', '60'); },
-                    }),
-                    Button({
-                      label: '90s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultWarmupRest = '90'; props.settingsStorage.setItem('defaultWarmupRest', '90'); },
-                    }),
-                    Button({
-                      label: 'Off',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultWarmupRest = '0'; props.settingsStorage.setItem('defaultWarmupRest', '0'); },
-                    }),
-                  ]
-                ),
-              ]
-            ),
-
-            // Superset Rest Input & Presets
-            View(
-              {
-                style: {
-                  width: '100%',
-                },
-              },
-              [
-                TextInput({
-                  label: 'Superset Rest (seconds)',
-                  labelStyle: {
-                    color: '#111827',
-                    fontSize: '17px',
-                    fontWeight: 'bold',
-                    textAlign: 'center',
-                    width: '100%',
-                  },
-                  placeholder: '90 (0 = Off)',
-                  value: this.state.defaultSupersetRest || '90',
-                  settingsKey: 'defaultSupersetRest',
-                  description: `Current: ${this.state.defaultSupersetRest === '0' ? 'Off' : (this.state.defaultSupersetRest || '90') + 's'}`,
-                  onChange: (val) => {
-                    const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
-                    this.state.defaultSupersetRest = clean;
-                    props.settingsStorage.setItem('defaultSupersetRest', clean);
-                  },
-                }),
-                View(
-                  {
-                    style: {
-                      display: 'flex',
-                      flexDirection: 'row',
-                      justifyContent: 'center',
-                      gap: '6px',
-                      marginTop: '6px',
-                      flexWrap: 'wrap',
-                    },
-                  },
-                  [
-                    Button({
-                      label: '30s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultSupersetRest = '30'; props.settingsStorage.setItem('defaultSupersetRest', '30'); },
-                    }),
-                    Button({
-                      label: '60s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultSupersetRest = '60'; props.settingsStorage.setItem('defaultSupersetRest', '60'); },
-                    }),
-                    Button({
-                      label: '90s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultSupersetRest = '90'; props.settingsStorage.setItem('defaultSupersetRest', '90'); },
-                    }),
-                    Button({
-                      label: '120s',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#EDE9FE', color: '#6D28D9', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultSupersetRest = '120'; props.settingsStorage.setItem('defaultSupersetRest', '120'); },
-                    }),
-                    Button({
-                      label: 'Off',
-                      style: { fontSize: '17px', padding: '6px 10px', backgroundColor: '#F3F4F6', color: '#4B5563', borderRadius: '6px' },
-                      onClick: () => { this.state.defaultSupersetRest = '0'; props.settingsStorage.setItem('defaultSupersetRest', '0'); },
-                    }),
-                  ]
-                ),
-              ]
+              'Rest timers follow your Liftosaur settings.'
             ),
           ]
         ),
@@ -561,30 +352,5 @@ AppSettingsPage({
     } else {
       this.state.apiKey = '';
     }
-
-    const parseRest = (key, defaultVal) => {
-      const item = props.settingsStorage.getItem(key);
-      if (item === undefined || item === null) {
-        props.settingsStorage.setItem(key, defaultVal);
-        return defaultVal;
-      }
-      if (typeof item === 'string') {
-        try {
-          const parsed = JSON.parse(item);
-          return typeof parsed === 'string' || typeof parsed === 'number'
-            ? String(parsed)
-            : String(parsed?.value ?? defaultVal);
-        } catch (e) {
-          return item;
-        }
-      } else if (typeof item === 'object' && item !== null) {
-        return String(item.value ?? defaultVal);
-      }
-      return defaultVal;
-    };
-
-    this.state.defaultStandardRest = parseRest('defaultStandardRest', '120');
-    this.state.defaultWarmupRest = parseRest('defaultWarmupRest', '60');
-    this.state.defaultSupersetRest = parseRest('defaultSupersetRest', '90');
   },
 });

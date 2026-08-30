@@ -1,4 +1,4 @@
-import test from 'node:test';
+import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import {
@@ -11,7 +11,7 @@ import {
   validateEnvelope,
 } from '../shared/protocol.js';
 
-test('createMessage builds valid v2 envelope', () => {
+test('createMessage builds valid v3 envelope', () => {
   const msg = createMessage({
     type: MESSAGE_TYPES.PING,
     payload: { pingTime: 12345 },
@@ -24,7 +24,6 @@ test('createMessage builds valid v2 envelope', () => {
   assert.equal(msg.sessionId, null);
   assert.deepEqual(msg.payload, { pingTime: 12345 });
 });
-
 test('validateEnvelope accepts valid message and rejects invalid version or missing fields', () => {
   const valid = createMessage({ type: MESSAGE_TYPES.PING });
   assert.equal(validateEnvelope(valid).valid, true);
@@ -32,10 +31,9 @@ test('validateEnvelope accepts valid message and rejects invalid version or miss
   assert.equal(validateEnvelope(null).valid, false);
   assert.equal(validateEnvelope({}).valid, false);
   assert.equal(validateEnvelope({ protocolVersion: 1, messageId: '1', type: 'PING' }).valid, false);
-  assert.equal(validateEnvelope({ protocolVersion: 2, messageId: '', type: 'PING' }).valid, false);
-  assert.equal(validateEnvelope({ protocolVersion: 2, messageId: '1', type: 'UNKNOWN_TYPE' }).valid, false);
+  assert.equal(validateEnvelope({ protocolVersion: 3, messageId: '', type: 'PING' }).valid, false);
+  assert.equal(validateEnvelope({ protocolVersion: 3, messageId: '1', type: 'UNKNOWN_TYPE' }).valid, false);
 });
-
 test('parseMessage parses JSON and validates envelope', () => {
   const valid = createMessage({ type: MESSAGE_TYPES.PING, payload: { test: true } });
   const serialized = JSON.stringify(valid);
@@ -48,7 +46,6 @@ test('parseMessage parses JSON and validates envelope', () => {
   const invalidJson = parseMessage('not json');
   assert.equal(invalidJson.valid, false);
 });
-
 test('createPong responds with PONG echoing messageId', () => {
   const ping = createMessage({ type: MESSAGE_TYPES.PING, messageId: 'ping-123' });
   const pong = createPong(ping, { receivedAt: 999 });
@@ -58,7 +55,6 @@ test('createPong responds with PONG echoing messageId', () => {
   assert.equal(pong.replyToId, 'ping-123');
   assert.deepEqual(pong.payload, { receivedAt: 999 });
 });
-
 test('createError creates structured redacted error response', () => {
   const ping = createMessage({ type: MESSAGE_TYPES.PING, messageId: 'ping-123' });
   const errorMsg = createError(ping, 'INVALID_REQUEST', 'Request failed');
@@ -68,3 +64,29 @@ test('createError creates structured redacted error response', () => {
   assert.equal(errorMsg.payload.code, 'INVALID_REQUEST');
   assert.equal(errorMsg.payload.message, 'Request failed');
 });
+
+describe('Direct Workout Protocol Pairs', () => {
+  test('supports new direct workout synchronization message pairs', () => {
+    const expectedPairs = [
+      ['GET_WORKOUT_NEXT', 'WORKOUT_NEXT_DATA'],
+      ['GET_WORKOUT_CURRENT', 'WORKOUT_CURRENT_DATA'],
+      ['START_WORKOUT', 'START_WORKOUT_DATA'],
+      ['SYNC_WORKOUT_SETS', 'SYNC_WORKOUT_SETS_RESULT'],
+      ['GET_SETTINGS', 'SETTINGS_DATA'],
+      ['DISCARD_WORKOUT', 'DISCARD_WORKOUT_RESULT'],
+    ];
+
+    for (const [reqType, resType] of expectedPairs) {
+      assert.ok(MESSAGE_TYPES[reqType], `Missing request type ${reqType}`);
+      assert.ok(MESSAGE_TYPES[resType], `Missing response type ${resType}`);
+
+      const req = createMessage({ type: MESSAGE_TYPES[reqType], payload: { test: true } });
+      assert.equal(validateEnvelope(req).valid, true, `Validation failed for ${reqType}`);
+
+      const res = createMessage({ type: MESSAGE_TYPES[resType], replyToId: req.messageId, payload: { ok: true } });
+      assert.equal(validateEnvelope(res).valid, true, `Validation failed for ${resType}`);
+    }
+  });
+});
+// This table is intentionally exhaustive so every request has a response pair.
+// Adding a protocol message without its pair must fail this test.

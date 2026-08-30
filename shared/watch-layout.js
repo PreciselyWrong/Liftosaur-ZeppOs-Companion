@@ -51,7 +51,7 @@ export const ACTIVE_SET_LAYOUT = Object.freeze({
 });
 
 export function shouldShowRpe(set) {
-  return set?.targetRpe !== null && set?.targetRpe !== undefined;
+  return Boolean(set?.logRpe) || (set?.targetRpe !== null && set?.targetRpe !== undefined);
 }
 
 export function activeSetLayout(set) {

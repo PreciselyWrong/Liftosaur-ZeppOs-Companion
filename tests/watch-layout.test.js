@@ -315,6 +315,10 @@ test('RPE is shown only when the current set asks for it', () => {
   assert.equal(shouldShowRpe({}), false);
 });
 
+test('RPE is shown when Liftosaur requires logging without a target', () => {
+  assert.equal(activeSetLayout({ targetRpe: null, logRpe: true }).showRpe, true);
+});
+
 test('sets without RPE get two larger controls and a larger action', () => {
   const compact = activeSetLayout({ targetRpe: null });
   assert.equal(compact.showRpe, false);
@@ -342,7 +346,8 @@ test('discarding a restored workout reloads programs when no outline is in memor
 test('a restored finished workout resumes saving instead of becoming dismissible', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
 
-  assert.match(source, /if \(restoredState === SESSION_STATES\.FINISHED\) submitWorkout\(\)/);
+  assert.match(source, /directSync\.finishRequestedAt \|\| restoredState === SESSION_STATES\.FINISHED/);
+  assert.match(source, /submitWorkout\(\)/);
   assert.match(source, /const isSending = status\.status === 'SENDING'/);
   assert.match(source, /if \(!isSending\)[\s\S]*text: canLeave \? 'Done' : 'Discard'/);
 });

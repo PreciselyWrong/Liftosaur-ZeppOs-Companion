@@ -35,13 +35,23 @@ export function createLiftosaurApiClient({
   apiKey,
   baseUrl = 'https://www.liftosaur.com/api/v1',
   fetcher = typeof fetch !== 'undefined' ? fetch : null,
+  deviceId = null,
+  clientName = null,
 } = {}) {
-  async function request(endpoint, { method = 'GET', body = null } = {}) {
+  async function request(endpoint, { method = 'GET', body = null, requireIdentity = false } = {}) {
     if (!fetcher) {
       throw new LiftosaurApiError('No HTTP fetcher available', { status: 0, endpoint });
     }
     if (!apiKey) {
       throw new LiftosaurApiError('No API key configured', { status: 401, endpoint, code: 'NO_API_KEY' });
+    }
+    if (requireIdentity) {
+      if (!deviceId) {
+        throw new LiftosaurApiError('No device ID configured', { status: 400, endpoint, code: 'NO_DEVICE_ID' });
+      }
+      if (!clientName) {
+        throw new LiftosaurApiError('No client name configured', { status: 400, endpoint, code: 'NO_CLIENT_NAME' });
+      }
     }
 
     const headers = {
@@ -49,6 +59,10 @@ export function createLiftosaurApiClient({
       'Content-Type': 'application/json',
       Authorization: `Bearer ${apiKey}`,
     };
+    if (requireIdentity) {
+      headers['X-Liftosaur-Device-Id'] = deviceId;
+      headers['X-Liftosaur-Client'] = clientName;
+    }
 
     let response;
     try {
@@ -181,6 +195,76 @@ export function createLiftosaurApiClient({
     /** DELETE /history/:id -> { deleted: true } */
     async deleteHistoryRecord(id) {
       return request(`/history/${encodeURIComponent(id)}`, { method: 'DELETE' });
+    },
+
+    /** GET /workout/next -> { workout } */
+    async getNextWorkout({ programId = null, week = null, dayInWeek = null } = {}) {
+      const params = [];
+      if (programId !== null && programId !== undefined) params.push(`programId=${encodeURIComponent(programId)}`);
+      if (week !== null && week !== undefined) params.push(`week=${encodeURIComponent(week)}`);
+      if (dayInWeek !== null && dayInWeek !== undefined) params.push(`dayInWeek=${encodeURIComponent(dayInWeek)}`);
+      const query = params.length > 0 ? `?${params.join('&')}` : '';
+      return request(`/workout/next${query}`);
+    },
+
+    /** POST /workout/start -> { workout } */
+    async startRunningWorkout({ programId = null, week = null, dayInWeek = null, startTime = null } = {}) {
+      const body = {};
+      if (programId !== null && programId !== undefined) body.programId = programId;
+      if (week !== null && week !== undefined) body.week = week;
+      if (dayInWeek !== null && dayInWeek !== undefined) body.dayInWeek = dayInWeek;
+      if (startTime !== null && startTime !== undefined) body.startTime = startTime;
+      return request('/workout/start', {
+        method: 'POST',
+        body,
+        requireIdentity: true,
+      });
+    },
+
+    /** GET /workout/current -> { workout } */
+    async getCurrentWorkout() {
+      return request('/workout/current');
+    },
+
+    /** POST /workout/set -> { workout } */
+    async logWorkoutSet(payload) {
+      return request('/workout/set', {
+        method: 'POST',
+        body: payload,
+        requireIdentity: true,
+      });
+    },
+
+    /** POST /workout/sets -> { workout } */
+    async logWorkoutSets(sets) {
+      return request('/workout/sets', {
+        method: 'POST',
+        body: { sets },
+        requireIdentity: true,
+      });
+    },
+
+    /** POST /workout/finish -> { workout } */
+    async finishRunningWorkout(payload) {
+      return request('/workout/finish', {
+        method: 'POST',
+        body: payload,
+        requireIdentity: true,
+      });
+    },
+
+    /** DELETE /workout/current -> { deleted: true } */
+    async discardCurrentWorkout(startTime) {
+      return request('/workout/current', {
+        method: 'DELETE',
+        body: { startTime },
+        requireIdentity: true,
+      });
+    },
+
+    /** GET /settings -> { units, timers: { warmup, workout, superset } } */
+    async getSettings() {
+      return request('/settings');
     },
   };
 }

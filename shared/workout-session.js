@@ -49,6 +49,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     warmups.forEach((w, wIdx) => {
       sets.push({
         index: sets.length + 1,
+        setId: w.setId ?? null,
+        serverIndex: w.serverIndex !== undefined ? w.serverIndex : (w.index !== undefined ? w.index : null),
         isWarmup: true,
         warmupIndex: wIdx + 1,
         totalWarmups: warmups.length,
@@ -58,10 +60,17 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         targetRepsMax: w.targetRepsMax ?? null,
         targetWeight: w.targetWeight ?? null,
         targetWeightPercent: w.targetWeightPercent ?? null,
-        targetRpe: w.targetRpe ?? null,
-        restSeconds: Number.isFinite(w.restSeconds) ? w.restSeconds : null,
-        isAmrap: Boolean(w.isAmrap),
+        originalWeight: w.originalWeight ?? null,
+        plates: w.plates ?? null,
+        targetRpe: w.targetRpe ?? w.rpe ?? null,
+        rpe: w.rpe ?? w.targetRpe ?? null,
+        logRpe: Boolean(w.logRpe),
         askWeight: Boolean(w.askWeight),
+        isUnilateral: Boolean(w.isUnilateral),
+        restSeconds: Number.isFinite(w.restSeconds) ? w.restSeconds : (Number.isFinite(w.timer) ? w.timer : null),
+        setTimer: w.setTimer ?? null,
+        completed: w.completed ?? null,
+        isAmrap: Boolean(w.isAmrap),
         unit: w.unit || unit,
       });
     });
@@ -69,6 +78,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     workSets.forEach((s, sIdx) => {
       sets.push({
         index: sets.length + 1,
+        setId: s.setId ?? null,
+        serverIndex: s.serverIndex !== undefined ? s.serverIndex : (s.index !== undefined ? s.index : null),
         isWarmup: false,
         warmupIndex: null,
         totalWarmups: warmups.length,
@@ -78,22 +89,34 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         targetRepsMax: s.targetRepsMax ?? null,
         targetWeight: s.targetWeight ?? null,
         targetWeightPercent: null,
-        targetRpe: s.targetRpe ?? null,
-        restSeconds: Number.isFinite(s.restSeconds) ? s.restSeconds : null,
-        isAmrap: Boolean(s.isAmrap),
+        originalWeight: s.originalWeight ?? null,
+        plates: s.plates ?? null,
+        targetRpe: s.targetRpe ?? s.rpe ?? null,
+        rpe: s.rpe ?? s.targetRpe ?? null,
+        logRpe: Boolean(s.logRpe),
         askWeight: Boolean(s.askWeight),
+        isUnilateral: Boolean(s.isUnilateral),
+        restSeconds: Number.isFinite(s.restSeconds) ? s.restSeconds : (Number.isFinite(s.timer) ? s.timer : null),
+        setTimer: s.setTimer ?? null,
+        completed: s.completed ?? null,
+        isAmrap: Boolean(s.isAmrap),
         unit: s.unit || unit,
       });
     });
 
     return {
       index: exercise.index ?? index + 1,
-      id: exercise.id || `ex-${index + 1}`,
+      id: exercise.id || exercise.entryId || `ex-${index + 1}`,
+      entryId: exercise.entryId ?? (exercise.id && !exercise.id.startsWith('ex-') ? exercise.id : null),
+      exerciseId: exercise.exerciseId ?? null,
       name: exercise.name || `Exercise ${index + 1}`,
       equipment: exercise.equipment || null,
       loadingEquipment: exercise.loadingEquipment || null,
       supersetGroup: exercise.supersetGroup || exercise.supersetTag || null,
       notes: exercise.notes || null,
+      description: exercise.description || null,
+      hasUpdateScript: Boolean(exercise.hasUpdateScript),
+      promptedVars: exercise.promptedVars ?? null,
       warmupSetsCount: warmups.length,
       workSetsCount: workSets.length,
       sets,
@@ -117,8 +140,85 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     completedSets: [],
   }));
 
+  if (plan?.isCurrent && exercises.length > 0) {
+    let completionOrder = 0;
+    for (let exerciseIdx = 0; exerciseIdx < exercises.length; exerciseIdx++) {
+      const exercise = exercises[exerciseIdx];
+      const prog = progress[exerciseIdx];
+      for (let setIdx = 0; setIdx < exercise.sets.length; setIdx++) {
+        const target = exercise.sets[setIdx];
+        if (!target.completed) break;
+        const completed = target.completed;
+        prog.completedSets.push({
+          exerciseIndex: exercise.index,
+          exerciseArrayIndex: exerciseIdx,
+          exerciseName: exercise.name,
+          entryId: exercise.entryId ?? null,
+          exerciseId: exercise.exerciseId ?? null,
+          setId: target.setId ?? null,
+          setIndex: setIdx + 1,
+          isWarmup: Boolean(target.isWarmup),
+          workSetIndex: target.workSetIndex ?? null,
+          warmupIndex: target.warmupIndex ?? null,
+          weight: completed.weight ?? null,
+          reps: completed.reps ?? null,
+          rpe: completed.rpe ?? null,
+          repsLeft: completed.repsLeft ?? null,
+          setTimer: completed.setTimer ?? null,
+          userVars: completed.userVars ?? null,
+          unit: completed.unit || target.unit || unit,
+          completedAt: completionOrder++,
+        });
+      }
+      const nextSetIdx = prog.completedSets.length;
+      prog.currentSetIndex = nextSetIdx;
+      if (nextSetIdx < exercise.sets.length) {
+        const next = exercise.sets[nextSetIdx];
+        prog.currentWeight = next.targetWeight;
+        prog.currentReps = next.targetReps;
+        prog.currentRpe = next.targetRpe;
+      }
+    }
+
+    workoutStartTime = Number.isFinite(plan.startTime) ? plan.startTime : null;
+    const firstPending = findServerResumeExerciseIndex();
+    if (firstPending === -1) {
+      state = SESSION_STATES.FINISHED;
+      currentExerciseIndex = Math.max(0, exercises.length - 1);
+    } else {
+      state = SESSION_STATES.ACTIVE_SET;
+      currentExerciseIndex = firstPending;
+    }
+  }
+
   function currentExercise() {
     return exercises[currentExerciseIndex] || null;
+  }
+
+  function findServerResumeExerciseIndex() {
+    const visitedGroups = new Set();
+    for (let index = 0; index < exercises.length; index++) {
+      const exercise = exercises[index];
+      if (progress[index].completedSets.length >= exercise.sets.length) continue;
+      if (!exercise.supersetGroup) return index;
+      if (visitedGroups.has(exercise.supersetGroup)) continue;
+      visitedGroups.add(exercise.supersetGroup);
+
+      const candidates = exercises
+        .map((candidate, candidateIndex) => ({ candidate, candidateIndex }))
+        .filter(({ candidate, candidateIndex }) =>
+          candidate.supersetGroup === exercise.supersetGroup &&
+          progress[candidateIndex].completedSets.length < candidate.sets.length
+        );
+      const fewestCompleted = Math.min(
+        ...candidates.map(({ candidateIndex }) => progress[candidateIndex].completedSets.length)
+      );
+      const next = candidates.find(
+        ({ candidateIndex }) => progress[candidateIndex].completedSets.length === fewestCompleted
+      );
+      if (next) return next.candidateIndex;
+    }
+    return -1;
   }
 
   function currentProgress() {
@@ -281,18 +381,35 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         const setIndex = prog.currentSetIndex;
         const target = exercise.sets[setIndex];
 
+        const payload = event.payload;
+        const completedWeight = payload?.weight !== undefined ? payload.weight : prog.currentWeight;
+        const completedReps = payload?.reps !== undefined ? payload.reps : prog.currentReps;
+        const completedRpe = payload?.rpe !== undefined ? payload.rpe : prog.currentRpe;
+        const entryId = payload?.entryId !== undefined ? payload.entryId : (exercise.entryId ?? null);
+        const setId = payload?.setId !== undefined ? payload.setId : (target?.setId ?? null);
+        const repsLeft = payload?.repsLeft !== undefined ? payload.repsLeft : null;
+        const setTimer = payload?.setTimer !== undefined ? payload.setTimer : null;
+        const userVars = payload?.userVars !== undefined ? payload.userVars : null;
+        const setUnit = payload?.unit || target?.unit || unit;
+
         prog.completedSets.push({
           exerciseIndex: exercise.index,
           exerciseArrayIndex: currentExerciseIndex,
           exerciseName: exercise.name,
+          entryId,
+          exerciseId: exercise.exerciseId ?? null,
+          setId,
           setIndex: setIndex + 1,
           isWarmup: Boolean(target?.isWarmup),
           workSetIndex: target?.workSetIndex ?? null,
           warmupIndex: target?.warmupIndex ?? null,
-          weight: prog.currentWeight,
-          reps: prog.currentReps,
-          rpe: prog.currentRpe,
-          unit,
+          weight: completedWeight,
+          reps: completedReps,
+          rpe: completedRpe,
+          repsLeft,
+          setTimer,
+          userVars,
+          unit: setUnit,
           completedAt: event.timestamp,
         });
 
@@ -471,12 +588,25 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
   function describeSet(exercise, prog, setIdx) {
     const target = exercise?.sets[setIdx] || null;
     return {
+      entryId: exercise?.entryId ?? null,
+      exerciseId: exercise?.exerciseId ?? null,
+      hasUpdateScript: Boolean(exercise?.hasUpdateScript),
+      promptedVars: exercise?.promptedVars ?? null,
+      setId: target?.setId ?? null,
+      serverIndex: target?.serverIndex ?? null,
       isWarmup: Boolean(target?.isWarmup),
       warmupIndex: target?.warmupIndex ?? null,
       totalWarmups: target?.totalWarmups ?? 0,
       workSetIndex: target?.workSetIndex ?? null,
       totalWorkSets: target?.totalWorkSets ?? exercise?.workSetsCount ?? 0,
       targetWeightPercent: target?.targetWeightPercent ?? null,
+      originalWeight: target?.originalWeight ?? null,
+      plates: target?.plates ?? null,
+      logRpe: Boolean(target?.logRpe),
+      askWeight: Boolean(target?.askWeight),
+      isUnilateral: Boolean(target?.isUnilateral),
+      setTimer: target?.setTimer ?? null,
+      completed: target?.completed ?? null,
       supersetGroup: exercise?.supersetGroup ?? null,
       weight: prog?.currentWeight ?? null,
       reps: prog?.currentReps ?? null,
@@ -557,6 +687,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         return {
           index: idx,
           id: ex.id,
+          entryId: ex.entryId ?? null,
+          exerciseId: ex.exerciseId ?? null,
           name: ex.name,
           supersetGroup: ex.supersetGroup,
           warmupSetsCount: ex.warmupSetsCount,
@@ -585,6 +717,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         programVersion: plan?.programVersion ?? null,
         elapsedSeconds,
         startedAt: effectiveStartTime,
+        endedAt: workoutEndTime,
         totalVolume,
         totalCompletedSetsCount: completed.length,
         totalExercises: exercises.length,
@@ -597,6 +730,7 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
           ...base,
           currentExerciseIndex: 0,
           exerciseId: null,
+          entryId: null,
           exerciseName: null,
           supersetGroup: null,
           totalSets: 0,
@@ -611,7 +745,8 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       return {
         ...base,
         currentExerciseIndex,
-        exerciseId: exercise.id,
+        exerciseId: exercise.exerciseId || exercise.id,
+        entryId: exercise.entryId ?? exercise.id,
         exerciseName: exercise.name,
         exerciseNotes: exercise.notes ?? null,
         loadingEquipment: exercise.loadingEquipment ?? null,
@@ -656,9 +791,33 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
       applyEvent({ type: EVENT_TYPES.ADJUST_RPE, payload: { delta }, timestamp });
     },
 
-    completeSet({ timestamp = Date.now() } = {}) {
+    completeSet({
+      timestamp = Date.now(),
+      repsLeft = null,
+      setTimer = null,
+      userVars = null,
+    } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
-      applyEvent({ type: EVENT_TYPES.COMPLETE_SET, timestamp });
+      const exercise = currentExercise();
+      const prog = currentProgress();
+      const setIndex = prog ? prog.currentSetIndex : 0;
+      const target = exercise?.sets[setIndex] || null;
+
+      const payload = {
+        exerciseIndex: exercise?.index ?? currentExerciseIndex + 1,
+        setIndex: setIndex + 1,
+        entryId: exercise?.entryId ?? null,
+        setId: target?.setId ?? null,
+        weight: prog?.currentWeight ?? null,
+        reps: prog?.currentReps ?? null,
+        rpe: prog?.currentRpe ?? null,
+        repsLeft,
+        setTimer,
+        userVars,
+        unit: target?.unit || unit,
+      };
+
+      applyEvent({ type: EVENT_TYPES.COMPLETE_SET, payload, timestamp });
     },
 
     pauseRest({ timestamp = Date.now() } = {}) {
@@ -712,8 +871,82 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
         }));
     },
 
+    /** Exact API payload writes for completed sets in completion order. */
+    getWorkoutSetWrites() {
+      return allCompletedSets()
+        .map(formatSetWrite)
+        .filter(Boolean);
+    },
+
+    /** The newest API set write payload, or null if none exist. */
+    getLastWorkoutSetWrite() {
+      const writes = allCompletedSets()
+        .map(formatSetWrite)
+        .filter(Boolean);
+      return writes.length > 0 ? writes[writes.length - 1] : null;
+    },
+
+    getWorkoutIntervals(endTime = workoutEndTime) {
+      const intervals = [];
+      let intervalStart = workoutStartTime;
+
+      for (const event of journal) {
+        if (event.type === EVENT_TYPES.START_WORKOUT) {
+          intervalStart = event.timestamp;
+        } else if (event.type === EVENT_TYPES.PAUSE_REST && intervalStart !== null) {
+          intervals.push([intervalStart, event.timestamp]);
+          intervalStart = null;
+        } else if (
+          (event.type === EVENT_TYPES.RESUME_REST || event.type === EVENT_TYPES.NEXT_SET) &&
+          intervalStart === null
+        ) {
+          intervalStart = event.timestamp;
+        }
+      }
+
+      if (intervalStart !== null && Number.isFinite(endTime)) {
+        intervals.push([intervalStart, endTime]);
+      }
+      return intervals;
+    },
+
     isAllCompleted: allSetsDone,
     getJournal: () => [...journal],
+  };
+}
+
+function formatSetWrite(set) {
+  if (!set || !set.setId) return null;
+
+  const completed = {};
+  if (set.reps !== null && set.reps !== undefined) {
+    completed.reps = set.reps;
+  }
+  if (set.repsLeft !== null && set.repsLeft !== undefined) {
+    completed.repsLeft = set.repsLeft;
+  }
+  if (set.weight !== null && set.weight !== undefined) {
+    if (typeof set.weight === 'number' && set.unit) {
+      const rounded = Math.round(set.weight * 100000) / 100000;
+      completed.weight = `${rounded}${set.unit}`;
+    } else {
+      if (typeof set.weight === 'string') completed.weight = set.weight;
+    }
+  }
+  if (set.rpe !== null && set.rpe !== undefined) {
+    completed.rpe = set.rpe;
+  }
+  if (set.setTimer !== null && set.setTimer !== undefined) {
+    completed.setTimer = set.setTimer;
+  }
+  if (set.userVars !== null && set.userVars !== undefined) {
+    completed.userVars = set.userVars;
+  }
+
+  return {
+    ...(set.entryId ? { entryId: set.entryId } : {}),
+    setId: set.setId,
+    completed,
   };
 }
 

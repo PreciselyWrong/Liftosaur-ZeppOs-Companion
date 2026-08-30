@@ -80,6 +80,33 @@ test('survives an adapter that throws', () => {
   store.clear();
 });
 
+test('persists direct synchronization progress with the session snapshot', () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const sync = {
+    mode: 'DIRECT',
+    startConfirmed: true,
+    acknowledgedSetCount: 2,
+    finishRequestedAt: null,
+    discardRequestedAt: null,
+  };
+
+  store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000, sync });
+
+  assert.deepEqual(store.load().sync, sync);
+  assert.equal(JSON.parse(adapter.read()).version, 2);
+});
+
+test('loads a version 1 snapshot only as an explicit legacy finalization session', () => {
+  const adapter = createMemoryStorageAdapter();
+  adapter.write(JSON.stringify({ version: 1, plan: PLAN, journal: JOURNAL, startedAt: 1000 }));
+
+  const restored = createSessionStore(adapter).load();
+
+  assert.equal(restored.sync.mode, 'LEGACY');
+  assert.equal(restored.startedAt, 1000);
+});
+
 test('keeps the current session in memory when device storage fails mid-workout', () => {
   let writes = 0;
   const primary = {

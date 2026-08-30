@@ -1,5 +1,23 @@
 # Changelog
 
+## [0.3.2] - 30 August 2026
+
+### Added
+- Start a workout on the watch and continue it in Liftosaur, or start on the phone and continue on the watch.
+- Sets completed on either device now appear on the other during the same workout.
+- Offline sets wait safely on the watch and synchronize after the phone reconnects.
+
+### Changed
+- Rest times, warmups, supersets, weights and plate loading now follow the values already resolved by Liftosaur.
+- Finishing on the watch now updates history, progression, 1RM changes and the next workout together.
+- The phone settings page now leaves rest defaults in Liftosaur, where they apply to every device.
+
+### Fixed
+- A failed set synchronization can no longer finish an incomplete workout or erase the local copy.
+- Older server responses can no longer replace newer sets completed on the watch.
+- A missing phone workout now opens a recovery choice instead of silently clearing the watch session.
+- Paused time and the real offline start and finish times survive restarts and cross-device updates.
+
 ## [0.3.1] - 25 August 2026
 
 ### Fixed

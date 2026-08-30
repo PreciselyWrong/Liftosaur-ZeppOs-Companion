@@ -1,13 +1,12 @@
 /**
  * Device <-> Side Service protocol.
  *
- * Version 2 replaces the single "give me the current workout" call of version 1
- * with an explicit selection flow: the watch asks for programs, then for a
- * program's weeks and days, then for one chosen day. Nothing is inferred on
- * either side, and a version 1 message is rejected rather than guessed at.
+ * Version 3 adds the shared running-workout lifecycle. The watch and phone use
+ * the same Liftosaur workout while version 2 remains an intentionally rejected
+ * legacy protocol.
  */
 
-export const PROTOCOL_VERSION = 2;
+export const PROTOCOL_VERSION = 3;
 
 export const MESSAGE_TYPES = {
   PING: 'PING',
@@ -28,6 +27,24 @@ export const MESSAGE_TYPES = {
 
   ABANDON_WORKOUT: 'ABANDON_WORKOUT',
   ABANDON_WORKOUT_RESPONSE: 'ABANDON_WORKOUT_RESPONSE',
+
+  GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT',
+  WORKOUT_NEXT_DATA: 'WORKOUT_NEXT_DATA',
+
+  GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT',
+  WORKOUT_CURRENT_DATA: 'WORKOUT_CURRENT_DATA',
+
+  START_WORKOUT: 'START_WORKOUT',
+  START_WORKOUT_DATA: 'START_WORKOUT_DATA',
+
+  SYNC_WORKOUT_SETS: 'SYNC_WORKOUT_SETS',
+  SYNC_WORKOUT_SETS_RESULT: 'SYNC_WORKOUT_SETS_RESULT',
+
+  GET_SETTINGS: 'GET_SETTINGS',
+  SETTINGS_DATA: 'SETTINGS_DATA',
+
+  DISCARD_WORKOUT: 'DISCARD_WORKOUT',
+  DISCARD_WORKOUT_RESULT: 'DISCARD_WORKOUT_RESULT',
 };
 
 export const ERROR_CODES = {
