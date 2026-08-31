@@ -16,6 +16,7 @@
 - A fresh test build now covers all supported round and square watches until 7 September 2026 at 17:56 UTC.
 
 ### Fixed
+- Production watch packages build successfully again after the direct synchronization update.
 - A failed set synchronization can no longer finish an incomplete workout or erase the local copy.
 - Older server responses can no longer replace newer sets completed on the watch.
 - A missing phone workout now opens a recovery choice instead of silently clearing the watch session.

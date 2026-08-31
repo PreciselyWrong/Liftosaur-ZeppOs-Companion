@@ -712,8 +712,9 @@ async function ensureDirectWorkoutStarted() {
   directStartPromise = (async () => {
     try {
       const res = await send(MESSAGE_TYPES.START_WORKOUT, payload);
-      const returnedWorkout = res.payload?.workout;
       refreshPolicy.markAuthoritativeResponse();
+      const payloadObj = res ? res.payload : null;
+      const returnedWorkout = payloadObj ? payloadObj.workout : null;
       if (returnedWorkout) {
         if (returnedWorkout.startTime && returnedWorkout.startTime !== view.startedAt) {
           directSync.conflict = true;
