@@ -1,10 +1,10 @@
 # Lifto Companion for Zepp OS
 
-Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking client for Amazfit smartwatches running Zepp OS (target: Amazfit Active 2 and compatible round watches).
+Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking client for compatible round and square Amazfit smartwatches running Zepp OS.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-309%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-364%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -24,9 +24,9 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 > ## ⚠️ Read this before scanning
 >
-> ### This QR code expires on 2026-09-01 at 10:02 UTC
+> ### This QR code expires on 2026-09-07 at 17:56 UTC
 >
-> That is 12:02 Central European Summer Time. After that moment it stops
+> That is 19:56 Central European Summer Time. After that moment it stops
 > working and returns a download error.
 >
 > The deadline is not my choice: `zeus preview` uploads the build to Zepp's own
@@ -47,9 +47,10 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 **Version:** Lifto Companion 0.3.2
 
-You also need a [Liftosaur](https://www.liftosaur.com) account with at least one
-program, and Developer Mode enabled in the Zepp app. Full walkthrough, phone
-only and no computer required: **[docs/tester-guide.md](docs/tester-guide.md)**.
+Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
+account. Cloud synchronization requires a Liftosaur account with at least one
+program. Full walkthrough, phone only and no computer required:
+**[docs/tester-guide.md](docs/tester-guide.md)**.
 
 ---
 
@@ -148,8 +149,8 @@ npm test
 # Preview on emulator
 .\dev.ps1
 
-# Generate QR code for real device testing
-zeus preview -t "Amazfit Active 2 (Round)"
+# Generate the unified QR code for all supported round and square watches
+node tools/build-preview.mjs docs/test-build-qr.png 10
 ```
 
 The `zeus preview` QR code is hosted by Zepp and stays valid for 7 days, so it can be
