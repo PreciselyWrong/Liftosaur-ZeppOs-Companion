@@ -64,10 +64,23 @@ test('the README test badge matches the published test suite', () => {
   const testCount = fs
     .readdirSync(path.join(root, 'tests'))
     .filter((name) => name.endsWith('.test.js'))
-    .reduce((total, name) => total + (read(path.join('tests', name)).match(/^test\(/gm) || []).length, 0);
+    .reduce((total, name) => total + (read(path.join('tests', name)).match(/^\s*test\(/gm) || []).length, 0);
   const readme = read('README.md');
 
   assert.match(readme, new RegExp(`tests-${testCount}%20passing-brightgreen`));
+});
+
+test('published preview documentation carries the current unified QR expiry', () => {
+  const readme = read('README.md');
+  const testerGuide = read('docs/tester-guide.md');
+
+  for (const document of [readme, testerGuide]) {
+    assert.match(document, /test-build-qr\.png/);
+    assert.match(document, /2026-09-07 at 17:56 UTC/);
+    assert.match(document, /19:56 Central European Summer Time/);
+    assert.match(document, /Round/);
+    assert.match(document, /Square/);
+  }
 });
 
 test('published icon assets stay below the repository audit threshold', () => {

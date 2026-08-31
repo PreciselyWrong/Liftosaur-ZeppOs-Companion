@@ -13,6 +13,7 @@
 - The phone settings page now leaves rest defaults in Liftosaur, where they apply to every device.
 - Phone changes are checked after workout actions while repeated checks and connection failures stay rate limited.
 - Public test data is now compact and fully synthetic.
+- A fresh test build now covers all supported round and square watches until 7 September 2026 at 17:56 UTC.
 
 ### Fixed
 - A failed set synchronization can no longer finish an incomplete workout or erase the local copy.

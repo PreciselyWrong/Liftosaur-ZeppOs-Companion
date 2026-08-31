@@ -21,7 +21,7 @@ You need:
   <img src="test-build-qr.png" width="220" alt="Test build QR code" />
 </p>
 
-This code expires on **2026-09-01 at 10:02 UTC** (12:02 Central European Summer Time).
+This code expires on **2026-09-07 at 17:56 UTC** (19:56 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -63,14 +63,12 @@ To sync with your own Liftosaur account, you need a Liftosaur Premium subscripti
 2. Open the **Mini Program** tab.
 3. Next to **Lifto Companion**, tap **Settings**.
 4. Paste your key into the API Key box.
-5. Optional: customize your default rest timers for standard sets, supersets, and warmups.
-
 The settings save automatically on your phone.
 
 ### How Direct Sync works
 
 Once configured, the watch connects directly to Liftosaur Cloud:
-- **Live Sync**: Workouts start on Liftosaur Cloud. Completed sets are synced in real time.
+- **Live Sync**: Workouts start on Liftosaur Cloud. Completed sets synchronize after workout actions or during the passive refresh window.
 - **Cross-device Continuity**: You can view or continue the same workout on your watch or in the official Liftosaur phone app.
 - **Automatic Progression**: Finishing on the watch automatically updates your history, progression rules, 1RM records, and advances to the next scheduled day.
 - **Special Sets**: For timed sets (countdown timer) or custom prompted variables, the watch prompts you to log that set on the phone app; the watch then automatically adopts the result.
@@ -81,7 +79,7 @@ On your watch, press the side button to open the app list: **Lifto Companion** i
 
 ## Things to know
 
-- **The QR code expires after 7 days** (on 2026-08-31 at 10:39 UTC for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
+- **The QR code expires after 7 days** (on 2026-09-07 at 17:56 UTC, or 19:56 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
 - **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
 - **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 
