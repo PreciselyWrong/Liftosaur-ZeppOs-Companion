@@ -1,2 +1,6 @@
 d7fc2b35ac2cef7a8a0241e3d08e7d9792b61ed0:tests/liftosaur-api-client.test.js:generic-api-key:36
 d7fc2b35ac2cef7a8a0241e3d08e7d9792b61ed0:tests/liftosaur-api-client.test.js:generic-api-key:54
+c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:30
+c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:252
+c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:258
+c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:286

@@ -12,12 +12,14 @@
 - Finishing on the watch now updates history, progression, 1RM changes and the next workout together.
 - The phone settings page now leaves rest defaults in Liftosaur, where they apply to every device.
 - Phone changes are checked after workout actions while repeated checks and connection failures stay rate limited.
+- Public test data is now compact and fully synthetic.
 
 ### Fixed
 - A failed set synchronization can no longer finish an incomplete workout or erase the local copy.
 - Older server responses can no longer replace newer sets completed on the watch.
 - A missing phone workout now opens a recovery choice instead of silently clearing the watch session.
 - Paused time and the real offline start and finish times survive restarts and cross-device updates.
+- Release security checks no longer mistake reviewed placeholders for real account keys.
 
 ## [0.3.1] - 25 August 2026
 

@@ -31,7 +31,7 @@ test('the npm lockfile is publishable for reproducible installs', () => {
   assert.equal(lockedProject.license, manifest.license);
 });
 
-test('gitleaks exemptions cover only the two reviewed historical test fixtures', () => {
+test('gitleaks exemptions cover only reviewed historical test fixtures', () => {
   const entries = read('.gitleaksignore')
     .split(/\r?\n/)
     .filter(Boolean);
@@ -39,7 +39,25 @@ test('gitleaks exemptions cover only the two reviewed historical test fixtures',
   assert.deepEqual(entries, [
     'd7fc2b35ac2cef7a8a0241e3d08e7d9792b61ed0:tests/liftosaur-api-client.test.js:generic-api-key:36',
     'd7fc2b35ac2cef7a8a0241e3d08e7d9792b61ed0:tests/liftosaur-api-client.test.js:generic-api-key:54',
+    'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:30',
+    'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:252',
+    'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:258',
+    'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:286',
   ]);
+});
+
+test('current API client tests use short non-secret sentinels', () => {
+  const source = read('tests/liftosaur-workout-api-client.test.js');
+
+  assert.doesNotMatch(source, /apiKey:\s*['"]lftsk_/);
+});
+
+test('program integration coverage uses an explicitly synthetic fixture', () => {
+  assert.equal(fs.existsSync(path.join(root, 'tests', 'user-program.test.js')), false);
+
+  const source = read('tests/synthetic-program.test.js');
+  assert.match(source, /const SYNTHETIC_PROGRAM/);
+  assert.doesNotMatch(source, /Semaine|Mardi|Mercredi|Jeudi|Vendredi|Samedi|Dimanche/);
 });
 
 test('the README test badge matches the published test suite', () => {
