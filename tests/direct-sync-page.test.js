@@ -101,11 +101,42 @@ test('direct discard never invokes legacy ABANDON_WORKOUT', () => {
   assert.doesNotMatch(discard, /MESSAGE_TYPES\.ABANDON_WORKOUT/);
 });
 
-test('polls GET_WORKOUT_CURRENT no faster than 15 seconds with guards', () => {
+test('uses one refresh policy for passive and action-triggered current-workout reads', () => {
   const source = readWatchPage();
-  assert.match(source, /15000/);
+  assert.match(source, /createWorkoutRefreshPolicy/);
+  assert.match(source, /function requestWorkoutRefresh/);
   assert.match(source, /MESSAGE_TYPES\.GET_WORKOUT_CURRENT/);
-  assert.match(source, /SESSION_STATES\.ACTIVE_SET/);
+  assert.match(source, /SESSION_STATES\.ACTIVE_SET[\s\S]*?SESSION_STATES\.REST/);
+  assert.match(source, /refreshPolicy\.beginPoll\(\)/);
+});
+
+test('meaningful workout navigation requests a coalesced refresh', () => {
+  const source = readWatchPage();
+  const nextSet = source.slice(source.indexOf('function handleNextSet()'), source.indexOf('async function pollCurrentWorkout()'));
+  const gestures = source.slice(source.indexOf('function handleGesture('), source.indexOf('function heartRateColor('));
+  const overview = source.slice(source.indexOf('function renderOverviewScreen('), source.indexOf('function renderActiveSetScreen('));
+
+  assert.match(nextSet, /requestWorkoutRefresh\(\)/);
+  assert.match(gestures, /requestWorkoutRefresh\(\)/);
+  assert.match(overview, /requestWorkoutRefresh\(\)/);
+});
+
+test('poll failures back off and authoritative writes reset refresh timing', () => {
+  const source = readWatchPage();
+  const poll = source.slice(source.indexOf('async function pollCurrentWorkout()'), source.indexOf('function submitWorkout()'));
+  const sync = source.slice(source.indexOf('async function synchronizeDirectSets()'), source.indexOf('function preserveDirectIntervals('));
+
+  assert.match(poll, /refreshPolicy\.markSuccess\(\)/);
+  assert.match(poll, /refreshPolicy\.markFailure\(\)/);
+  assert.match(sync, /refreshPolicy\.markAuthoritativeResponse\(\)/);
+});
+
+test('a poll started before a local set write cannot overwrite that newer action', () => {
+  const source = readWatchPage();
+  const poll = source.slice(source.indexOf('async function pollCurrentWorkout()'), source.indexOf('function submitWorkout()'));
+
+  assert.match(poll, /writeCountAtPollStart/);
+  assert.match(poll, /currentWriteCount\s*===\s*writeCountAtPollStart/);
 });
 
 test('adopts the whole server workout after a successful set batch', () => {

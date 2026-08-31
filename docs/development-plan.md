@@ -53,7 +53,7 @@ Goal: Direct synchronization with Liftosaur Cloud as the authoritative source of
 - [x] Map server `data.workout` to watch day plan via `shared/workout-api-plan.js` -> verify: warmups, plates, rest timers, and supersets parsed accurately.
 - [x] Persist local state before network dispatch -> verify: plan, journal, unacknowledged write queue, pause intervals, and finish intent saved locally.
 - [x] Drain set write queue chronologically via `POST /workout/sets` -> verify: server snapshot adopted once queue is empty.
-- [x] Throttle `GET /workout/current` polling to minimum 15-second intervals -> verify: safe polling without request spam.
+- [x] Coalesce action refreshes behind a 10-second global floor, retain 15-second passive checks, and back off failures -> verify: prompt cross-device updates without request spam.
 - [x] Enforce finish guard on pending set queue -> verify: finish blocked until all queued sets are confirmed synced.
 - [x] Explicit conflict recovery -> verify: missing remote workout or start-time mismatch opens recovery modal without deleting local data.
 - [x] Timed sets and prompted variables fallback -> verify: user prompted to log on phone app, watch adopts completed set.

@@ -31,6 +31,7 @@ import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
+import { createWorkoutRefreshPolicy } from '../../shared/workout-refresh-policy.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -174,7 +175,7 @@ let dayPlan = null;
 let accountSettings = null;
 let defaultWorkoutPlan = null;
 let directSync = defaultDirectSync('LEGACY');
-let lastCurrentPollAt = 0;
+const refreshPolicy = createWorkoutRefreshPolicy();
 let isPollingCurrent = false;
 let isDirectWriteInFlight = false;
 let directSyncPromise = null;
@@ -519,6 +520,7 @@ function loadPrograms() {
           return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
         })
         .then((currentRes) => {
+          refreshPolicy.markAuthoritativeResponse();
           const currentWorkout = currentRes.payload?.workout || null;
           if (currentWorkout) {
             lastServerWorkoutSignature = JSON.stringify(currentWorkout);
@@ -711,6 +713,7 @@ async function ensureDirectWorkoutStarted() {
     try {
       const res = await send(MESSAGE_TYPES.START_WORKOUT, payload);
       const returnedWorkout = res.payload?.workout;
+      refreshPolicy.markAuthoritativeResponse();
       if (returnedWorkout) {
         if (returnedWorkout.startTime && returnedWorkout.startTime !== view.startedAt) {
           directSync.conflict = true;
@@ -805,6 +808,7 @@ async function synchronizeDirectSets() {
         const batchLength = batch.length;
 
         const res = await send(MESSAGE_TYPES.SYNC_WORKOUT_SETS, { sets: batch });
+        refreshPolicy.markAuthoritativeResponse();
         const returnedWorkout = res.payload?.workout;
         if (returnedWorkout) {
           if (returnedWorkout.startTime && returnedWorkout.startTime !== session.view().startedAt) {
@@ -825,6 +829,7 @@ async function synchronizeDirectSets() {
           const currentState = session.view().state;
           if (currentState === SESSION_STATES.REST) {
             deferredServerWorkout = returnedWorkout;
+            lastServerWorkoutSignature = JSON.stringify(returnedWorkout);
           } else if (currentState === SESSION_STATES.ACTIVE_SET) {
             applyAdoptedSnapshot(returnedWorkout);
           }
@@ -891,6 +896,7 @@ async function adoptCurrentWorkout() {
   beginRequest('Loading phone workout…');
   try {
     const res = await send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+    refreshPolicy.markAuthoritativeResponse();
     const workout = res.payload?.workout || null;
     if (!workout) {
       directSync.conflict = true;
@@ -923,25 +929,34 @@ function handleNextSet() {
     applyAdoptedSnapshot(sw);
   } else {
     session.nextSet();
+    requestWorkoutRefresh();
   }
+}
+
+function requestWorkoutRefresh() {
+  if (directSync.mode !== 'DIRECT') return;
+  refreshPolicy.request();
+  pollCurrentWorkout();
 }
 
 async function pollCurrentWorkout() {
   if (directSync.mode !== 'DIRECT' || directSync.conflict) return;
-  if (session.view().state !== SESSION_STATES.ACTIVE_SET) return;
+  const currentState = session.view().state;
+  if (currentState !== SESSION_STATES.ACTIVE_SET && currentState !== SESSION_STATES.REST) return;
   const pendingCount = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
   if (pendingCount > 0) return;
   if (directSyncPromise || directStartPromise || isDirectWriteInFlight || isPollingCurrent) return;
-
-  const now = Date.now();
-  if (now - lastCurrentPollAt < 15000) return;
-  lastCurrentPollAt = now;
+  if (!refreshPolicy.beginPoll()) return;
+  const writeCountAtPollStart = session.getWorkoutSetWrites().length;
   isPollingCurrent = true;
 
   try {
     const res = await send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+    refreshPolicy.markSuccess();
     const serverWorkout = res.payload?.workout || null;
-    const currentPending = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
+    const currentWriteCount = session.getWorkoutSetWrites().length;
+    const currentPending = currentWriteCount - directSync.acknowledgedSetCount;
+    if (currentWriteCount !== writeCountAtPollStart) return;
 
     if (!serverWorkout) {
       if (!directSync.startConfirmed) {
@@ -964,17 +979,19 @@ async function pollCurrentWorkout() {
       return;
     }
 
-    if (currentPending === 0) {
+    if (currentPending === 0 && currentWriteCount === writeCountAtPollStart) {
       const serverSignature = JSON.stringify(serverWorkout);
       if (serverSignature === lastServerWorkoutSignature) return;
       const currentState = session.view().state;
       if (currentState === SESSION_STATES.REST) {
         deferredServerWorkout = serverWorkout;
+        lastServerWorkoutSignature = serverSignature;
       } else {
         applyAdoptedSnapshot(serverWorkout);
       }
     }
   } catch (err) {
+    refreshPolicy.markFailure();
     console.log('[liftosaur] poll current workout failed:', err?.message || String(err));
   } finally {
     isPollingCurrent = false;
@@ -1438,6 +1455,7 @@ function handleGesture(gesture) {
       return false;
     }
     renderUI();
+    requestWorkoutRefresh();
     return true;
   }
 
@@ -1445,6 +1463,7 @@ function handleGesture(gesture) {
     overviewPage = Math.floor(view.currentExerciseIndex / OVERVIEW_PAGE_SIZE);
     isOverviewOpen = true;
     renderUI();
+    requestWorkoutRefresh();
     return true;
   }
 
@@ -1454,6 +1473,7 @@ function handleGesture(gesture) {
     if (gesture !== GESTURE_UP) return false;
     isRestMinimized = false;
     renderUI();
+    requestWorkoutRefresh();
     return true;
   }
 
@@ -1469,6 +1489,7 @@ function handleGesture(gesture) {
   } else {
     return false;
   }
+  requestWorkoutRefresh();
   return true;
 }
 
@@ -2447,6 +2468,7 @@ function renderOverviewScreen(view) {
   renderTopBar(view, () => {
     isOverviewOpen = false;
     renderUI();
+    requestWorkoutRefresh();
   });
 
   const all = view.overviewExercises;
@@ -2476,6 +2498,7 @@ function renderOverviewScreen(view) {
         session.selectExercise(idx);
         isOverviewOpen = false;
         persistAndRender();
+        requestWorkoutRefresh();
       },
     });
     y += px(74);
@@ -2869,6 +2892,7 @@ function renderRestScreen(view) {
     text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.adjustRest(-10));
+      requestWorkoutRefresh();
     },
   });
 
@@ -2885,6 +2909,7 @@ function renderRestScreen(view) {
     text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.toggleRestPause());
+      requestWorkoutRefresh();
     },
   });
 
@@ -2900,6 +2925,7 @@ function renderRestScreen(view) {
     text_size: font('caption'),
     click_func: () => {
       persistAndRender(() => session.adjustRest(10));
+      requestWorkoutRefresh();
     },
   });
 
@@ -3371,7 +3397,9 @@ Page(
       } else if (directSync.finishRequestedAt || restoredState === SESSION_STATES.FINISHED) {
         submitWorkout();
       } else if (directSync.mode === 'DIRECT') {
-        synchronizeDirectSets().catch(() => {});
+        synchronizeDirectSets()
+          .then(() => requestWorkoutRefresh())
+          .catch(() => {});
       }
       renderUI();
       startClock();

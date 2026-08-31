@@ -43,7 +43,9 @@ Legend: [x] verified | [!] failed | [ ] not run | [-] cannot be validated at thi
 | Completed set persisted to watch storage before BLE/HTTP dispatch | [x] | [x] | [ ] |
 | Batch set write responses adopt server update scripts | [x] | [x] | [ ] |
 | Server snapshot deferred until local set queue is empty | [x] | [x] | [ ] |
-| `GET_WORKOUT_CURRENT` polling throttled to minimum 15 seconds | [x] | [x] | [ ] |
+| Current-workout reads share a 10-second floor and 15-second passive interval | [x] | [x] | [ ] |
+| Repeated action refreshes coalesce and failures back off to 120 seconds | [x] | [x] | [ ] |
+| A read racing a newer local set cannot replace that action | [x] | [x] | [ ] |
 | Pause intervals preserved and sent with `POST /workout/finish` | [x] | [x] | [ ] |
 | Restart during active set recovers plan, journal, and queue | [x] | [x] | [ ] |
 | Restart during rest recovers absolute `restEndsAt` | [x] | [x] | [ ] |

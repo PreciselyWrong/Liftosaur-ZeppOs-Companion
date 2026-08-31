@@ -11,6 +11,7 @@
 - Rest times, warmups, supersets, weights and plate loading now follow the values already resolved by Liftosaur.
 - Finishing on the watch now updates history, progression, 1RM changes and the next workout together.
 - The phone settings page now leaves rest defaults in Liftosaur, where they apply to every device.
+- Phone changes are checked after workout actions while repeated checks and connection failures stay rate limited.
 
 ### Fixed
 - A failed set synchronization can no longer finish an incomplete workout or erase the local copy.

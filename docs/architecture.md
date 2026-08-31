@@ -97,7 +97,7 @@ A user tap never blocks on BLE or HTTP.
 2. **Queue Draining**: `POST /workout/sets` drains queued sets in order.
 3. **Repeat-Safe**: Set writes carry stable set identifiers. Start, finish, and discard carry the workout start time, making retries safe.
 4. **Snapshot Adoption**: When the local set queue is empty, the watch adopts the authoritative server snapshot returned by `POST /workout/sets` or `GET /workout/current`. Dynamic script updates (`hasUpdateScript`) and phone-side edits are applied cleanly.
-5. **Polling**: The watch polls `GET /workout/current` during active workouts at a controlled rate (minimum 15-second interval). If an active workout is modified on the phone, the watch adopts the state once its local write queue is empty.
+5. **Adaptive Refresh**: Meaningful workout navigation requests a current-workout refresh, while passive checks run every 15 seconds. A shared coordinator coalesces requests, enforces a 10-second global floor, and backs failures off to 30, 60 and 120 seconds. The watch adopts phone changes only when its local write queue is empty and no local set write started during the read.
 6. **Conflict Handling**: If a remote workout is missing or reports a conflicting start time, the watch opens an explicit user recovery dialog and never silently deletes local session data.
 
 ---

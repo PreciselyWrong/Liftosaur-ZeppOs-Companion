@@ -63,9 +63,11 @@ active workout, returning the initial server snapshot.
 
 ### Polling Interval Guard
 
-The watch polls `GET_WORKOUT_CURRENT` during active workouts to support cross-device continuation
-(e.g., set logged on phone app). Polling is throttled to no faster than once every 15 seconds.
-Server snapshots received via polling are adopted only when the local write queue is empty.
+The watch requests `GET_WORKOUT_CURRENT` after meaningful workout navigation and also checks
+passively every 15 seconds. One coordinator coalesces repeated requests and enforces a global
+10-second floor across both paths. Failed reads back off to 30, 60 and 120 seconds. Server
+snapshots are adopted only when the local write queue is empty, and a read started before a
+new local set write cannot replace that newer action.
 
 ### Finalisation & Discard
 
