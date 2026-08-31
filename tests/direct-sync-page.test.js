@@ -151,6 +151,18 @@ test('adopts the whole server workout after a successful set batch', () => {
   assert.match(sync, /applyAdoptedSnapshot\(returnedWorkout\)/);
 });
 
+test('start response avoids the QuickJS optional-chain stack bug', () => {
+  const source = readWatchPage();
+  const start = source.slice(
+    source.indexOf('async function ensureDirectWorkoutStarted()'),
+    source.indexOf('function handleStartWorkout()'),
+  );
+
+  assert.doesNotMatch(start, /res\.payload\?\.workout/);
+  assert.match(start, /const payloadObj = res \? res\.payload : null/);
+  assert.match(start, /const returnedWorkout = payloadObj \? payloadObj\.workout : null/);
+});
+
 test('shows pending synchronization instead of hiding an offline queue', () => {
   const source = readWatchPage();
   assert.match(source, /syncWarning \? truncate\(syncWarning, 16\) : formatHeartRate/);
