@@ -27,7 +27,7 @@ function jsonResponse(body, { ok = true, status = 200 } = {}) {
 
 describe('Liftosaur Running a Workout API client slice', () => {
   const defaultOptions = {
-    apiKey: 'lftsk_valid_api_key_12345',
+    apiKey: 'test-api-key',
     deviceId: 'dev_stable_watch_uuid_001',
     clientName: 'lifto-companion/0.3.2',
   };
@@ -54,7 +54,7 @@ describe('Liftosaur Running a Workout API client slice', () => {
     assert.equal(fetcher.calls.length, 1);
     assert.equal(fetcher.calls[0].url, 'https://www.liftosaur.com/api/v1/workout/next');
     assert.equal(fetcher.calls[0].options.method, 'GET');
-    assert.equal(fetcher.calls[0].options.headers.Authorization, 'Bearer lftsk_valid_api_key_12345');
+    assert.equal(fetcher.calls[0].options.headers.Authorization, 'Bearer test-api-key');
     assert.equal(fetcher.calls[0].options.headers['X-Liftosaur-Device-Id'], undefined);
     assert.equal(fetcher.calls[0].options.headers['X-Liftosaur-Client'], undefined);
     assert.equal(result.workout.programName, 'GZCLP');
@@ -249,13 +249,13 @@ describe('Liftosaur Running a Workout API client slice', () => {
     const fetcher = fakeFetch(async () => jsonResponse({ data: {} }));
 
     const clientWithoutDevice = createLiftosaurApiClient({
-      apiKey: 'lftsk_valid_api_key_12345',
+      apiKey: 'test-api-key',
       deviceId: null,
       clientName: 'lifto-companion/0.3.2',
       fetcher,
     });
     const clientWithoutClientName = createLiftosaurApiClient({
-      apiKey: 'lftsk_valid_api_key_12345',
+      apiKey: 'test-api-key',
       deviceId: 'dev_stable_watch_uuid_001',
       clientName: '',
       fetcher,
@@ -283,7 +283,7 @@ describe('Liftosaur Running a Workout API client slice', () => {
 
     // Existing non-workout writes and reads work fine without deviceId/clientName
     const clientNoIdentity = createLiftosaurApiClient({
-      apiKey: 'lftsk_valid_api_key_12345',
+      apiKey: 'test-api-key',
       fetcher,
     });
     await clientNoIdentity.listPrograms();
