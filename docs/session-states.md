@@ -66,7 +66,7 @@ If network connectivity drops during finalisation, the session is kept locally w
 
 | State | Definition | Runtime Behavior |
 | --- | --- | --- |
-| `ONLINE` | Side Service reachable, last API call succeeded. | Immediate queue draining and periodic 15-second current-workout polling. |
+| `ONLINE` | Side Service reachable, last API call succeeded. | Immediate queue draining, coalesced action refreshes behind a 10-second floor, and 15-second passive checks. |
 | `DEGRADED` | Side Service reachable, API calls failing or timing out. | Sets accumulate in local queue; UI indicates pending sync; auto-retried. |
 | `OFFLINE` | No BLE or network link available. | Fully local operation; sets queued in watch storage; no network spam. |
 

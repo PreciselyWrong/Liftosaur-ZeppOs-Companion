@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-300%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-309%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -118,6 +118,7 @@ Shared, platform-independent modules:
 | --- | --- |
 | `shared/workout-api-plan.js` | Map official `data.workout` objects into the local day plan |
 | `shared/workout-session.js` | The session state machine, set journal, and pause intervals |
+| `shared/workout-refresh-policy.js` | Coalesced action refreshes, passive timing, and failure backoff |
 | `shared/weight-rounding.js` | Loadable-weight plate math and weight string parsing |
 | `shared/protocol.js` | The device <-> phone Protocol v3 envelope |
 | `shared/liftohistory.js` | Parse and format Liftohistory text (legacy & diagnostics) |

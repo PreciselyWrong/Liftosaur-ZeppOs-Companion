@@ -73,9 +73,9 @@ The watch renders these pre-resolved values directly without guessing missing va
 
 ### Polling & Cross-Device Continuation
 
-- The watch polls `GET /workout/current` during active workouts at a safe frequency (no faster than once every 15 seconds).
+- Meaningful workout navigation requests `GET /workout/current`, while passive checks run every 15 seconds. All reads share a 10-second floor, repeated requests coalesce, and failures back off to 30, 60 and 120 seconds.
 - Polling allows a user to start on watch and view on phone, or vice-versa.
-- If the phone app modifies or completes a set, the watch adopts the full server state once its own local write queue is empty.
+- If the phone app modifies or completes a set, the watch adopts the full server state once its own local write queue is empty and no newer local set action raced the read.
 - If polling returns an empty workout (`workout: null`) or a conflicting workout while the watch has active local state, the watch opens an explicit recovery prompt and never silently clears local data.
 
 ### Atomic Finalisation
