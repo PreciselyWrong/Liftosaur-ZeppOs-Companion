@@ -5,6 +5,9 @@
 ### Fixed
 - Starting with an exercise in the middle now continues forward after synchronization instead of jumping back to the beginning.
 
+### Changed
+- A fresh test build now covers all supported round and square watches until 8 September 2026 at 15:10 UTC.
+
 ## [0.3.2] - 30 August 2026
 
 ### Added
