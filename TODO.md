@@ -4,10 +4,10 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `b32b9f1`
+- Current commit: `5d79d90`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
-- Current phase: 3 - shared controller extraction
+- Current phase: 5 - full extension renderer
 - Overall status: in progress
 
 ## Status legend
@@ -89,7 +89,9 @@
 
 ## Phase 4 - Dual-target build system
 
-- [ ] Build standalone and extension outputs separately with no secrets.
+- [x] Build standalone and extension outputs separately with no secrets.
+- [x] Provide pure planning, process execution, and CLI entrypoint for companion, workout, and all targets.
+- [x] Guard workout builds against missing or invalid App IDs before process invocation.
 
 ## Phase 5 - Full extension renderer
 
@@ -140,7 +142,10 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 413 passing
+- `npm test` - 425 passing
+- `npm run build:companion`
+- `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
+- `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
 - `zeus build` - Companion passed
 - `zeus build` from generated Workout Extension - passed
@@ -151,3 +156,4 @@
 - 2026-09-01: Added and built the minimal separate Workout Extension spike without claiming simulator or hardware validation.
 - 2026-09-01: Extracted shared local workout control and migrated Companion without changing its network or renderer behavior.
 - 2026-09-01: Centralized direct Cloud synchronization and recovery in the shared workout controller.
+- 2026-09-01: Added pure dual-target build system and package scripts for companion, workout, and all products.

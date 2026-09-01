@@ -6,6 +6,9 @@
   "main": "app.js",
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
+    "build:companion": "node tools/build-targets.js companion",
+    "build:workout": "node tools/build-targets.js workout",
+    "build:all": "node tools/build-targets.js all",
     "generate:extension": "node tools/generate-workout-extension.js"
   },
   "author": "",
