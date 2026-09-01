@@ -878,7 +878,8 @@ function getDirectWorkoutIntervals(endTime) {
   ];
 }
 
-function applyAdoptedSnapshot(serverWorkout) {
+function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
+  const resumeFromEntryId = preserveNavigation ? session.view().entryId : null;
   preserveDirectIntervals();
   const plan = workoutToDayPlan(serverWorkout, {
     units: accountSettings?.units || dayPlan?.unit || null,
@@ -887,7 +888,7 @@ function applyAdoptedSnapshot(serverWorkout) {
   if (!plan || !plan.unit) return;
   dayPlan = plan;
   lastServerWorkoutSignature = JSON.stringify(serverWorkout);
-  session = createWorkoutSession({ plan: dayPlan });
+  session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
   directSync.acknowledgedSetCount = session.getWorkoutSetWrites().length;
   persistSession();
   renderUI();
@@ -917,7 +918,7 @@ async function adoptCurrentWorkout() {
     syncWarning = null;
     isBusy = false;
     statusMessage = '';
-    applyAdoptedSnapshot(workout);
+    applyAdoptedSnapshot(workout, { preserveNavigation: false });
   } catch (err) {
     failRequest(err);
   }

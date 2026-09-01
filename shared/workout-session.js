@@ -37,7 +37,11 @@ export function weightStepFor(unit) {
   return unit === 'lb' ? 5 : 2.5;
 }
 
-export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) {
+export function createWorkoutSession({
+  plan = null,
+  initialJournal = [],
+  resumeFromEntryId = null,
+} = {}) {
   const unit = plan?.unit || 'kg';
   const step = weightStepFor(unit);
 
@@ -181,7 +185,15 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     }
 
     workoutStartTime = Number.isFinite(plan.startTime) ? plan.startTime : null;
-    const firstPending = findServerResumeExerciseIndex();
+    const anchorIndex = resumeFromEntryId === null
+      ? -1
+      : exercises.findIndex((exercise) => exercise.entryId === resumeFromEntryId);
+    const resumeIndex = anchorIndex === -1
+      ? 0
+      : progress[anchorIndex].completedSets.length < exercises[anchorIndex].sets.length
+        ? anchorIndex
+        : (anchorIndex + 1) % exercises.length;
+    const firstPending = findServerResumeExerciseIndex(resumeIndex);
     if (firstPending === -1) {
       state = SESSION_STATES.FINISHED;
       currentExerciseIndex = Math.max(0, exercises.length - 1);
@@ -195,9 +207,10 @@ export function createWorkoutSession({ plan = null, initialJournal = [] } = {}) 
     return exercises[currentExerciseIndex] || null;
   }
 
-  function findServerResumeExerciseIndex() {
+  function findServerResumeExerciseIndex(from = 0) {
     const visitedGroups = new Set();
-    for (let index = 0; index < exercises.length; index++) {
+    for (let offset = 0; offset < exercises.length; offset++) {
+      const index = (from + offset) % exercises.length;
       const exercise = exercises[index];
       if (progress[index].completedSets.length >= exercise.sets.length) continue;
       if (!exercise.supersetGroup) return index;
