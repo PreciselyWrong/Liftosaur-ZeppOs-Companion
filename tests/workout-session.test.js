@@ -1223,6 +1223,68 @@ describe('Workout API set-write journal support', () => {
     assert.deepEqual(session.getJournal(), []);
   });
 
+  test('keeps an unfinished exercise selected across a server snapshot', () => {
+    const session = createWorkoutSession({
+      plan: {
+        source: 'WORKOUT_API',
+        isCurrent: true,
+        startTime: 1000,
+        unit: 'kg',
+        exercises: [
+          {
+            entryId: 'squat',
+            name: 'Squat',
+            sets: [{ setId: 'squat-1', targetReps: 5, targetWeight: 100 }],
+          },
+          {
+            entryId: 'bench',
+            name: 'Bench Press',
+            sets: [{ setId: 'bench-1', targetReps: 5, targetWeight: 80 }],
+          },
+        ],
+      },
+      resumeFromEntryId: 'bench',
+    });
+
+    assert.equal(session.view().entryId, 'bench');
+  });
+
+  test('continues after a completed snapshot anchor before wrapping to the beginning', () => {
+    const session = createWorkoutSession({
+      plan: {
+        source: 'WORKOUT_API',
+        isCurrent: true,
+        startTime: 1000,
+        unit: 'kg',
+        exercises: [
+          {
+            entryId: 'squat',
+            name: 'Squat',
+            sets: [{ setId: 'squat-1', targetReps: 5, targetWeight: 100 }],
+          },
+          {
+            entryId: 'bench',
+            name: 'Bench Press',
+            sets: [{
+              setId: 'bench-1',
+              targetReps: 5,
+              targetWeight: 80,
+              completed: { reps: 5, weight: 80 },
+            }],
+          },
+          {
+            entryId: 'row',
+            name: 'Cable Row',
+            sets: [{ setId: 'row-1', targetReps: 8, targetWeight: 60 }],
+          },
+        ],
+      },
+      resumeFromEntryId: 'bench',
+    });
+
+    assert.equal(session.view().entryId, 'row');
+  });
+
   test('builds finish intervals from durable pause and resume events', () => {
     const session = createWorkoutSession({
       plan: {

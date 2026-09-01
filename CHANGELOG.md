@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.3.3] - 1 September 2026
+
+### Fixed
+- Starting with an exercise in the middle now continues forward after synchronization instead of jumping back to the beginning.
+
 ## [0.3.2] - 30 August 2026
 
 ### Added

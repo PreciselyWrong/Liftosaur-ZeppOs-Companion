@@ -216,6 +216,23 @@ test('server snapshot adoption preserves earlier pause intervals for finish', ()
   assert.match(submit, /getDirectWorkoutIntervals\(endTime\)/);
 });
 
+test('server snapshot adoption preserves the watch exercise navigation anchor', () => {
+  const source = readWatchPage();
+  const applySnapshot = source.slice(
+    source.indexOf('function applyAdoptedSnapshot('),
+    source.indexOf('async function adoptCurrentWorkout()'),
+  );
+
+  assert.match(applySnapshot, /resumeFromEntryId/);
+  assert.match(applySnapshot, /session\.view\(\)\.entryId/);
+
+  const explicitAdoption = source.slice(
+    source.indexOf('async function adoptCurrentWorkout()'),
+    source.indexOf('function handleNextSet()'),
+  );
+  assert.match(explicitAdoption, /preserveNavigation:\s*false/);
+});
+
 test('session restore recovers directSync metadata and retries finish or discard if requested', () => {
   const source = readWatchPage();
   const restore = source.slice(source.indexOf('function restoreSession()'), source.indexOf('function formatSeconds('));
