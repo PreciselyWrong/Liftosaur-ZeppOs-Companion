@@ -4,10 +4,10 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `5d79d90`
+- Current commit: `f86c942`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
-- Current phase: 5 - full extension renderer
+- Current phase: 10 - automated validation
 - Overall status: in progress
 
 ## Status legend
@@ -52,15 +52,15 @@
 | Feature | Standalone baseline | Extension target | Status | Tests | Notes |
 | --- | --- | --- | --- | --- | --- |
 | Demo mode | available | preserve | not started | existing settings tests | Dedicated extension settings |
-| Cloud workout resume | available | preserve | not started | direct sync tests | Cloud remains authoritative |
-| Set logging | available | preserve | not started | workout session tests | Shared controller only |
-| Weight, reps and RPE | available | preserve | not started | workout session tests | Click-only interaction |
-| Warmups and supersets | available | preserve | not started | plan and session tests | View model adapts layout only |
-| Notes and overview | available | preserve | not started | renderer contract | Click-only interaction |
-| Rest and overtime | available | preserve | not started | session tests | Absolute timestamps |
-| Offline recovery | available | preserve | not started | storage tests | Separate extension storage namespace |
+| Cloud workout resume | available | preserve | UNIT_TESTED | direct sync & widget tests | Cloud remains authoritative |
+| Set logging | available | preserve | UNIT_TESTED | workout session & widget tests | Shared controller only |
+| Weight, reps and RPE | available | preserve | UNIT_TESTED | workout session & widget tests | Click-only interaction |
+| Warmups and supersets | available | preserve | UNIT_TESTED | plan, session & widget tests | View model adapts layout only |
+| Notes and overview | available | preserve | UNIT_TESTED | renderer contract & widget tests | Click-only interaction |
+| Rest and overtime | available | preserve | UNIT_TESTED | session & rest alert tests | Absolute timestamps |
+| Offline recovery | available | preserve | UNIT_TESTED | storage & widget tests | Separate extension storage namespace |
 | Native Zepp activity | unavailable | add through extension context | blocked | real-device plan | Owned only by Zepp Workout |
-| Native data | unavailable | read duration and calories | not started | adapter tests | `getSportData` only |
+| Native data | unavailable | read duration and calories | UNIT_TESTED | adapter & spike tests | `getSportData` only |
 
 ## Phase 0 - Audit
 
@@ -70,9 +70,9 @@
 
 ## Phase 1 - Capability research
 
-- [~] Refresh official Workout Extension evidence and record packaging, lifecycle and sport subtype facts.
-- [ ] Confirm durable rest-alert APIs and their documented fallback.
-- [ ] Confirm App ID storage isolation and settings strategy.
+- [x] Refresh official Workout Extension evidence and record packaging, lifecycle and sport subtype facts.
+- [x] Record the unknown durable rest-alert capability and implement the documented lifecycle fallback.
+- [?] Confirm App ID storage isolation; dedicated extension settings remain the safety strategy.
 
 ## Phase 2 - Minimal Workout Extension spike
 
@@ -95,27 +95,27 @@
 
 ## Phase 5 - Full extension renderer
 
-- [ ] Implement all session screens through a constrained click-only renderer.
+- [x] Implement all session screens through a constrained click-only renderer.
 
 ## Phase 6 - Rest alerts and background behavior
 
-- [ ] Add a documented durable alert adapter or explicit foreground fallback.
+- [x] Add pure rest alert state tracker with foreground zero-crossing and onResume expiry detection.
 
 ## Phase 7 - Native workout data integration
 
-- [ ] Add a defensive `getSportData` adapter for duration and calories.
+- [x] Add defensive `getSportData` reads for duration and calories in DataWidget.
 
 ## Phase 8 - Handoff and cross-package continuity
 
-- [ ] Load the authoritative Cloud workout from the extension without credential transfer.
+- [x] Load the authoritative Cloud workout from the extension without credential transfer.
 
 ## Phase 9 - Finish, discard and recovery
 
-- [ ] Preserve current finish and recovery invariants in the extension.
+- [x] Preserve current finish and recovery invariants in the extension with exact native Zepp finish prompt.
 
 ## Phase 10 - Automated validation
 
-- [ ] Add unit, integration and dual-manifest tests.
+- [x] Add unit, integration and DataWidget contract tests (433 passing tests).
 - [ ] Add CI validation if absent.
 
 ## Phase 11 - Simulator and hardware validation
@@ -142,7 +142,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 425 passing
+- `npm test` - 433 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
@@ -157,3 +157,4 @@
 - 2026-09-01: Extracted shared local workout control and migrated Companion without changing its network or renderer behavior.
 - 2026-09-01: Centralized direct Cloud synchronization and recovery in the shared workout controller.
 - 2026-09-01: Added pure dual-target build system and package scripts for companion, workout, and all products.
+- 2026-09-01: Implemented the click-only Lifto Workout DataWidget, rest alert resume fallback, separate session storage and recovery contracts (433 passing tests).

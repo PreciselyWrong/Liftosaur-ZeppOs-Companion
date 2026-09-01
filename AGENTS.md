@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 1 September 2026 with 425 passing tests.
+- Test: `npm test` - verified on 1 September 2026 with 433 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1`, which checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (requires `ZEPP_WORKOUT_EXTENSION_APP_ID`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -21,11 +21,14 @@
 ## Map
 
 - `page/common/` - standalone lifecycle, renderer, Cloud orchestration and recovery UI.
+- `data-widget/common/` - Strength Training Workout Extension single-page DataWidget click-only UI.
 - `shared/workout-session.js` - pure session state machine and event journal.
 - `shared/workout-controller.js` - shared local workout state, persistence, Cloud synchronization, polling, conflicts and terminal writes.
 - `shared/workout-api-plan.js`, `shared/day-plan.js` - authoritative API response to plan and legacy replay mappings.
 - `shared/session-storage.js`, `shared/workout-refresh-policy.js` - crash recovery, queue state and refresh timing.
 - `shared/screen-layout.js`, `shared/watch-layout.js` - the only screen-size and renderer layout rules.
+- `shared/rest-alert.js` - rest alert state tracking, foreground zero-crossing, and resume expiry.
+- `shared/workout-extension-nav.js`, `shared/workout-extension-metrics.js` - extension screen formatting and defensive native metric parsing.
 - `shared/workout-extension-manifest.js` - separate extension manifest contract.
 - `app-side/` - protocol routing, the only HTTP client, Cloud services and stable client identity.
 - `setting/` - phone-side API key settings. Secrets never belong on the watch.
@@ -81,6 +84,6 @@
 
 ## State
 
-- Version 0.3.3 beta: standalone direct Cloud workouts, durable offline set queue, conflict recovery, absolute rest timing, round and square layouts, and crash-safe finish retries are covered by 425 tests.
+- Version 0.3.3 beta: standalone and extension workout flows, durable offline set queues, conflict recovery, absolute rest timing, round and square layouts, and crash-safe finish retries are covered by 433 tests.
 - Now: build the separate Strength Training Workout Extension package and shared controller on `feat/workout-extension` while keeping standalone green.
 - Next: validate direct sync and the extension lifecycle on physical watches; simulator images cannot prove native Workout integration.

@@ -501,7 +501,9 @@ export function createWorkoutController({
 
       if (!serverWorkout) {
         if (!directSync.startConfirmed) {
-          ensureDirectWorkoutStarted().catch(() => {});
+          ensureDirectWorkoutStarted().catch((err) => {
+            logError('background workout start failed', err);
+          });
           return false;
         }
         directSync.conflict = true;
@@ -546,7 +548,9 @@ export function createWorkoutController({
   function requestWorkoutRefresh() {
     if (directSync.mode !== 'DIRECT') return;
     policy.request();
-    pollCurrentWorkout().catch(() => {});
+    pollCurrentWorkout().catch((err) => {
+      logError('background workout refresh failed', err);
+    });
   }
 
   async function adoptCurrentWorkout({ preserveNavigation = false } = {}) {
@@ -691,7 +695,9 @@ export function createWorkoutController({
     startWorkout: (options = {}) => {
       mutateSession(() => session.startWorkout({ timestamp: options.timestamp ?? now() }));
       if (directSync.mode === 'DIRECT' && request) {
-        ensureDirectWorkoutStarted().catch(() => {});
+        ensureDirectWorkoutStarted().catch((err) => {
+          logError('background workout start failed', err);
+        });
       }
     },
     selectExercise: (index, options = {}) =>
@@ -709,7 +715,9 @@ export function createWorkoutController({
     completeSet: (options = {}) => {
       mutateSession(() => session.completeSet({ timestamp: now(), ...options }));
       if (directSync.mode === 'DIRECT' && request) {
-        synchronizeDirectSets().catch(() => {});
+        synchronizeDirectSets().catch((err) => {
+          logError('background set sync failed', err);
+        });
       }
     },
     pauseRest: (options = {}) =>
