@@ -1,5 +1,5 @@
 # WARNING: `zeus dev` overwrites this file with its own template on every run,
-# which drops the secret patterns and the agent-file exclusions below.
+# which drops the secret patterns below.
 # After running zeus dev, restore it: git checkout -- .gitignore
 
 # Secrets and local configuration
@@ -67,7 +67,5 @@ Desktop.ini
 ehthumbs.db
 .DS_Store
 
-# Local agent files
+# Local provider settings
 .claude/settings.local.json
-AGENTS.md
-TODO.md
