@@ -126,6 +126,6 @@ Finishing a session in Lifto Workout involves two separate operations:
 
 ## Evidence Limits
 
-- **Unit Tested**: Domain controller, session state machine, protocol encoding, REST payload mapping, refresh policies, metric parsers, rest alert logic, and build/preview generators are validated by 447 Node.js tests.
+- **Unit Tested**: Domain controller, session state machine, protocol encoding, REST payload mapping, refresh policies, metric parsers, rest alert logic, and build/preview generators are validated by 448 Node.js tests.
 - **Emulator Evidence**: Companion layouts have existing round and square simulator evidence. The generated Workout DataWidget can be previewed outside workout context, which does not validate this full renderer inside the native Workout app.
 - **Hardware Gated**: Simulator images omit the native Workout app; real workout-context behavior, background rest alerts, and multi-device compatibility remain unproven until executed against the physical-watch test plan.

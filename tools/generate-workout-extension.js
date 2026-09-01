@@ -16,6 +16,40 @@ export function parseWorkoutExtensionAppId(appIdInput = process.env.ZEPP_WORKOUT
   return numericId;
 }
 
+const GENERATED_PATHS = [
+  'app.json',
+  'app.js',
+  'package.json',
+  'data-widget',
+  'app-side',
+  'setting',
+  'shared',
+  'assets',
+  'dist',
+];
+
+function cleanGeneratedTarget(targetDir) {
+  if (!fs.existsSync(targetDir)) return;
+  const entries = fs.readdirSync(targetDir);
+  if (entries.length === 0) return;
+
+  let isGeneratedWorkoutProject = false;
+  try {
+    const manifest = JSON.parse(fs.readFileSync(path.join(targetDir, 'app.json'), 'utf8'));
+    isGeneratedWorkoutProject = manifest?.app?.extType === 'workout';
+  } catch (err) {
+    isGeneratedWorkoutProject = false;
+  }
+
+  if (!isGeneratedWorkoutProject) {
+    throw new Error(`Target directory is not a generated Workout Extension project: ${targetDir}`);
+  }
+
+  for (const generatedPath of GENERATED_PATHS) {
+    fs.rmSync(path.join(targetDir, generatedPath), { recursive: true, force: true });
+  }
+}
+
 export function generateWorkoutExtensionProject({
   appId = process.env.ZEPP_WORKOUT_EXTENSION_APP_ID,
   targetDir = null,
@@ -28,8 +62,8 @@ export function generateWorkoutExtensionProject({
   const rootPkg = JSON.parse(fs.readFileSync(path.join(resolvedRootDir, 'package.json'), 'utf8'));
   const rootAppJson = JSON.parse(fs.readFileSync(path.join(resolvedRootDir, 'app.json'), 'utf8'));
 
-  const version = rootPkg.version || '0.3.3';
-  const versionCode = rootAppJson.app?.version?.code || 24;
+  const version = rootPkg.version;
+  const versionCode = rootAppJson.app?.version?.code;
 
   const manifest = createWorkoutExtensionManifest({
     appId: parsedAppId,
@@ -37,6 +71,7 @@ export function generateWorkoutExtensionProject({
     versionCode,
   });
 
+  cleanGeneratedTarget(resolvedTargetDir);
   fs.mkdirSync(resolvedTargetDir, { recursive: true });
 
   fs.writeFileSync(
