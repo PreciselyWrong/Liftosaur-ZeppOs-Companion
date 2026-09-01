@@ -1,63 +1,31 @@
 # Test Matrix
 
-Three distinct evidence levels. A row validated in the emulator is never promoted to
-real-device evidence.
+Evidence is never promoted between levels. `UNIT_TESTED` means an automated contract,
+`SIMULATOR_TESTED` means reproduced in the Zepp simulator, and `REAL_DEVICE_TESTED`
+means reproduced on a named watch and firmware. Workout Extension hardware cases live in
+[workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md).
 
-- `DOC` - official documentation only.
-- `EMU` - reproduced in the Zepp OS Simulator or automated unit test suite.
-- `REAL` - reproduced on a physical watch.
-
-Legend: [x] verified | [!] failed | [ ] not run | [-] cannot be validated at this level.
-
-## Platform and Packaging
-
-| Scenario | DOC | EMU | REAL |
+| Scenario | Product | Evidence | Remaining proof |
 | --- | --- | --- | --- |
-| Standalone mini-program template builds via Zeus CLI | [x] | [x] | [x] |
-| `app.json` invariants guarded by `npm test` | [x] | [x] | [-] |
-| Round screen layout rendered correctly (e.g., Active 2 Round) | [x] | [x] | [ ] |
-| Square screen layout rendered correctly (e.g., Active 2 Square) | [x] | [x] | [ ] |
-| Live HR display via `@zos/sensor` | [x] | [x] | [ ] |
-| Screen wake lock via `@zos/display` during workout | [x] | [x] | [ ] |
-| Zepp native workout activity creation | [-] | [-] | [ ] |
-
-## Protocol v3 Round-Trip
-
-| Scenario | DOC | EMU | REAL |
-| --- | --- | --- | --- |
-| `PING` -> `PONG`, `messageId` echoed | [x] | [x] | [ ] |
-| Malformed or wrong protocol version envelope rejected explicitly | [x] | [x] | [-] |
-| `GET_SETTINGS` returns default units and timers | [x] | [x] | [ ] |
-| `GET_WORKOUT_NEXT` previews scheduled or selected day workout | [x] | [x] | [ ] |
-| `START_WORKOUT` starts cloud workout with watch start timestamp | [x] | [x] | [ ] |
-| `SYNC_WORKOUT_SETS` drains batch of queued sets | [x] | [x] | [ ] |
-| `FINISH_WORKOUT` commits history, progression, and `nextDay` | [x] | [x] | [ ] |
-| `DISCARD_WORKOUT` removes active Cloud session | [x] | [x] | [ ] |
-| Client identity headers (`X-Liftosaur-Device-Id`, `X-Liftosaur-Client`) present on writes | [x] | [x] | [-] |
-| API key redacted from all logs and error messages | [x] | [x] | [-] |
-
-## Running Workout Synchronization & Durability
-
-| Scenario | DOC | EMU | REAL |
-| --- | --- | --- | --- |
-| Completed set persisted to watch storage before BLE/HTTP dispatch | [x] | [x] | [ ] |
-| Batch set write responses adopt server update scripts | [x] | [x] | [ ] |
-| Server snapshot deferred until local set queue is empty | [x] | [x] | [ ] |
-| Current-workout reads share a 10-second floor and 15-second passive interval | [x] | [x] | [ ] |
-| Repeated action refreshes coalesce and failures back off to 120 seconds | [x] | [x] | [ ] |
-| A read racing a newer local set cannot replace that action | [x] | [x] | [ ] |
-| Pause intervals preserved and sent with `POST /workout/finish` | [x] | [x] | [ ] |
-| Restart during active set recovers plan, journal, and queue | [x] | [x] | [ ] |
-| Restart during rest recovers absolute `restEndsAt` | [x] | [x] | [ ] |
-| Unsynced sets block finish until queue is cleared | [x] | [x] | [ ] |
-| Missing remote workout opens recovery modal without deleting local data | [x] | [x] | [ ] |
-| Timed sets and prompted variables prompt user to log on phone app | [x] | [x] | [ ] |
-
-## Rest Timer & Alerts
-
-| Scenario | DOC | EMU | REAL |
-| --- | --- | --- | --- |
-| Absolute-time countdown stays accurate across screen sleeps | [x] | [x] | [ ] |
-| Haptic vibration alert triggered at rest zero | [x] | [x] | [ ] |
-| Overtime counter tracks negative elapsed seconds | [x] | [x] | [ ] |
-| Rest timer cancelled immediately on starting next set | [x] | [x] | [ ] |
+| Standalone package builds with Zeus | Companion | UNIT_TESTED build contract; local build passed | none for packaging |
+| Round and square layout rules | Companion | UNIT_TESTED; existing simulator evidence | named physical models |
+| Live heart rate and wake lock | Companion | DOC_CONFIRMED; existing simulator evidence | named physical models |
+| Extension manifest and two target shapes | Workout | DOC_CONFIRMED; UNIT_TESTED; local builds passed | install with registered App ID |
+| DataWidget inside Strength Training | Workout | DOC_CONFIRMED | BLOCKED on physical watch |
+| Native duration and calories | Workout | DOC_CONFIRMED; parser UNIT_TESTED | BLOCKED on physical watch |
+| Native workout history | Workout | DOC_CONFIRMED ownership by Zepp | BLOCKED on physical watch |
+| Protocol envelope and message routing | Both | UNIT_TESTED | physical BLE round-trip |
+| Phone-only API key and redaction | Both | UNIT_TESTED | release secret scan |
+| Program, next workout, and explicit day selection | Both | UNIT_TESTED | physical BLE and Cloud run |
+| Current workout continuation | Both | UNIT_TESTED | physical cross-app run |
+| Persist before render and ordered queue drain | Both | UNIT_TESTED | offline physical run |
+| Stale snapshot and start-time conflict guards | Both | UNIT_TESTED | physical concurrent edit |
+| Active-set, rest, and finish recovery | Both | UNIT_TESTED | physical crash/restart |
+| Warmups, supersets, AMRAP, weight, reps, and RPE | Both | UNIT_TESTED | physical interaction |
+| Absolute rest, overtime, pause, and adjustment | Both | UNIT_TESTED | physical lifecycle |
+| Rest vibration while focused | Workout | UNIT_TESTED | physical haptic behavior |
+| Rest vibration while unfocused | Workout | UNKNOWN | BLOCKED on physical watch |
+| Liftosaur finish drains sets before clearing local data | Both | UNIT_TESTED | physical Cloud run |
+| Native Zepp finish remains a separate user action | Workout | DOC_CONFIRMED; UNIT_TESTED prompt | physical user flow |
+| Companion temporary preview QR workflow | Companion | UNIT_TESTED parser; published preview exists | refresh after expiry |
+| Workout temporary preview QR workflow | Workout | UNIT_TESTED orchestration | BLOCKED on registered App ID and hardware |

@@ -1,5 +1,20 @@
 # Changelog
 
+## [0.4.0] - 1 September 2026
+
+### Added
+- Lifto Workout can now be built separately for Zepp Strength Training, with program selection, set adjustments, notes, rest, recovery, conflicts, and Liftosaur finish guidance in one tap-only view.
+- Native Zepp duration and calories appear when the Workout app provides them.
+- Separate build and temporary preview commands now cover Lifto Companion and Lifto Workout.
+
+### Changed
+- Both products now use one durable workout engine for offline sets, phone changes, crash recovery, and repeat-safe finishing.
+- Pull requests now check 447 workout, security, layout, package, and preview contracts without requiring private credentials.
+
+### Known limitations
+- Lifto Workout still needs a registered Zepp App ID and physical-watch validation before a public test QR can be offered.
+- Rest alerts fire while Lifto is visible and once on return; delivery while another Workout page is visible remains unconfirmed.
+
 ## [0.3.3] - 1 September 2026
 
 ### Fixed

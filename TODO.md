@@ -4,10 +4,10 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `6ab09bf`
+- Current commit: `9754492`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
-- Current phase: 10 - automated validation
+- Current phase: 12 - documentation and release
 - Overall status: in progress
 
 ## Status legend
@@ -124,7 +124,9 @@
 
 ## Phase 12 - Documentation and release
 
-- [ ] Publish tester guide, capability matrix, architecture, risks and manual actions.
+- [x] Complete factual Workout Extension documentation across decisions, architecture, risks, hardware test plan, manual actions, research, and capability matrix.
+- [x] Draft release notes for the two-product beta.
+- [ ] Publish the Workout tester guide and store assets after physical validation.
 
 ## Manual external actions
 
@@ -160,3 +162,4 @@
 - 2026-09-01: Added pure dual-target build system and package scripts for companion, workout, and all products.
 - 2026-09-01: Implemented the click-only Lifto Workout DataWidget, rest alert resume fallback, separate session storage and recovery contracts (433 passing tests).
 - 2026-09-01: Added unit-tested dual-preview orchestration and credential-free CI without uploading a preview.
+- 2026-09-01: Completed factual Workout Extension documentation across decisions, architecture, risks, hardware test plan, manual actions, research, and capability matrix.
