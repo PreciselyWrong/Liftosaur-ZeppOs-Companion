@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-import { execSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
@@ -35,13 +35,35 @@ const DEVICES = [
   'Amazfit Bip Max',
 ];
 
-const OUT_PATH = process.argv[2] || 'docs/test-build-qr.png';
-const SCALE = Number(process.argv[3] || 10);
+const DEFAULT_OUT_PATH = 'docs/test-build-qr.png';
+const DEFAULT_SCALE = 10;
 const QUIET = 4;
 
-function parseMatrix(text) {
+export function parseCliArgs(args = process.argv.slice(2)) {
+  if (args.includes('--help') || args.includes('-h')) return { showHelp: true };
+  return {
+    showHelp: false,
+    outPath: args[0] || DEFAULT_OUT_PATH,
+    scale: Number(args[1] || DEFAULT_SCALE),
+  };
+}
+
+export function combineProcessOutput({ stdout = '', stderr = '' }) {
+  return `${stdout}${stderr}`;
+}
+
+export function parsePreviewExpiry(text) {
+  return text.match(/expire on (\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2})/i)?.[1] || null;
+}
+
+export function previewCommand(devices = DEVICES) {
+  return `zeus preview -s -t "${devices.join(',')}"`;
+}
+
+export function parseMatrix(text) {
   const lines = text
-    .replace(/\x1b\[[0-9;]*[A-Za-z]/g, '')
+    .replace(/\r/g, '\n')
+    .replace(/\x1b(?:[@-Z\\-_]|\[[0-?]*[ -/]*[@-~])/g, '')
     .split(/\r?\n/)
     .filter((l) => l.length > 10 && /^[▀▄█ ]+$/u.test(l.replace(/\s+$/, '')));
   if (!lines.length) throw new Error('no QR block found in the capture');
@@ -211,11 +233,26 @@ function writePng(matrix, scale, outPath) {
 }
 
 function main() {
+  const { showHelp, outPath, scale } = parseCliArgs();
+  if (showHelp) {
+    console.log(`Usage: node tools/build-preview.mjs [out-path] [scale]
+
+Build and rasterise one Zepp preview QR code for all ${DEVICES.length} supported watches.`);
+    return;
+  }
+  if (!Number.isFinite(scale) || scale <= 0) throw new Error('scale must be a positive number');
+
   console.log(`Building preview for ${DEVICES.length} devices...`);
-  const rawOutput = execSync(`zeus preview -s -t "${DEVICES.join(',')}"`, {
+  const result = spawnSync(previewCommand(), {
     encoding: 'utf8',
     maxBuffer: 10 * 1024 * 1024,
+    shell: true,
   });
+  if (result.error) throw result.error;
+  const rawOutput = combineProcessOutput(result);
+  if (result.status !== 0) {
+    throw new Error(`zeus preview failed with exit code ${result.status}\n${rawOutput}`);
+  }
 
   for (const line of rawOutput.split('\n')) {
     if (line.includes('device sources') || line.includes('expire')) {
@@ -224,10 +261,12 @@ function main() {
   }
 
   const matrix = normalizeQrMatrix(parseMatrix(rawOutput));
+  const expiry = parsePreviewExpiry(rawOutput);
   const size = matrix.length;
   const version = (size - 17) / 4;
-  const { pxW, pxH } = writePng(matrix, SCALE, OUT_PATH);
-  console.log(`${OUT_PATH}: QR version ${version} (${size}x${size} modules) -> ${pxW}x${pxH}px`);
+  const { pxW, pxH } = writePng(matrix, scale, outPath);
+  console.log(`${outPath}: QR version ${version} (${size}x${size} modules) -> ${pxW}x${pxH}px`);
+  if (expiry) console.log(`Preview expires at ${expiry} local time.`);
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) main();

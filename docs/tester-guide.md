@@ -21,7 +21,7 @@ You need:
   <img src="test-build-qr.png" width="220" alt="Test build QR code" />
 </p>
 
-This code expires on **2026-09-07 at 17:56 UTC** (19:56 Central European Summer Time).
+This code expires on **2026-09-08 at 15:10 UTC** (17:10 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -79,7 +79,7 @@ On your watch, press the side button to open the app list: **Lifto Companion** i
 
 ## Things to know
 
-- **The QR code expires after 7 days** (on 2026-09-07 at 17:56 UTC, or 19:56 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
+- **The QR code expires after 7 days** (on 2026-09-08 at 15:10 UTC, or 17:10 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
 - **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
 - **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 

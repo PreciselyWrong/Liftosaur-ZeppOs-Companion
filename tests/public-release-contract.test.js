@@ -76,8 +76,8 @@ test('published preview documentation carries the current unified QR expiry', ()
 
   for (const document of [readme, testerGuide]) {
     assert.match(document, /test-build-qr\.png/);
-    assert.match(document, /2026-09-07 at 17:56 UTC/);
-    assert.match(document, /19:56 Central European Summer Time/);
+    assert.match(document, /2026-09-08 at 15:10 UTC/);
+    assert.match(document, /17:10 Central European Summer Time/);
     assert.match(document, /Round/);
     assert.match(document, /Square/);
   }

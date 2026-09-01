@@ -1,7 +1,14 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { normalizeQrMatrix } from '../tools/build-preview.mjs';
+import {
+  combineProcessOutput,
+  normalizeQrMatrix,
+  parseCliArgs,
+  parseMatrix,
+  parsePreviewExpiry,
+  previewCommand,
+} from '../tools/build-preview.mjs';
 
 const FINDER = [
   [1, 1, 1, 1, 1, 1, 1],
@@ -59,6 +66,56 @@ function withAsymmetricFrame(matrix) {
   }
   return framed;
 }
+
+function toTerminal(matrix) {
+  const rows = matrix.length % 2 === 0
+    ? matrix
+    : [...matrix, Array(matrix[0].length).fill(false)];
+  const lines = [];
+  for (let y = 0; y < rows.length; y += 2) {
+    lines.push(rows[y].map((top, x) => {
+      const bottom = rows[y + 1][x];
+      if (top && bottom) return '█';
+      if (top) return '▀';
+      if (bottom) return '▄';
+      return ' ';
+    }).join(''));
+  }
+  return lines.join('\n');
+}
+
+test('help arguments never trigger a preview build', () => {
+  assert.deepEqual(parseCliArgs(['--help']), { showHelp: true });
+  assert.deepEqual(parseCliArgs(['-h']), { showHelp: true });
+});
+
+test('combines both Zeus output streams before parsing', () => {
+  assert.equal(combineProcessOutput({ stdout: 'build\n', stderr: 'qr\n' }), 'build\nqr\n');
+});
+
+test('quotes the complete device list as one Zeus argument', () => {
+  assert.equal(
+    previewCommand(['Amazfit Active', 'Amazfit Active 2 (Round)']),
+    'zeus preview -s -t "Amazfit Active,Amazfit Active 2 (Round)"',
+  );
+});
+
+test('parses a terminal QR wrapped in private ANSI cursor sequences', () => {
+  const expected = structuralQr();
+  const terminal = toTerminal(withQuietZone(expected))
+    .split('\n')
+    .map((line) => `\x1b[?25l${line}\x1b[?25h`)
+    .join('\r\n');
+
+  assert.deepEqual(normalizeQrMatrix(parseMatrix(terminal)), expected);
+});
+
+test('extracts the expiry reported by Zeus', () => {
+  assert.equal(
+    parsePreviewExpiry('[✔] This QR code will expire on 2026-09-08 19:30:00.'),
+    '2026-09-08 19:30:00',
+  );
+});
 
 test('normalizes terminal QR matrices with dark block modules', () => {
   const expected = structuralQr();
