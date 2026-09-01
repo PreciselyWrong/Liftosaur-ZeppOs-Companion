@@ -4,11 +4,11 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `9754492`
+- Current commit: `dbf210f`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
-- Current phase: 12 - documentation and release
-- Overall status: in progress
+- Current phase: 14 - final validation and pull request
+- Overall status: engineering complete; App ID and physical validation blocked externally
 
 ## Status legend
 
@@ -144,7 +144,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 447 passing
+- `npm test` - 448 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`

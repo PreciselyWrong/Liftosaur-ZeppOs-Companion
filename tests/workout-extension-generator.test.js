@@ -25,6 +25,14 @@ test('generates a complete Workout Extension project in target directory', () =>
   const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lifto-ext-gen-test-'));
 
   try {
+    const staleSharedDir = path.join(tempDir, 'shared');
+    fs.mkdirSync(staleSharedDir, { recursive: true });
+    fs.writeFileSync(
+      path.join(tempDir, 'app.json'),
+      JSON.stringify({ app: { extType: 'workout' } }),
+    );
+    fs.writeFileSync(path.join(staleSharedDir, 'removed-prototype.js'), 'stale\n');
+
     const result = generateWorkoutExtensionProject({
       appId: 987654,
       targetDir: tempDir,
@@ -79,6 +87,11 @@ test('generates a complete Workout Extension project in target directory', () =>
     );
     assert.ok(fs.existsSync(path.join(tempDir, 'shared', 'protocol.js')), 'shared/protocol.js must exist');
     assert.ok(fs.existsSync(path.join(tempDir, 'shared', 'screen-layout.js')), 'shared/screen-layout.js must exist');
+    assert.equal(
+      fs.existsSync(path.join(tempDir, 'shared', 'removed-prototype.js')),
+      false,
+      'stale generated files must not survive regeneration',
+    );
 
     assert.ok(
       fs.existsSync(path.join(tempDir, 'assets', 'common.r', 'icon.png')),
@@ -88,6 +101,23 @@ test('generates a complete Workout Extension project in target directory', () =>
       fs.existsSync(path.join(tempDir, 'assets', 'square.s', 'icon.png')),
       'assets/square.s/icon.png must exist',
     );
+  } finally {
+    fs.rmSync(tempDir, { recursive: true, force: true });
+  }
+});
+
+test('refuses to clean a non-empty directory that is not a generated Workout project', () => {
+  const tempDir = fs.mkdtempSync(path.join(os.tmpdir(), 'lifto-ext-safe-target-test-'));
+
+  try {
+    const unrelatedPath = path.join(tempDir, 'keep.txt');
+    fs.writeFileSync(unrelatedPath, 'unrelated\n');
+
+    assert.throws(
+      () => generateWorkoutExtensionProject({ appId: 987654, targetDir: tempDir }),
+      /not a generated Workout Extension project/,
+    );
+    assert.equal(fs.readFileSync(unrelatedPath, 'utf8'), 'unrelated\n');
   } finally {
     fs.rmSync(tempDir, { recursive: true, force: true });
   }

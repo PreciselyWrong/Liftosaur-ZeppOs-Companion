@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-447%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-448%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -62,7 +62,7 @@ Workout Extension documentation:
 > will refuse to install whatever you scan. That is not a bug, so please do not
 > report it as one.
 
-**Version:** Lifto Companion 0.3.3
+**Version:** Lifto Companion 0.4.0 beta. The temporary QR below installs the previously published 0.3.3 build.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one

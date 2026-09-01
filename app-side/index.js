@@ -146,7 +146,7 @@ function getServices() {
     const client = createLiftosaurApiClient({
       apiKey,
       deviceId,
-      clientName: 'liftosaur-zepp-os/0.3.2',
+      clientName: 'liftosaur-zepp-os/0.4.0',
     });
     const referenceData = createReferenceData({ client });
     cachedProgramService = createProgramService({
