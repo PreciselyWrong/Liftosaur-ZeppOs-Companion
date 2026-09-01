@@ -4,7 +4,7 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `31afd7e`
+- Current commit: `b32b9f1`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
 - Current phase: 3 - shared controller extraction
@@ -33,7 +33,7 @@
 | --- | --- | --- | --- |
 | Main synchronization | `git fetch origin main`, `git pull --ff-only origin main` | passed | `main` already matched `origin/main` at `190a174` |
 | Working tree | `git status --short` | passed | clean before branch creation |
-| Existing tests | `npm test` | passed | 398 passing tests, 0 failures, 1 September 2026 |
+| Existing tests | `npm test` | passed | 413 passing tests, 0 failures, 1 September 2026 |
 | Companion build | `zeus build` | passed | Zeus 1.9.3 produced the standalone build on 1 September 2026 |
 | Workout build | generate with synthetic App ID, then `zeus build` | passed | Separate round and square extension targets compiled on 1 September 2026 |
 
@@ -85,7 +85,7 @@
 
 - [x] Extract local plan, session, journal, persistence, restore and direct-sync metadata ownership.
 - [x] Route Companion session actions through the shared controller and keep its build green.
-- [ ] Move the remaining Cloud synchronization orchestration out of the standalone page.
+- [x] Move Cloud start, queue draining, polling, adoption, conflict, finish and discard orchestration out of the standalone page.
 
 ## Phase 4 - Dual-target build system
 
@@ -140,7 +140,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 398 passing
+- `npm test` - 413 passing
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
 - `zeus build` - Companion passed
 - `zeus build` from generated Workout Extension - passed
@@ -150,3 +150,4 @@
 - 2026-09-01: Created the feature branch and recorded a clean, passing standalone baseline.
 - 2026-09-01: Added and built the minimal separate Workout Extension spike without claiming simulator or hardware validation.
 - 2026-09-01: Extracted shared local workout control and migrated Companion without changing its network or renderer behavior.
+- 2026-09-01: Centralized direct Cloud synchronization and recovery in the shared workout controller.
