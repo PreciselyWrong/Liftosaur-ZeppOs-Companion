@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-413%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-425%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -98,6 +98,8 @@ continued on either device via `GET /workout/current`.
 │  shared/workout-session.js pure state machine + journal │
 │       │                                                 │
 │  shared/session-storage.js local storage persistence    │
+│       │                                                 │
+│  data-widget/common/       workout extension UI         │
 └───────────────────────────┬─────────────────────────────┘
                             │ BLE / ZML protocol v3
 ┌───────────────────────────▼─────────────────────────────┐
@@ -145,6 +147,18 @@ Shared, platform-independent modules:
 ### Running Unit Tests
 ```bash
 npm test
+```
+
+### Building Packages
+```bash
+# Build standalone Companion package
+npm run build:companion
+
+# Build Strength Training Workout Extension package (requires numeric App ID)
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:workout
+
+# Build both targets
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
 ```
 
 ### Running on Simulator or Real Device
