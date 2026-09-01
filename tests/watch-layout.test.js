@@ -340,7 +340,7 @@ test('discarding a restored workout reloads programs when no outline is in memor
 
   assert.match(handler, /if \(outline\)/);
   assert.match(handler, /loadPrograms\(\)/);
-  assert.match(handler, /createWorkoutSession\(\{ plan: null \}\)/);
+  assert.match(handler, /workoutController\.clear\(\)/);
 });
 
 test('a restored finished workout resumes saving instead of becoming dismissible', () => {

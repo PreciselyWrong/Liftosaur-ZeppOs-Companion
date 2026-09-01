@@ -237,7 +237,8 @@ test('session restore recovers directSync metadata and retries finish or discard
   const source = readWatchPage();
   const restore = source.slice(source.indexOf('function restoreSession()'), source.indexOf('function formatSeconds('));
 
-  assert.match(restore, /snapshot\.sync/);
+  assert.match(restore, /workoutController\.restore\(\)/);
+  assert.match(restore, /directSync\s*=\s*workoutController\.sync\(\)/);
   assert.match(source, /directSync\.finishRequestedAt/);
   assert.match(source, /directSync\.discardRequestedAt/);
 });

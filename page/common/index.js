@@ -21,7 +21,11 @@ import {
 } from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
 
-import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-session.js';
+import { SESSION_STATES } from '../../shared/workout-session.js';
+import {
+  createWorkoutController,
+  defaultDirectSync,
+} from '../../shared/workout-controller.js';
 import {
   createFallbackStorageAdapter,
   createSessionStore,
@@ -157,6 +161,8 @@ const localStoreAdapter = createFallbackStorageAdapter(
   (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
 );
 const sessionStore = createSessionStore(localStoreAdapter);
+const workoutController = createWorkoutController({ store: sessionStore });
+const session = workoutController;
 
 let pageInstance = null;
 let screen = SCREEN.LOADING;
@@ -184,21 +190,6 @@ let deferredServerWorkout = null;
 let syncWarning = null;
 let lastServerWorkoutSignature = null;
 
-function defaultDirectSync(mode = 'LEGACY') {
-  return {
-    mode,
-    startConfirmed: false,
-    acknowledgedSetCount: 0,
-    finishRequestedAt: null,
-    discardRequestedAt: null,
-    conflict: false,
-    remoteMissing: false,
-    preservedIntervals: [],
-    intervalsPreservedThrough: null,
-  };
-}
-
-let session = createWorkoutSession({ plan: null });
 let isOverviewOpen = false;
 let overviewPage = 0;
 let readyPage = 0;
@@ -532,7 +523,6 @@ function loadPrograms() {
               throw new Error('Workout has no unit specified');
             }
             dayPlan = plan;
-            session = createWorkoutSession({ plan: dayPlan });
             directSync = {
               mode: 'DIRECT',
               startConfirmed: true,
@@ -544,6 +534,7 @@ function loadPrograms() {
               preservedIntervals: [],
               intervalsPreservedThrough: null,
             };
+            workoutController.loadPlan(dayPlan, { sync: directSync });
             persistSession();
             isBusy = false;
             statusMessage = '';
@@ -628,9 +619,8 @@ function loadDayPlan(week, day) {
         isBusy = false;
         statusMessage = '';
         dayPlan = res.payload;
-        session = createWorkoutSession({ plan: dayPlan });
         directSync = defaultDirectSync('LEGACY');
-        sessionStore.clear();
+        workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
         finishState = null;
         isOverviewOpen = false;
         overviewPage = 0;
@@ -665,7 +655,6 @@ function loadDayPlan(week, day) {
       isBusy = false;
       statusMessage = '';
       dayPlan = plan;
-      session = createWorkoutSession({ plan: dayPlan });
       directSync = {
         mode: 'DIRECT',
         startConfirmed: false,
@@ -677,7 +666,7 @@ function loadDayPlan(week, day) {
         preservedIntervals: [],
         intervalsPreservedThrough: null,
       };
-      sessionStore.clear();
+      workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
       finishState = null;
       isOverviewOpen = false;
       overviewPage = 0;
@@ -888,7 +877,7 @@ function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {})
   if (!plan || !plan.unit) return;
   dayPlan = plan;
   lastServerWorkoutSignature = JSON.stringify(serverWorkout);
-  session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
+  workoutController.loadPlan(dayPlan, { sync: directSync, resumeFromEntryId });
   directSync.acknowledgedSetCount = session.getWorkoutSetWrites().length;
   persistSession();
   renderUI();
@@ -1036,7 +1025,7 @@ function submitWorkout() {
         }
 
         await send(MESSAGE_TYPES.FINISH_WORKOUT, payload);
-        sessionStore.clear();
+        workoutController.clearPersisted();
         finishState = {
           status: 'SAVED',
           message: 'Saved to Liftosaur',
@@ -1080,7 +1069,7 @@ function submitWorkout() {
                 : 'Saved to Liftosaur',
       };
       if (payload.status !== 'BASE_PROGRAM_UNAVAILABLE') {
-        sessionStore.clear();
+        workoutController.clearPersisted();
       }
       renderUI();
     })
@@ -1133,9 +1122,7 @@ function abandonWorkout() {
 }
 
 function returnAfterDiscard() {
-  sessionStore.clear();
-  session.cancelWorkout();
-  session = createWorkoutSession({ plan: null });
+  workoutController.clear();
   dayPlan = null;
   directSync = defaultDirectSync('LEGACY');
   listPage = 0;
@@ -1154,19 +1141,13 @@ function returnAfterDiscard() {
 
 function persistSession() {
   if (!dayPlan) return;
-  sessionStore.save({
-    plan: dayPlan,
-    journal: session.getJournal(),
-    startedAt: session.view().startedAt,
-    sync: directSync,
-  });
+  workoutController.updateSync(directSync);
 }
 
 /** Persist first, render second. The account is written once, at finish. */
 function persistAndRender(action) {
   if (action) {
     action();
-    persistSession();
   }
   renderUI();
 }
@@ -1177,42 +1158,10 @@ function persistAndRender(action) {
  * restored - no network needed to carry on lifting.
  */
 function restoreSession() {
-  const snapshot = sessionStore.load();
-  if (!snapshot) return false;
-
-  try {
-    dayPlan = snapshot.plan;
-    session = createWorkoutSession({ plan: snapshot.plan, initialJournal: snapshot.journal });
-    if (snapshot.sync) {
-      directSync = {
-        mode: snapshot.sync.mode || (snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY'),
-        startConfirmed: Boolean(snapshot.sync.startConfirmed),
-        acknowledgedSetCount: snapshot.sync.acknowledgedSetCount || 0,
-        finishRequestedAt: snapshot.sync.finishRequestedAt || null,
-        discardRequestedAt: snapshot.sync.discardRequestedAt || null,
-        conflict: Boolean(snapshot.sync.conflict),
-        remoteMissing: Boolean(snapshot.sync.remoteMissing),
-        preservedIntervals: Array.isArray(snapshot.sync.preservedIntervals)
-          ? snapshot.sync.preservedIntervals
-          : [],
-        intervalsPreservedThrough: Number.isFinite(snapshot.sync.intervalsPreservedThrough)
-          ? snapshot.sync.intervalsPreservedThrough
-          : null,
-      };
-    } else {
-      directSync = defaultDirectSync(snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY');
-    }
-  } catch (err) {
-    console.log('[liftosaur] could not resume session:', err?.message || String(err));
-    sessionStore.clear();
-    return false;
-  }
-
-  const view = session.view();
-  if (view.state === SESSION_STATES.NO_PLAN) {
-    sessionStore.clear();
-    return false;
-  }
+  const restored = workoutController.restore();
+  if (!restored.success) return false;
+  dayPlan = workoutController.plan();
+  directSync = workoutController.sync();
 
   console.log('[liftosaur] session resumed');
   screen = SCREEN.SESSION;
@@ -3136,8 +3085,7 @@ function renderFinishedScreen(view) {
 
         const finishedPlan = dayPlan;
         const finishedProgram = programForSavedPlan(selectedProgram, programs, finishedPlan);
-        sessionStore.clear();
-        session = createWorkoutSession({ plan: null });
+        workoutController.clear();
         dayPlan = null;
         finishState = null;
         listPage = 0;

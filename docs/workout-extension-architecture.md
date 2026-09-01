@@ -14,7 +14,7 @@ System Workout owns recording and history
   -> native metric view model
 ```
 
-The standalone page and the extension renderer have distinct lifecycle and interaction adapters. They share the session model, serialization, Cloud protocol and refresh policy. The extension must not import the standalone renderer.
+The standalone page and the extension renderer have distinct lifecycle and interaction adapters. They share `workout-controller.js` for local plan, journal, persistence, restore and sync metadata ownership, plus the session model, Cloud protocol and refresh policy. The extension must not import the standalone renderer.
 
 The extension uses a separate App ID, settings namespace and Side Service installation. Its API key remains on the paired phone. It never passes through watch storage, a protocol payload or a handoff record. The authoritative shared running workout is loaded from Liftosaur Cloud.
 
