@@ -22,6 +22,7 @@
 
 - `page/common/` - standalone lifecycle, renderer, Cloud orchestration and recovery UI.
 - `shared/workout-session.js` - pure session state machine and event journal.
+- `shared/workout-controller.js` - local plan, journal, persistence, restore and sync metadata orchestration shared by both products.
 - `shared/workout-api-plan.js`, `shared/day-plan.js` - authoritative API response to plan and legacy replay mappings.
 - `shared/session-storage.js`, `shared/workout-refresh-policy.js` - crash recovery, queue state and refresh timing.
 - `shared/screen-layout.js`, `shared/watch-layout.js` - the only screen-size and renderer layout rules.
@@ -80,6 +81,6 @@
 
 ## State
 
-- Version 0.3.3 beta: standalone direct Cloud workouts, durable offline set queue, conflict recovery, absolute rest timing, round and square layouts, and crash-safe finish retries are covered by 376 tests.
+- Version 0.3.3 beta: standalone direct Cloud workouts, durable offline set queue, conflict recovery, absolute rest timing, round and square layouts, and crash-safe finish retries are covered by 398 tests.
 - Now: build the separate Strength Training Workout Extension package and shared controller on `feat/workout-extension` while keeping standalone green.
 - Next: validate direct sync and the extension lifecycle on physical watches; simulator images cannot prove native Workout integration.
