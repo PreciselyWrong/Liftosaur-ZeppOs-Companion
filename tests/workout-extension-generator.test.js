@@ -74,8 +74,8 @@ test('generates a complete Workout Extension project in target directory', () =>
     assert.ok(fs.existsSync(path.join(tempDir, 'setting', 'index.js')), 'setting/index.js must exist');
 
     assert.ok(
-      fs.existsSync(path.join(tempDir, 'shared', 'workout-extension-spike.js')),
-      'shared/workout-extension-spike.js must exist',
+      fs.existsSync(path.join(tempDir, 'shared', 'workout-extension-metrics.js')),
+      'shared/workout-extension-metrics.js must exist',
     );
     assert.ok(fs.existsSync(path.join(tempDir, 'shared', 'protocol.js')), 'shared/protocol.js must exist');
     assert.ok(fs.existsSync(path.join(tempDir, 'shared', 'screen-layout.js')), 'shared/screen-layout.js must exist');
@@ -104,7 +104,7 @@ test('ships the official single-page DataWidget lifecycle and click-only interac
     assert.match(source, new RegExp(`${lifecycle}\\(\\)`));
   }
   assert.match(source, /getSportData\(\{ type: 'duration' \}/);
-  assert.match(source, /MESSAGE_TYPES\.PING/);
+  assert.match(source, /MESSAGE_TYPES\.(GET_SETTINGS|GET_WORKOUT_CURRENT|START_WORKOUT)/);
   assert.match(source, /click_func:/);
   assert.doesNotMatch(source, /onGesture|SCROLL_LIST|VIEW_CONTAINER/);
 });

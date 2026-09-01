@@ -1,10 +1,10 @@
-# Lifto Companion for Zepp OS
+# Lifto for Zepp OS
 
-Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking client for compatible round and square Amazfit smartwatches running Zepp OS.
+Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) on compatible round and square Amazfit smartwatches running Zepp OS.
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-425%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-433%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -13,6 +13,16 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
   <img src="docs/screenshots/workout-overview.png" width="19%" alt="Workout Overview" />
   <img src="docs/screenshots/workout-summary.png" width="19%" alt="Workout Summary" />
 </p>
+
+## Lifto Companion
+
+The standalone app provides the least constrained watch experience: program browsing, direct Cloud workouts, recovery tools, gestures, live heart rate, and the existing temporary preview QR workflow.
+
+## Lifto Workout
+
+The separate Workout Extension runs inside Zepp Strength Training. It keeps the native Zepp activity and metrics visible while the shared Lifto controller handles prescriptions, set logging, rest, recovery, and Liftosaur finalization through click-only screens.
+
+The two apps are complementary and can be installed together. Liftosaur Cloud is their shared workout handoff; credentials remain inside each app's phone Side Service.
 
 ---
 
@@ -126,6 +136,9 @@ Shared, platform-independent modules:
 | `shared/workout-session.js` | The session state machine, set journal, and pause intervals |
 | `shared/workout-refresh-policy.js` | Coalesced action refreshes, passive timing, and failure backoff |
 | `shared/weight-rounding.js` | Loadable-weight plate math and weight string parsing |
+| `shared/rest-alert.js` | Rest alert state tracking, foreground zero-crossing, and resume expiry |
+| `shared/workout-extension-nav.js` | Extension screen names and formatting helpers |
+| `shared/workout-extension-metrics.js` | Defensive native duration and calorie response parsing |
 | `shared/protocol.js` | The device <-> phone Protocol v3 envelope |
 | `shared/liftohistory.js` | Parse and format Liftohistory text (legacy & diagnostics) |
 | `shared/liftoscript-outline.js` | Read `#` week and `##` day headers (catalog fallback) |
@@ -134,6 +147,7 @@ Shared, platform-independent modules:
 
 - **Timed sets & prompted variables**: sets with a prescribed timer countdown or arbitrary prompted script variables currently ask the user to complete that set in the official Liftosaur phone app. The watch polls and adopts the completed result.
 - **Native workout activity**: direct sync does not create a Zepp native workout activity. Native workout integration remains separately gated by real-device testing.
+- **Workout Extension rest alerts**: vibration is unit-tested while Lifto has focus. Zepp pauses the extension when it loses focus, so an expired rest alerts once when Lifto resumes; background delivery remains unconfirmed.
 - **Legacy REST flow**: the older Playground replay and raw `/history` + `/programs` write flow remains only for one-time recovery of version 1 local snapshots. In that legacy flow, the official phone app day pointer does not advance. Under the Running a Workout API, the phone pointer advances automatically on finish.
 
 ---

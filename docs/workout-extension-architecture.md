@@ -18,4 +18,6 @@ The standalone page and the extension renderer have distinct lifecycle and inter
 
 The extension uses a separate App ID, settings namespace and Side Service installation. Its API key remains on the paired phone. It never passes through watch storage, a protocol payload or a handoff record. The authoritative shared running workout is loaded from Liftosaur Cloud.
 
-Every set is persisted before rendering and queued before asynchronous sync. The session stores `restStartedAt`, `restDuration` and `restEndsAt`; a display tick is not authoritative. On focus return the adapter recomputes the timer and clears obsolete notifications. Finish only clears local data after Liftosaur confirms completion. Native Zepp finish remains a user action.
+The DataWidget renders loading, program/week/day selection, ready, active set, rest, overview, notes, finish and explicit recovery states inside one click-only page. It uses the separate `liftosaur.extension.session.v2` storage key and never imports the standalone renderer.
+
+Every set is persisted before rendering and queued before asynchronous sync. Rest uses the controller's absolute end time; a display tick is not authoritative. Zepp pauses the extension when it loses focus, so the unit-tested fallback checks the absolute deadline on resume and alerts once. Durable background vibration remains `UNKNOWN`. Finish only clears local data after Liftosaur confirms completion. Native Zepp finish remains a user action.
