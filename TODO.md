@@ -4,10 +4,10 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
+- Current commit: `c77cc1b`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
-- Current phase: 0 - audit and capability research
+- Current phase: 2 - minimal Workout Extension spike
 - Overall status: in progress
 
 ## Status legend
@@ -33,8 +33,9 @@
 | --- | --- | --- | --- |
 | Main synchronization | `git fetch origin main`, `git pull --ff-only origin main` | passed | `main` already matched `origin/main` at `190a174` |
 | Working tree | `git status --short` | passed | clean before branch creation |
-| Existing tests | `npm test` | passed | 374 passing tests, 0 failures, 1 September 2026 |
-| Build | Zeus build | not run | requires Developer Mode and a supported device context |
+| Existing tests | `npm test` | passed | 386 passing tests, 0 failures, 1 September 2026 |
+| Companion build | `zeus build` | passed | Zeus 1.9.3 produced the standalone build on 1 September 2026 |
+| Workout build | generate with synthetic App ID, then `zeus build` | passed | Separate round and square extension targets compiled on 1 September 2026 |
 
 ## Decision gates
 
@@ -75,9 +76,10 @@
 
 ## Phase 2 - Minimal Workout Extension spike
 
-- [ ] Add a separate extension manifest generator with configurable App ID.
-- [ ] Add a click-only DataWidget entry point and lifecycle adapter.
-- [ ] Add manifest and lifecycle characterization tests.
+- [x] Add a separate extension manifest generator with configurable App ID.
+- [x] Add a click-only DataWidget with lifecycle logging, durable counter, absolute timer, native duration read and Side Service ping.
+- [x] Add manifest, generator, state, sport-data and lifecycle characterization tests.
+- [ ] Generate and install a real preview package; a dedicated App ID and compatible watch are required.
 
 ## Phase 3 - Shared controller extraction
 
@@ -137,8 +139,12 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 374 passing
+- `npm test` - 386 passing
+- `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
+- `zeus build` - Companion passed
+- `zeus build` from generated Workout Extension - passed
 
 ## Change log
 
 - 2026-09-01: Created the feature branch and recorded a clean, passing standalone baseline.
+- 2026-09-01: Added and built the minimal separate Workout Extension spike without claiming simulator or hardware validation.

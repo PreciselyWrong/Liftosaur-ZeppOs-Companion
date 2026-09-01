@@ -20,7 +20,7 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
     configVersion: 'v3',
     app: {
       appId,
-      appName: 'Lifto Workout Extension',
+      appName: 'Lifto Workout',
       appType: 'app',
       extType: 'workout',
       version: { code: versionCode, name: version },
@@ -28,7 +28,11 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
       vender: 'Sni3rs',
       description: 'Liftosaur session companion for Zepp Strength Training',
     },
-    permissions: ['device:os.local_storage', 'data:user.hd.workout'],
+    permissions: [
+      'device:os.local_storage',
+      'data:os.device.info',
+      'data:user.hd.workout',
+    ],
     runtime: {
       apiVersion: { compatible: '3.6', target: '3.6', minVersion: '3.6' },
     },

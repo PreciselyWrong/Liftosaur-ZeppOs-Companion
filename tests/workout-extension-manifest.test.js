@@ -9,7 +9,11 @@ test('builds a separate Strength Training Workout Extension manifest', () => {
   assert.equal(manifest.app.extType, 'workout');
   assert.equal(manifest.app.appId, 7654321);
   assert.equal(manifest.runtime.apiVersion.minVersion, '3.6');
-  assert.deepEqual(manifest.permissions, ['device:os.local_storage', 'data:user.hd.workout']);
+  assert.deepEqual(manifest.permissions, [
+    'device:os.local_storage',
+    'data:os.device.info',
+    'data:user.hd.workout',
+  ]);
   assert.deepEqual(manifest.targets.common.module['data-widget'].widgets[0].runtime.ability, [
     { type: 1, subType: [52] },
   ]);
