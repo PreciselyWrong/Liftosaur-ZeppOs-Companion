@@ -1,140 +1,131 @@
 # Architecture
 
+## Two-Product Architecture & Boundaries
+
+Lifto is structured as two distinct, complementary packages sharing a platform-independent domain and protocol layer:
+
+1. **Lifto Companion** (Standalone Mini Program)
+   - App ID: `1123411` (`appType: "app"` in `app.json`)
+   - Runtime: standalone watch application (`page/common/index.js`)
+   - Features: program browsing, custom workout selection, direct Cloud sync, live heart-rate sensor via `@zos/sensor`, display wake lock via `@zos/display`, manual recovery tools
+   - Local storage key: `liftosaur.session.v2`
+
+2. **Lifto Workout** (Strength Training Workout Extension)
+   - App ID: dedicated registered ID (`appType: "app"`, `extType: "workout"` generated via `shared/workout-extension-manifest.js`)
+   - Runtime: embedded single-page DataWidget (`data-widget/common/index.js`) inside the native Zepp Workout application (`subType: [52]`)
+   - Features: click-only session flow, live native duration and calorie readouts via `getSportData`, shared Cloud synchronization, absolute rest alerts with `onResume` fallback
+   - Local storage key: `liftosaur.extension.session.v2`
+
+---
+
 ## Components and Boundaries
 
 | Component | Runs on | Owns | Never owns |
 | --- | --- | --- | --- |
-| Standalone App (mini program) | Watch | Liftosaur UI, touch state machine, HR sensor via `@zos/sensor`, local journal and write queue | Direct HTTP, raw secret keys |
-| Device App Storage | Watch | Durable local event journal, active session state, pending set queue, pause intervals, finish/discard intent | Server-wide progression state |
-| Side Service | Phone | API key, stable installation identity (`X-Liftosaur-Device-Id`), HTTPS communication to Liftosaur Cloud | UI rendering, watch sensor state |
-| Liftosaur Cloud | Remote | Shared active workout state, programs, history, exercise update scripts, progression, 1RM calculations, and `nextDay` pointer | Local UI / device state |
-
-Single-ownership rule: each datum has exactly one authoritative owner. The app is the sole owner
-of the watch heart-rate sensor. Liftosaur Cloud is the sole source of truth for active workout
-prescriptions and progression.
-
----
-
-## Who Decides What
-
-The watch decides nothing about workout prescriptions or progressions. It asks, and Liftosaur Cloud answers:
-
-| Question | Answered by |
-| --- | --- |
-| Which programs exist? | `GET /programs` (or cached outline) |
-| Which workout is next? | `GET /workout/next` (official Cloud schedule) |
-| Which day am I doing? | **The user**, by confirming the next day or selecting an explicit program/week/day |
-| Which exercises, sets, reps, weights, RPE, rest, plates, warmups, supersets? | `GET /workout/next` or `GET /workout/current` (pre-resolved by Cloud) |
-| What changes when a set completes? | `POST /workout/sets` (server executes update scripts and returns new state) |
-| What does this session change in my program progression and history? | `POST /workout/finish` (atomic server-side progression, 1RM, and `nextDay` update) |
+| Lifto Companion (`page/common/`) | Watch | Standalone UI, touch navigation, HR sensor via `@zos/sensor`, screen wake lock | Direct HTTP, raw secret keys, native Zepp workout recording |
+| Lifto Workout (`data-widget/common/`) | Watch | Click-only DataWidget UI, embedded Strength Training flow, read-only `getSportData` display | Direct HTTP, raw secret keys, starting/stopping native Zepp workout |
+| Shared Controller (`shared/workout-controller.js`) | Watch / Node | Local day plan, session state machine, durable journal, write queue, polling policy, conflict resolution, finish/discard orchestration | UI rendering, hardware sensor access, HTTP transport |
+| Standalone Storage (`liftosaur.session.v2`) | Watch | Companion local session snapshot, journal, set queue, pause intervals | Extension session state, server-wide progression |
+| Extension Storage (`liftosaur.extension.session.v2`) | Watch | Extension local session snapshot, journal, set queue, pause intervals | Companion session state, server-wide progression |
+| Companion Side Service (`app-side/`) | Phone | Standalone API key, standalone installation ID (`X-Liftosaur-Device-Id`), HTTPS to Cloud | Extension settings, watch UI rendering |
+| Extension Side Service (`app-side/`) | Phone | Extension API key, extension installation ID (`X-Liftosaur-Device-Id`), HTTPS to Cloud | Companion settings, watch UI rendering |
+| Native Zepp Workout App | Watch | System workout session, native activity recording, sensor aggregation, native fitness history | Liftosaur Cloud session, Liftosaur progression scripts |
+| Liftosaur Cloud | Remote | Authoritative active workout state, programs, history, exercise update scripts, progression, 1RM, `nextDay` pointer | Local watch UI / device state |
 
 ---
 
-## Selection and Launch Flow
+## Canonical Domain Layer (`shared/workout-controller.js`)
 
-On startup in Cloud mode, the watch queries `GET_SETTINGS`, `GET_WORKOUT_CURRENT`, and `GET_WORKOUT_NEXT`:
+Both packages share one authoritative domain controller:
+
+- **Day Plan Mapping**: `shared/workout-api-plan.js` maps official `data.workout` responses to local day plans.
+- **Session State Machine**: `shared/workout-session.js` maintains the active state (`NO_PLAN`, `READY`, `ACTIVE_SET`, `REST`, `FINISHING`, `COMPLETED`, `CANCELLED`), set journal, and pause intervals.
+- **Durable Persistence**: Every state transition persists to the target package's storage namespace before UI redraw.
+- **Asynchronous Sync**: `POST /workout/start`, `POST /workout/sets`, `GET /workout/current`, `POST /workout/finish`, and `DELETE /workout/current` run in the background.
+- **Adaptive Polling Policy**: `shared/workout-refresh-policy.js` enforces a 10-second action floor, 15-second passive checks, and exponential backoff (30s, 60s, 120s) on network failures.
+- **Conflict Resolution**: If the remote session vanishes or reports a mismatched start time, the controller transitions to an explicit conflict state without deleting local data.
+
+---
+
+## Native Zepp Ownership & Read-Only Metrics
+
+In Workout Extension mode, the native Zepp Workout application is the sole owner of workout activity recording:
+
+- Lifto Workout requests permission `data:user.hd.workout`.
+- The DataWidget reads live duration and calories via `getSportData({ type: 'duration' | 'calories' })`.
+- Metrics are defensively parsed via `shared/workout-extension-metrics.js`.
+- Lifto Workout **never** starts, pauses, resumes, or stops native Zepp recording; no public API exists for third-party widgets to control the system Workout app.
+
+---
+
+## Phone Settings & Security Boundary
+
+- Each package has its own App ID and separate phone settings page (`setting/index.js`).
+- The Liftosaur API key (`lftsk_*`) is entered and stored in phone `settingsStorage` for each respective app.
+- Secrets are never transmitted across BLE, stored in watch `LocalStorage`, or shared via watch files.
+- Each Side Service installation generates a stable, random installation ID stored in phone `settingsStorage` (`liftosaurDeviceId`) and attaches it as `X-Liftosaur-Device-Id`.
+
+---
+
+## Cloud-First Continuity
+
+Liftosaur Cloud is the universal handoff mechanism between devices:
 
 ```text
-Launch
-  │
-  ├──▶ GET_WORKOUT_CURRENT (active workout exists?)
-  │       │
-  │       ├──▶ Yes ──▶ Open the shared workout (cross-device continuity)
-  │       │
-  │       └──▶ No ──▶ GET_WORKOUT_NEXT ──▶ Home screen shows scheduled next day
-  │                                                │
-  │                                                └──▶ Or open Program / Week / Day picker
-  ▼                                                               │
-START_WORKOUT (POST /workout/start) ◀─────────────────────────────┘
-  ▼
-READY ──▶ ACTIVE_SET ⇄ REST ──▶ FINISHING
-  ▼
-SYNC_WORKOUT_SETS (POST /workout/sets, repeat-safe queue drain)
-  ▼
-FINISH_WORKOUT (POST /workout/finish, atomic Cloud history + progression + pointer)
+       Liftosaur Mobile App (Official)
+                     ^
+                     | HTTPS (/workout/*)
+                     v
+               Liftosaur Cloud
+                     ^
+                     | HTTPS (/workout/*)
+                     v
+           Mobile Side Service (v3)
+                     ^
+                     | BLE / ZML Protocol v3
+                     v
+       +-------------+---------------+
+       |                             |
+Lifto Companion               Lifto Workout
+(Standalone App)           (Workout Extension)
 ```
 
-In the legacy v1 REST flow (now retained only for legacy snapshot recovery), a
-history-based suggestion was independent of the official phone app day pointer because raw REST
-writes did not advance it. Under the Running a Workout API (Protocol v3), `GET /workout/next`
-provides the official scheduled workout directly, and `POST /workout/finish` advances the official
-phone pointer automatically.
+- Starting a workout in Lifto Companion, Lifto Workout, or the official Liftosaur phone app registers on Cloud via `POST /workout/start`.
+- Either watch app queries `GET /workout/current` on launch to resume an active workout seamlessly.
+- No local watch-to-watch IPC or credential exchange is required.
+
+In the legacy v1 REST flow (now retained only for legacy snapshot recovery), a history-based suggestion was independent of the official phone app day pointer because raw REST writes did not advance it. Under the Running a Workout API (Protocol v3), `GET /workout/next` provides the official scheduled workout directly, and `POST /workout/finish` advances the official phone pointer automatically.
 
 ---
 
-## Rendering the Clock and Metrics
+## Two-Stage Workout Finish Split
 
-A full re-render tears down and rebuilds widgets, which on physical hardware can drop seconds
-during active countdowns. The elapsed time, heart rate, and rest timer widgets are registered
-as live widgets and patched in place using `setProperty(prop.MORE, ...)`, re-sending geometry
-safely. The timer samples every 250 ms and updates the display only when the displayed second
-changes.
+Finishing a session in Lifto Workout involves two separate operations:
 
----
+1. **Liftosaur Cloud Finalization**:
+   - `finishWorkoutRemote()` in `shared/workout-controller.js` drains any remaining queued sets.
+   - `POST /workout/finish` sends start time, end time, and preserved pause intervals.
+   - Liftosaur Cloud atomically saves history, progression, 1RM updates, advances the phone `nextDay` pointer, and clears the active Cloud workout.
+   - Local extension storage (`liftosaur.extension.session.v2`) is cleared.
 
-## Data Flow & Synchronization
-
-```text
-Watch UI  ──tap──▶  Local Journal & Set Queue (persist first)
-        │                  │
-        │                  ▼
-        │            UI update (instant feedback)
-        ▼
-Device <-> Side Service Protocol v3 (BLE / ZML)
-        ▼
-Side Service ──HTTPS (with X-Liftosaur-Device-Id)──▶ Liftosaur Cloud (/workout/*)
-```
-
-The ordering is strictly: **persist locally -> render UI -> sync asynchronously.**
-
-A user tap never blocks on BLE or HTTP.
+2. **Native Zepp Workout Completion**:
+   - Lifto Workout displays an explicit finish confirmation screen prompting the user to end the native workout.
+   - The user finishes and saves the native activity using the Zepp Workout system controls.
 
 ---
 
-## Active Workout Synchronization & Queuing
+## Rest Alerts & Lifecycle Fallback
 
-1. **Set Logging**: Completing a set immediately persists the record in the watch journal and queues the set write.
-2. **Queue Draining**: `POST /workout/sets` drains queued sets in order.
-3. **Repeat-Safe**: Set writes carry stable set identifiers. Start, finish, and discard carry the workout start time, making retries safe.
-4. **Snapshot Adoption**: When the local set queue is empty, the watch adopts the authoritative server snapshot returned by `POST /workout/sets` or `GET /workout/current`. Dynamic script updates (`hasUpdateScript`) and phone-side edits are applied cleanly.
-5. **Adaptive Refresh**: Meaningful workout navigation requests a current-workout refresh, while passive checks run every 15 seconds. A shared coordinator coalesces requests, enforces a 10-second global floor, and backs failures off to 30, 60 and 120 seconds. The watch adopts phone changes only when its local write queue is empty and no local set write started during the read.
-6. **Conflict Handling**: If a remote workout is missing or reports a conflicting start time, the watch opens an explicit user recovery dialog and never silently deletes local session data.
-
----
-
-## Finalisation
-
-Finishing a workout is an atomic cloud transaction:
-- `POST /workout/finish` sends the real `startTime`, `endTime`, and preserved pause `intervals`.
-- Liftosaur Cloud atomically commits the history record, updates program progression, recalculates 1RM values, advances `nextDay`, and clears the active session.
-- A non-empty local set queue blocks finish submission until all sets are confirmed synced.
-- Discarding a workout (`DELETE /workout/current`) requires explicit user action.
+- Rest timing uses absolute timestamps (`restStartedAt`, `restDuration`, `restEndsAt`).
+- While the DataWidget is focused, `shared/rest-alert.js` tracks zero-crossing and triggers haptic vibration via `Vibrator`.
+- When the DataWidget loses focus or the screen turns off, Zepp OS pauses widget execution (`onPause`).
+- On `onResume`, the widget checks whether `restEndsAt` passed while unfocused and immediately fires a single resume alert.
+- Background vibration delivery while the DataWidget is unfocused remains `UNKNOWN` and cannot be claimed without physical hardware verification.
 
 ---
 
-## Durability and Crash Recovery
+## Evidence Limits
 
-- **Watch Persistence**: Every state change (plan, completed sets, queued sync items, pause intervals, finish/discard intent) is persisted to watch storage before rendering.
-- **App Restart**: If the watch app is killed or restarts mid-session, `restoreSession()` restores the exact active set, elapsed time, and unacknowledged sync queue.
-- **Network Resilience**: The watch functions fully offline. Sets accumulate safely in the local queue and sync when connectivity returns.
-
----
-
-## Known Limits & Notes
-
-- **Timed Sets & Prompted Variables**: Sets with live timer countdowns (`setTimer`) or custom interactive script variables (`promptedVars`) ask the user to complete that set on the official Liftosaur phone app. The watch then polls and adopts the completed set.
-- **Native Workout Activity**: Direct sync does not create a Zepp native workout activity. Native workout integration remains separately gated by real-device testing.
-- **Legacy Replay & Fallbacks**: The old Playground replay and raw `/history` + `/programs` write flow remains only for one-time recovery of v1 local snapshots.
-
----
-
-## Key Handling & Identity
-
-- The Liftosaur API key (`lftsk_...`) is entered in the phone Settings App and remains strictly in phone storage. It is never sent over BLE or logged.
-- The phone generates a random, stable installation ID stored in phone `settingsStorage` (`liftosaurDeviceId`). This identifier is sent in the `X-Liftosaur-Device-Id` HTTP header to coordinate running workout sync.
-
----
-
-## Status
-
-Implemented and unit-tested against recorded and live Running a Workout API contracts (Protocol v3).
+- **Unit Tested**: Domain controller, session state machine, protocol encoding, REST payload mapping, refresh policies, metric parsers, rest alert logic, and build/preview generators are validated by 447 Node.js tests.
+- **Emulator Evidence**: Companion layouts have existing round and square simulator evidence. The generated Workout DataWidget can be previewed outside workout context, which does not validate this full renderer inside the native Workout app.
+- **Hardware Gated**: Simulator images omit the native Workout app; real workout-context behavior, background rest alerts, and multi-device compatibility remain unproven until executed against the physical-watch test plan.

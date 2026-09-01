@@ -1,29 +1,30 @@
 # Workout Extension Research
 
 Research refreshed: 1 September 2026.
+Evidence vocabulary: `DOC_CONFIRMED`, `UNIT_TESTED`, `BLOCKED`, `UNKNOWN`.
 
-## Official sources
+## Official Sources
 
-- [Introduction](https://docs.zepp.com/docs/guides/workout-extension/intro/): Workout Extension is a Zepp OS 3.5 plug-in for the system Workout app. The documented device list is T-Rex 3, Cheetah Pro, Cheetah Round, Cheetah Square, T-Rex Ultra and Falcon.
+- [Introduction](https://docs.zepp.com/docs/guides/workout-extension/intro/): Workout Extension is a Zepp OS 3.5+ plug-in for the system Workout app. The documented device list includes T-Rex 3, Cheetah Pro, Cheetah Round, Cheetah Square, T-Rex Ultra, and Falcon.
 - [Quick Start](https://docs.zepp.com/docs/guides/workout-extension/quick-start/): the extension is an independent application with an independent App ID. It requires API level 3.6, a single `data-widget`, `extType: "workout"`, and a `data-widget` manifest entry. Strength Training is sport subtype `52`.
 - [getSportData](https://docs.zepp.com/docs/reference/device-app-api/newAPI/app-access/getSportData/): live workout metrics are read-only and require `data:user.hd.workout`.
-- [Distribution](https://docs.zepp.com/docs/guides/workout-extension/distribute/): a distinct app registration is required. The extension cannot have the same name as the standalone Mini Program.
+- [Distribution](https://docs.zepp.com/docs/guides/workout-extension/distribute/): a distinct app registration is required. The extension cannot share the name or App ID of the standalone Mini Program.
 
-## Confirmed constraints
+## Confirmed Constraints
 
-- A widget has one page, no scrolling, gesture monitoring or physical button response. Interactive controls use click events.
-- A focused widget receives `onResume`; loss of focus receives `onPause`. While paused, callbacks and timers do not run.
-- `subType: [52]` scopes the widget to Strength Training.
-- The simulator shows an extension as a normal app. It does not prove workout-context behaviour.
-- The public live-data API reads an already-running workout. It does not start, pause, resume or finish one.
+- **UI Constraints (`DOC_CONFIRMED`)**: A DataWidget has a single page without vertical/horizontal list scrolling, page-level gesture handlers, or physical button hooks. All user interaction relies on `widget.BUTTON.click_func`.
+- **Lifecycle (`DOC_CONFIRMED`)**: A focused widget receives `onResume`; loss of focus triggers `onPause`. While paused, timers and UI callbacks do not run.
+- **Sport Subtype (`DOC_CONFIRMED`)**: `subType: [52]` scopes the widget specifically to Strength Training.
+- **Read-Only Sport Data (`DOC_CONFIRMED`)**: `getSportData` reads active duration and calorie metrics from a running workout. It provides no mechanism to start, pause, resume, or finish native workout recording.
+- **Simulator Limits (`BLOCKED`)**: The Zepp OS simulator renders a DataWidget only in an isolated standalone preview context. Simulator images omit the native Workout system app entirely. Workout-context validation cannot be performed in the simulator and is `BLOCKED` on physical hardware.
 
-## Product decisions
+## Product Decisions
 
-- The extension will never try to end the native workout. It saves Liftosaur and directs the user to Zepp controls.
-- Rest time stays absolute. On resume, the renderer computes the remaining time from `restEndsAt`.
-- The extension uses its own settings and Side Service. No credential is copied to the watch or between App IDs.
+- **Two-Stage Finish Split (`DOC_CONFIRMED` / `UNIT_TESTED`)**: The extension never attempts to terminate the native workout. It finalizes the Liftosaur Cloud session atomically (`POST /workout/finish`), clears local store, and instructs the user to stop the native workout in Zepp Workout UI.
+- **Absolute Rest Timing (`UNIT_TESTED`)**: Rest timing is stored as absolute timestamps (`restStartedAt`, `restDuration`, `restEndsAt`). On `onResume`, the renderer recomputes remaining time and fires a resume alert if rest expired while unfocused.
+- **Settings & Credential Isolation (`DOC_CONFIRMED`)**: The extension uses its own App ID, phone settings page, and Side Service instance. No credentials cross BLE or are shared in watch storage files.
 
-## Open questions
+## Open / Gated Items
 
-- Confirm the official alarm or App Service mechanism that can alert during widget pause. Until then, use an on-resume and foreground visual fallback.
-- Validate widget focus, background rest alert and native metrics on a documented physical watch.
+- **Background Rest Alert Delivery (`UNKNOWN`)**: Whether haptic vibration can trigger while the DataWidget is paused/unfocused or display is asleep is unconfirmed. The on-resume alert check serves as the verified fallback.
+- **Physical Hardware Execution (`BLOCKED`)**: Validation across documented watch models (T-Rex 3, Cheetah series, Falcon) requires executing the physical hardware test plan.

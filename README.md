@@ -24,6 +24,13 @@ The separate Workout Extension runs inside Zepp Strength Training. It keeps the 
 
 The two apps are complementary and can be installed together. Liftosaur Cloud is their shared workout handoff; credentials remain inside each app's phone Side Service.
 
+Workout Extension documentation:
+
+- [Extension Research](docs/workout-extension-research.md) & [Capability Matrix](docs/workout-extension-capability-matrix.md)
+- [Extension Architecture](docs/workout-extension-architecture.md)
+- [Manual Setup Actions](docs/workout-extension-manual-actions.md)
+- [Hardware Test Plan](docs/workout-extension-hardware-test-plan.md)
+
 ---
 
 ## Try it now (test build)

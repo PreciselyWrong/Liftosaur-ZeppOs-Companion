@@ -1,8 +1,101 @@
 # Workout Extension Manual Actions
 
-1. In Zepp Developer Console, create a new Workout Extension application named `Lifto Workout`.
-2. Copy its numeric App ID into the local extension build environment. Do not commit it until it is a public registered identifier.
-3. Build the extension package and install it in Developer Mode on a documented supported watch.
-4. In the system Workout app, start Strength Training and add Lifto under Motion Extensions.
-5. Configure Liftosaur credentials in the extension's own phone settings page. Do not copy a standalone credential to watch storage.
-6. Follow the hardware test plan and retain only redacted evidence.
+This guide lists external actions that require human intervention in the Zepp Developer Console, on a mobile device, or on physical watch hardware.
+
+---
+
+## 1. Create a Real Dedicated App ID in Zepp Developer Console
+
+1. Log in to the [Zepp Open Platform / Developer Console](https://developer.zepp.com/).
+2. Create a new application with:
+   - **App Name**: `Lifto Workout`
+   - **App Type**: Workout Extension (`extType: "workout"`)
+3. Note the positive integer `appId` assigned by the console.
+4. Set the environment variable locally:
+   ```bash
+   export ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id>
+   ```
+   Or in PowerShell:
+   ```powershell
+   $env:ZEPP_WORKOUT_EXTENSION_APP_ID = "<app-id>"
+   ```
+
+> **Important**: A synthetic or mock App ID (such as `999999`) is valid only for offline compilation and CI invariant checks. Only a real App ID registered in the Zepp Developer Console can produce a server-accepted, installable preview package or a Store submission.
+
+---
+
+## 2. Build Packages and Generate Preview QR Codes
+
+Run the build and preview orchestrators:
+
+```bash
+# Build standalone Companion package (Mini Program)
+npm run build:companion
+
+# Build Lifto Workout extension (requires real App ID)
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:workout
+
+# Build both product packages
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
+
+# Generate Lifto Companion preview QR (root project)
+npm run preview:companion
+
+# Generate Lifto Workout preview QR (requires real App ID)
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run preview:workout
+```
+
+### Preview QR Expiry (~7 Days)
+
+- Both `npm run preview:*` commands upload the generated `.zab` package to Zepp servers via `zeus preview`.
+- The returned install QR code is valid for **about 7 days**.
+- Zepp deletes preview packages after 7 days; there is no renewal mechanism. A fresh preview QR must be generated when expired.
+
+---
+
+## 3. Install on Physical Watch in Developer Mode
+
+1. Enable Developer Mode in the Zepp mobile app:
+   - Navigate to **Profile > Settings > About**.
+   - Tap the Zepp icon or version 7 times until Developer Mode is unlocked.
+2. In the Zepp mobile app, navigate to **Profile > your paired watch > Developer Mode**.
+3. Scan the preview QR code generated in step 2.
+4. Confirm installation of `Lifto Workout` to the connected watch.
+
+---
+
+## 4. Configure Extension Phone Settings
+
+1. In the Zepp mobile app, go to **Profile > your paired watch > Developer Mode** (or App Management).
+2. Select **Lifto Workout** and open **Settings**.
+3. Enter your Liftosaur API key (`lftsk_*`).
+
+> **Note**: Lifto Companion and Lifto Workout are distinct App IDs with independent `settingsStorage`. API keys do not transfer automatically and must be entered separately in each app's settings.
+
+---
+
+## 5. Enable Lifto under Strength Training on Watch
+
+1. On the watch, launch the system **Workout** application.
+2. Select **Strength Training**.
+3. Open Strength Training settings / Motion Extensions (or Data Pages).
+4. Add and enable **Lifto**.
+
+---
+
+## 6. Execute Physical Hardware Test Plan
+
+1. Follow the test cases in [docs/workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md).
+2. Record watch model, firmware version, Zepp OS version, commit hash, date, result (`pending` / `BLOCKED`), and telemetry.
+3. Capture debug logs via Zeus CLI or Zepp Developer tools where accessible.
+4. Redact all API keys, bearer tokens, and private data before saving log artifacts.
+
+---
+
+## 7. Store Submission (Release Gate)
+
+Once hardware validation passes:
+1. Generate the final release build (`npm run build:workout`).
+2. In Zepp Developer Console, upload the `.zab` package from `build/workout-extension/dist/`.
+3. Provide store listing metadata, screenshots, icon, and link to privacy policy ([docs/privacy-policy.md](privacy-policy.md)).
+4. Submit for Zepp App Store review.
