@@ -4,7 +4,7 @@ Standalone, unofficial [Liftosaur](https://www.liftosaur.com) workout tracking c
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-398%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-413%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -90,8 +90,10 @@ continued on either device via `GET /workout/current`.
 ┌─────────────────────────────────────────────────────────┐
 │                      Amazfit Watch                      │
 │                                                         │
-│  page/common/index.js      workout UI & direct sync     │
-│       │                    polling, queues & recovery   │
+│  page/common/index.js      standalone workout UI        │
+│       │                                                 │
+│  shared/workout-controller.js                           │
+│       │                    sync, queues & recovery      │
 │       ▼                                                 │
 │  shared/workout-session.js pure state machine + journal │
 │       │                                                 │
@@ -117,7 +119,7 @@ Shared, platform-independent modules:
 
 | Module | Responsibility |
 | --- | --- |
-| `shared/workout-controller.js` | Own the local plan, journal, persistence, restoration, and sync metadata |
+| `shared/workout-controller.js` | Own local workout state, persistence, Cloud synchronization, polling, conflicts, finish, and discard |
 | `shared/workout-api-plan.js` | Map official `data.workout` objects into the local day plan |
 | `shared/workout-session.js` | The session state machine, set journal, and pause intervals |
 | `shared/workout-refresh-policy.js` | Coalesced action refreshes, passive timing, and failure backoff |

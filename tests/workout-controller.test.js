@@ -8,6 +8,9 @@ import {
 } from '../shared/workout-controller.js';
 import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
+import { MESSAGE_TYPES } from '../shared/protocol.js';
+import { workoutToDayPlan } from '../shared/workout-api-plan.js';
+import { createWorkoutRefreshPolicy } from '../shared/workout-refresh-policy.js';
 
 const SAMPLE_PLAN = {
   programId: 'prog-1',
@@ -72,7 +75,6 @@ test('initializes with default empty state when no plan is provided', () => {
   assert.equal(controller.getCompletedSets().length, 0);
   assert.equal(controller.getWorkoutSetWrites().length, 0);
 });
-
 test('normalizes direct sync metadata defaults and patches safely', () => {
   const legacyDefault = defaultDirectSync('LEGACY');
   assert.equal(legacyDefault.mode, 'LEGACY');
@@ -485,4 +487,588 @@ test('restore fails safely without clearing raw store when snapshot is missing o
   const corruptResult = controller.restore();
   assert.equal(corruptResult.success, false);
   assert.notEqual(adapter.read(), null);
+});
+
+function createFakeTransport() {
+  const calls = [];
+  const handlers = new Map();
+
+  function request(type, payload = {}) {
+    calls.push({ type, payload });
+    const handler = handlers.get(type);
+    if (handler) {
+      return handler(payload);
+    }
+    return Promise.resolve({ type: `${type}_DATA`, payload: {} });
+  }
+
+  return {
+    request,
+    calls,
+    on(type, fn) {
+      handlers.set(type, fn);
+    },
+    resetCalls() {
+      calls.length = 0;
+    },
+  };
+}
+
+const SAMPLE_SERVER_WORKOUT = {
+  programId: 'prog-1',
+  dayName: 'Day 1',
+  dayData: { week: 1, dayInWeek: 1 },
+  startTime: 1000,
+  entries: [
+    {
+      entryId: 'entry-1',
+      exerciseId: 'squat',
+      name: 'Squat',
+      sets: [
+        {
+          index: 0,
+          setId: 'set-1',
+          weight: '100kg',
+          reps: 5,
+          timer: 90,
+        },
+        {
+          index: 1,
+          setId: 'set-2',
+          weight: '100kg',
+          reps: 5,
+          timer: 90,
+        },
+      ],
+    },
+    {
+      entryId: 'entry-2',
+      exerciseId: 'bench',
+      name: 'Bench Press',
+      sets: [
+        {
+          index: 0,
+          setId: 'set-3',
+          weight: '80kg',
+          reps: 5,
+          timer: 60,
+        },
+      ],
+    },
+  ],
+};
+
+test('local set persists before the first transport call', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+  let completedSetCountInStoreAtTransportCall = null;
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => {
+    return Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } });
+  });
+
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
+    const persisted = store.load();
+    completedSetCountInStoreAtTransportCall = (persisted?.journal || []).filter(
+      (j) => j.type === 'COMPLETE_SET'
+    ).length;
+    return Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: { workout: SAMPLE_SERVER_WORKOUT } });
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  await controller.syncSets();
+
+  assert.equal(completedSetCountInStoreAtTransportCall, 1);
+});
+
+test('concurrent drains share one promise and acknowledge only confirmed batch length', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+  let resolveSync;
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    new Promise((resolve) => {
+      resolveSync = resolve;
+    })
+  );
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  controller.nextSet();
+  controller.completeSet();
+
+  assert.equal(controller.getWorkoutSetWrites().length, 2);
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+
+  const p1 = controller.syncSets();
+  const p2 = controller.syncSets();
+  assert.equal(p1, p2);
+
+  await Promise.resolve();
+
+  resolveSync({
+    type: 'SYNC_WORKOUT_SETS_RESULT',
+    payload: { workout: SAMPLE_SERVER_WORKOUT },
+  });
+
+  await p1;
+  assert.equal(controller.sync().acknowledgedSetCount, 2);
+});
+
+test('retryable transport failure preserves queue and returns pending status', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
+    const err = new Error('Network timeout');
+    err.code = 'NETWORK';
+    return Promise.reject(err);
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet();
+
+  await assert.rejects(async () => {
+    await controller.syncSets();
+  });
+
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+  assert.equal(controller.sync().conflict, false);
+  assert.equal(controller.getStatus().code, 'pending');
+});
+
+test('non-retryable failure creates explicit conflict', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
+    const err = new Error('Invalid set index');
+    err.code = 'INVALID_SET';
+    return Promise.reject(err);
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet();
+
+  await assert.rejects(async () => {
+    await controller.syncSets();
+  });
+
+  assert.equal(controller.sync().conflict, true);
+  assert.equal(controller.getStatus().code, 'conflict');
+});
+
+test('poll cannot adopt after a local write started later', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+  let resolvePoll;
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () =>
+    new Promise((resolve) => {
+      resolvePoll = resolve;
+    })
+  );
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  currentTime = 20000;
+  const pollPromise = controller.pollCurrent();
+
+  controller.completeSet();
+  assert.equal(controller.getWorkoutSetWrites().length, 1);
+
+  resolvePoll({
+    type: 'WORKOUT_CURRENT_DATA',
+    payload: { workout: SAMPLE_SERVER_WORKOUT },
+  });
+
+  await pollPromise;
+
+  assert.equal(controller.getWorkoutSetWrites().length, 1);
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+});
+
+test('poll/adoption never replaces pending writes', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet();
+
+  assert.equal(controller.getWorkoutSetWrites().length, 1);
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+
+  const result = await controller.pollCurrent();
+  assert.equal(result, false);
+  assert.equal(transport.calls.filter((c) => c.type === MESSAGE_TYPES.GET_WORKOUT_CURRENT).length, 0);
+});
+
+test('REST snapshot defers and applies only on next set', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  const modifiedWorkout = {
+    ...SAMPLE_SERVER_WORKOUT,
+    entries: [
+      {
+        ...SAMPLE_SERVER_WORKOUT.entries[0],
+        sets: [
+          { ...SAMPLE_SERVER_WORKOUT.entries[0].sets[0], completed: { reps: 5, weight: '100kg' } },
+          { ...SAMPLE_SERVER_WORKOUT.entries[0].sets[1], reps: 8 },
+        ],
+      },
+      SAMPLE_SERVER_WORKOUT.entries[1],
+    ],
+  };
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: modifiedWorkout },
+    })
+  );
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet();
+
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  await controller.syncSets();
+
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  assert.equal(controller.hasDeferredServerWorkout(), true);
+
+  controller.nextSet();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+  assert.equal(controller.hasDeferredServerWorkout(), false);
+  assert.equal(controller.view().currentSet.targetReps, 8);
+});
+
+test('start-time mismatch is conflict', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({
+      type: 'START_WORKOUT_DATA',
+      payload: { workout: { ...SAMPLE_SERVER_WORKOUT, startTime: 9999 } },
+    })
+  );
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+
+  await controller.ensureStarted();
+
+  assert.equal(controller.sync().conflict, true);
+  assert.equal(controller.getStatus().code, 'conflict');
+});
+
+test('finish drains then sends exact times/intervals then clears persistence only on success', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.FINISH_WORKOUT, () =>
+    Promise.resolve({ type: 'FINISH_WORKOUT_RESULT', payload: { status: 'SAVED' } })
+  );
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  currentTime = 2000;
+  controller.completeSet();
+  controller.nextSet();
+  currentTime = 3000;
+  controller.completeSet();
+  currentTime = 4000;
+  controller.finishWorkout();
+
+  assert.equal(store.hasSession(), true);
+
+  const finishRes = await controller.finishWorkoutRemote();
+  assert.equal(finishRes.success, true);
+  assert.equal(store.hasSession(), false);
+
+  const finishCall = transport.calls.find((c) => c.type === MESSAGE_TYPES.FINISH_WORKOUT);
+  assert.ok(finishCall);
+  assert.equal(finishCall.payload.startTime, 1000);
+  assert.ok(finishCall.payload.endTime >= 4000);
+  assert.ok(Array.isArray(finishCall.payload.intervals));
+  assert.equal(controller.getStatus().code, 'saved');
+});
+
+test('failed finish keeps snapshot and finish intent', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.FINISH_WORKOUT, () => {
+    const err = new Error('Gateway error');
+    err.code = 'API_FAILED';
+    return Promise.reject(err);
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  controller.completeSet();
+
+  await assert.rejects(async () => {
+    await controller.finishWorkoutRemote();
+  });
+
+  assert.equal(store.hasSession(), true);
+  assert.ok(store.load().sync.finishRequestedAt);
+  assert.equal(controller.getStatus().code, 'error');
+});
+
+test('missing remote workout sets remote-missing without clearing', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () =>
+    Promise.resolve({ type: 'WORKOUT_CURRENT_DATA', payload: { workout: null } })
+  );
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  currentTime = 20000;
+  await controller.pollCurrent();
+
+  assert.equal(controller.sync().remoteMissing, true);
+  assert.equal(controller.sync().conflict, true);
+  assert.equal(store.hasSession(), true);
+  assert.equal(controller.getStatus().code, 'remote-missing');
+});
+
+test('discard persists intent before request and clears only on confirmed or no_active_workout', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+  let intentRecordedInStore = false;
+
+  transport.on(MESSAGE_TYPES.DISCARD_WORKOUT, () => {
+    const persisted = store.load();
+    if (persisted && persisted.sync && persisted.sync.discardRequestedAt) {
+      intentRecordedInStore = true;
+    }
+    return Promise.resolve({ type: 'DISCARD_WORKOUT_RESULT', payload: {} });
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+
+  await controller.discardWorkoutRemote();
+
+  assert.equal(intentRecordedInStore, true);
+  assert.equal(store.hasSession(), false);
+  assert.equal(controller.plan(), null);
+
+  const controller2 = createWorkoutController({
+    store,
+    request: () => {
+      const err = new Error('No active workout');
+      err.code = 'no_active_workout';
+      return Promise.reject(err);
+    },
+    now: () => 1000,
+  });
+
+  controller2.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller2.startWorkout();
+  await controller2.discardWorkoutRemote();
+  assert.equal(store.hasSession(), false);
+  assert.equal(controller2.plan(), null);
+});
+
+test('discard without transport preserves the local session and intent', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const controller = createWorkoutController({ store, now: () => 1000 });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+
+  const result = await controller.discardWorkoutRemote();
+
+  assert.deepEqual(result, { success: false, reason: 'NO_TRANSPORT' });
+  assert.equal(store.hasSession(), true);
+  assert.equal(controller.plan(), SAMPLE_DIRECT_PLAN);
+  assert.equal(controller.sync().discardRequestedAt, 1000);
+  assert.equal(controller.getStatus().code, 'pending');
+});
+
+test('restored finish/discard intents can be resumed by a renderer', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.FINISH_WORKOUT, () =>
+    Promise.resolve({ type: 'FINISH_WORKOUT_RESULT', payload: { status: 'SAVED' } })
+  );
+
+  store.save({
+    plan: SAMPLE_DIRECT_PLAN,
+    journal: [{ type: 'START_WORKOUT', timestamp: 1000 }],
+    startedAt: 1000,
+    sync: {
+      mode: 'DIRECT',
+      startConfirmed: true,
+      acknowledgedSetCount: 0,
+      finishRequestedAt: 5000,
+      discardRequestedAt: null,
+      conflict: false,
+      remoteMissing: false,
+      preservedIntervals: [],
+      intervalsPreservedThrough: null,
+    },
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 6000,
+  });
+
+  const restored = controller.restore();
+  assert.equal(restored.success, true);
+  assert.equal(controller.sync().finishRequestedAt, 5000);
+
+  const res = await controller.finishWorkoutRemote();
+  assert.equal(res.success, true);
+  assert.equal(store.hasSession(), false);
 });
