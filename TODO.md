@@ -4,7 +4,7 @@
 
 - Branch: `feat/workout-extension`
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
-- Current commit: `f86c942`
+- Current commit: `6ab09bf`
 - Started: 1 September 2026
 - Last updated: 1 September 2026
 - Current phase: 10 - automated validation
@@ -116,7 +116,7 @@
 ## Phase 10 - Automated validation
 
 - [x] Add unit, integration and DataWidget contract tests (433 passing tests).
-- [ ] Add CI validation if absent.
+- [x] Add CI validation and dual-product preview orchestration.
 
 ## Phase 11 - Simulator and hardware validation
 
@@ -142,11 +142,12 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 433 passing
+- `npm test` - 447 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
+- `node --test tests/preview-targets.test.js` - preview orchestration only; no upload performed
 - `zeus build` - Companion passed
 - `zeus build` from generated Workout Extension - passed
 
@@ -158,3 +159,4 @@
 - 2026-09-01: Centralized direct Cloud synchronization and recovery in the shared workout controller.
 - 2026-09-01: Added pure dual-target build system and package scripts for companion, workout, and all products.
 - 2026-09-01: Implemented the click-only Lifto Workout DataWidget, rest alert resume fallback, separate session storage and recovery contracts (433 passing tests).
+- 2026-09-01: Added unit-tested dual-preview orchestration and credential-free CI without uploading a preview.

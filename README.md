@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-433%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-447%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -175,18 +175,22 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:workout
 ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
 ```
 
-### Running on Simulator or Real Device
+### Running on Simulator or Generating Previews
 ```powershell
 # Preview on emulator
 .\dev.ps1
 
-# Generate the unified QR code for all supported round and square watches
-node tools/build-preview.mjs docs/test-build-qr.png 10
+# Generate Lifto Companion preview QR (root project)
+npm run preview:companion
+
+# Generate Lifto Workout preview QR (requires real dedicated App ID)
+ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run preview:workout
 ```
 
-The `zeus preview` QR code is hosted by Zepp and stays valid for 7 days, so it can be
-shared with testers who do not have a computer. A single QR code covers every device
-built into the bundle.
+Both `zeus preview` QR codes are hosted by Zepp and expire after about 7 days. The Companion QR keeps its 28-device bundle. The Workout command requests the same build matrix, but compatible hardware remains unclaimed until the physical-watch plan passes. Workout preview generation requires a real dedicated App ID registered in the Zepp Developer Console.
+
+### CI Validation
+Pull requests and pushes run automated validation via GitHub Actions using Node 24 LTS (`npm ci`, `npm test`, and synthetic Workout Extension generation). No credentials or store access are required.
 
 ### Installing as a Tester
 
