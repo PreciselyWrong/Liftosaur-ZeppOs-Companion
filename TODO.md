@@ -6,9 +6,9 @@
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
 - Current commit: `dbf210f`
 - Started: 1 September 2026
-- Last updated: 1 September 2026
-- Current phase: 14 - final validation and pull request
-- Overall status: engineering complete; App ID and physical validation blocked externally
+- Last updated: 2 September 2026
+- Current phase: 15 - Active 2 integration refinement
+- Overall status: Active 2 loads the extension; refined lifecycle behaviour awaits physical retesting
 
 ## Status legend
 
@@ -57,10 +57,10 @@
 | Weight, reps and RPE | available | preserve | UNIT_TESTED | workout session & widget tests | Click-only interaction |
 | Warmups and supersets | available | preserve | UNIT_TESTED | plan, session & widget tests | View model adapts layout only |
 | Notes and overview | available | preserve | UNIT_TESTED | renderer contract & widget tests | Click-only interaction |
-| Rest and overtime | available | preserve | UNIT_TESTED | session & rest alert tests | Absolute timestamps |
+| Rest and overtime | available | preserve | UNIT_TESTED | session & rest alert tests | Native and manual pauses compose without losing time |
 | Offline recovery | available | preserve | UNIT_TESTED | storage & widget tests | Separate extension storage namespace |
 | Native Zepp activity | unavailable | add through extension context | blocked | real-device plan | Owned only by Zepp Workout |
-| Native data | unavailable | read duration and calories | UNIT_TESTED | adapter & spike tests | `getSportData` only |
+| Native data | unavailable | read duration and calories | UNIT_TESTED | adapter & spike tests | Live duration drives pause reconciliation |
 
 ## Phase 0 - Audit
 
@@ -120,13 +120,21 @@
 
 ## Phase 11 - Simulator and hardware validation
 
-- [!] Validate extension in a real Strength Training workout on a supported watch.
+- [~] Active 2 firmware 7.23.0.1 at API level 400 loads the extension in Strength Training; refined integration checks remain pending.
 
 ## Phase 12 - Documentation and release
 
 - [x] Complete the public Workout Extension setup and hardware test guides.
 - [x] Draft release notes for the two-product beta.
 - [ ] Publish the Workout tester guide and store assets after physical validation.
+
+## Phase 15 - Active 2 integration refinement
+
+- [x] Add 60, 120, 240 second and Always display duration choices with a 120 second default.
+- [x] Reconcile native Workout pauses with Lifto elapsed and rest time without overriding manual rest pause.
+- [x] Refresh native metrics while visible and retry durable pending set writes after focus or network loss.
+- [x] Add the exact Active 2 integration retest checklist.
+- [ ] Run the checklist on Active 2 firmware 7.23.0.1 at API level 400 and attach evidence.
 
 ## Manual external actions
 
@@ -138,13 +146,13 @@
 | ID | Blocker | Owner | Workaround | Remaining impact |
 | --- | --- | --- | --- | --- |
 | EXT-APP-ID | Dedicated App ID has not been supplied. | Maintainer | Build with an explicit development-only environment value. | Store-ready package cannot be produced. |
-| EXT-HARDWARE | No supported physical watch is connected. | Maintainer | Unit tests and simulator-safe checks. | Workout-context proof remains blocked. |
+| EXT-HARDWARE | Active 2 integration retest evidence is pending. | Maintainer | Use the exact Active 2 checklist. | Refined lifecycle behaviour is not yet physically confirmed. |
 
 ## Commands verified
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 448 passing
+- `npm test` - 471 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
@@ -163,3 +171,4 @@
 - 2026-09-01: Implemented the click-only Lifto Workout DataWidget, rest alert resume fallback, separate session storage and recovery contracts (433 passing tests).
 - 2026-09-01: Added unit-tested dual-preview orchestration and credential-free CI without uploading a preview.
 - 2026-09-01: Completed the public Workout Extension setup and hardware test guides.
+- 2026-09-02: Added configurable display hold, native pause reconciliation, live metrics, pending sync recovery and an Active 2 retest checklist.

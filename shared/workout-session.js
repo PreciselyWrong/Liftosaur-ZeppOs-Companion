@@ -27,6 +27,8 @@ export const EVENT_TYPES = {
   NEXT_SET: 'NEXT_SET',
   PAUSE_REST: 'PAUSE_REST',
   RESUME_REST: 'RESUME_REST',
+  PAUSE_WORKOUT: 'PAUSE_WORKOUT',
+  RESUME_WORKOUT: 'RESUME_WORKOUT',
   ADJUST_REST: 'ADJUST_REST',
   SELECT_EXERCISE: 'SELECT_EXERCISE',
   FINISH_WORKOUT: 'FINISH_WORKOUT',
@@ -133,6 +135,7 @@ export function createWorkoutSession({
   let workoutEndTime = null;
   let totalPausedWorkoutDurationMs = 0;
   let pauseStartedAt = null;
+  const activePauseReasons = new Set();
   let restInfo = null;
   let journal = [];
 
@@ -354,6 +357,7 @@ export function createWorkoutSession({
           if (prog.completedSets.length < exercises[target].sets.length) {
             state = SESSION_STATES.ACTIVE_SET;
             restInfo = null;
+            endPause('rest', event.timestamp);
           }
         }
         break;
@@ -427,6 +431,7 @@ export function createWorkoutSession({
         });
 
         if (allSetsDone()) {
+          clearPauses(event.timestamp);
           state = SESSION_STATES.FINISHED;
           workoutEndTime = event.timestamp;
           restInfo = null;
@@ -449,22 +454,25 @@ export function createWorkoutSession({
             endsAt: event.timestamp + restDuration * 1000,
             isPaused: false,
             pausedRemaining: null,
+            nativePausedRemainingMs: activePauseReasons.has('workout')
+              ? restDuration * 1000
+              : null,
           };
         } else {
           restInfo = null;
-          advanceToNextSet();
+          advanceToNextSet({ timestamp: event.timestamp });
         }
         break;
       }
 
       case EVENT_TYPES.PAUSE_REST: {
         if (state === SESSION_STATES.REST && restInfo && !restInfo.isPaused) {
-          const remaining = Math.ceil((restInfo.endsAt - event.timestamp) / 1000);
+          const remainingMs = activePauseReasons.has('workout')
+            ? (restInfo.nativePausedRemainingMs ?? restInfo.endsAt - event.timestamp)
+            : restInfo.endsAt - event.timestamp;
           restInfo.isPaused = true;
-          restInfo.pausedRemaining = remaining;
-          if (pauseStartedAt === null) {
-            pauseStartedAt = event.timestamp;
-          }
+          restInfo.pausedRemaining = Math.ceil(remainingMs / 1000);
+          beginPause('rest', event.timestamp);
         }
         break;
       }
@@ -476,10 +484,34 @@ export function createWorkoutSession({
           restInfo.endsAt = event.timestamp + remaining * 1000;
           restInfo.startedAt = event.timestamp - (restInfo.duration - remaining) * 1000;
           restInfo.pausedRemaining = null;
-          if (pauseStartedAt !== null) {
-            totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
-            pauseStartedAt = null;
+          if (activePauseReasons.has('workout')) {
+            restInfo.nativePausedRemainingMs = remaining * 1000;
           }
+          endPause('rest', event.timestamp);
+        }
+        break;
+      }
+
+      case EVENT_TYPES.PAUSE_WORKOUT: {
+        if (
+          (state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST) &&
+          !activePauseReasons.has('workout')
+        ) {
+          if (restInfo && !restInfo.isPaused) {
+            restInfo.nativePausedRemainingMs = restInfo.endsAt - event.timestamp;
+          }
+          beginPause('workout', event.timestamp);
+        }
+        break;
+      }
+
+      case EVENT_TYPES.RESUME_WORKOUT: {
+        if (activePauseReasons.has('workout')) {
+          if (restInfo && !restInfo.isPaused && Number.isFinite(restInfo.nativePausedRemainingMs)) {
+            restInfo.endsAt = event.timestamp + restInfo.nativePausedRemainingMs;
+          }
+          if (restInfo) restInfo.nativePausedRemainingMs = null;
+          endPause('workout', event.timestamp);
         }
         break;
       }
@@ -489,6 +521,12 @@ export function createWorkoutSession({
           const delta = event.payload?.delta || 0;
           if (restInfo.isPaused) {
             restInfo.pausedRemaining = Math.max(0, (restInfo.pausedRemaining ?? 0) + delta);
+          } else if (activePauseReasons.has('workout')) {
+            restInfo.nativePausedRemainingMs = Math.max(
+              0,
+              (restInfo.nativePausedRemainingMs ?? 0) + delta * 1000
+            );
+            restInfo.duration = Math.max(0, restInfo.duration + delta);
           } else {
             restInfo.endsAt = restInfo.endsAt + delta * 1000;
             restInfo.duration = Math.max(0, restInfo.duration + delta);
@@ -498,20 +536,14 @@ export function createWorkoutSession({
       }
 
       case EVENT_TYPES.NEXT_SET: {
-        if (pauseStartedAt !== null) {
-          totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
-          pauseStartedAt = null;
-        }
+        endPause('rest', event.timestamp);
         restInfo = null;
-        advanceToNextSet({ keepAdjustments: true });
+        advanceToNextSet({ keepAdjustments: true, timestamp: event.timestamp });
         break;
       }
 
       case EVENT_TYPES.FINISH_WORKOUT: {
-        if (pauseStartedAt !== null) {
-          totalPausedWorkoutDurationMs += Math.max(0, event.timestamp - pauseStartedAt);
-          pauseStartedAt = null;
-        }
+        clearPauses(event.timestamp);
         state = SESSION_STATES.FINISHED;
         workoutEndTime = event.timestamp;
         restInfo = null;
@@ -524,6 +556,7 @@ export function createWorkoutSession({
         workoutEndTime = null;
         totalPausedWorkoutDurationMs = 0;
         pauseStartedAt = null;
+        activePauseReasons.clear();
         restInfo = null;
         currentExerciseIndex = 0;
         progress.forEach((prog, i) => {
@@ -539,10 +572,36 @@ export function createWorkoutSession({
     }
   }
 
-  function advanceToNextSet({ keepAdjustments = false } = {}) {
+  function beginPause(reason, timestamp) {
+    if (activePauseReasons.has(reason)) return;
+    if (activePauseReasons.size === 0) pauseStartedAt = timestamp;
+    activePauseReasons.add(reason);
+  }
+
+  function endPause(reason, timestamp) {
+    if (!activePauseReasons.delete(reason)) return;
+    if (activePauseReasons.size === 0 && pauseStartedAt !== null) {
+      totalPausedWorkoutDurationMs += Math.max(0, timestamp - pauseStartedAt);
+      pauseStartedAt = null;
+    }
+  }
+
+  function clearPauses(timestamp) {
+    if (pauseStartedAt !== null) {
+      totalPausedWorkoutDurationMs += Math.max(0, timestamp - pauseStartedAt);
+    }
+    pauseStartedAt = null;
+    activePauseReasons.clear();
+  }
+
+  function advanceToNextSet({ keepAdjustments = false, timestamp = null } = {}) {
     const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     if (nextIdx === -1) {
       state = SESSION_STATES.FINISHED;
+      if (Number.isFinite(timestamp)) {
+        clearPauses(timestamp);
+        workoutEndTime = timestamp;
+      }
       return;
     }
 
@@ -663,13 +722,17 @@ export function createWorkoutSession({
       if (restInfo) {
         const pending = describePendingSet();
         const pendingSet = pending?.set || null;
+        const nativePaused = activePauseReasons.has('workout');
         const remaining = restInfo.isPaused
           ? (restInfo.pausedRemaining ?? 0)
-          : Math.ceil((restInfo.endsAt - now) / 1000);
+          : nativePaused && Number.isFinite(restInfo.nativePausedRemainingMs)
+            ? Math.ceil(restInfo.nativePausedRemainingMs / 1000)
+            : Math.ceil((restInfo.endsAt - now) / 1000);
         rest = {
           duration: restInfo.duration,
           remaining,
-          isPaused: Boolean(restInfo.isPaused),
+          isPaused: Boolean(restInfo.isPaused || nativePaused),
+          isWorkoutPaused: nativePaused,
           pausedRemaining: restInfo.pausedRemaining ?? null,
           isOvertime: !restInfo.isPaused && remaining <= 0,
           startedAt: restInfo.startedAt,
@@ -843,6 +906,17 @@ export function createWorkoutSession({
       applyEvent({ type: EVENT_TYPES.RESUME_REST, timestamp });
     },
 
+    pauseWorkout({ timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.ACTIVE_SET && state !== SESSION_STATES.REST) return;
+      if (activePauseReasons.has('workout')) return;
+      applyEvent({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp });
+    },
+
+    resumeWorkout({ timestamp = Date.now() } = {}) {
+      if (!activePauseReasons.has('workout')) return;
+      applyEvent({ type: EVENT_TYPES.RESUME_WORKOUT, timestamp });
+    },
+
     toggleRestPause({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.REST || !restInfo) return;
       if (restInfo.isPaused) {
@@ -902,18 +976,25 @@ export function createWorkoutSession({
     getWorkoutIntervals(endTime = workoutEndTime) {
       const intervals = [];
       let intervalStart = workoutStartTime;
+      const pauseReasons = new Set();
 
       for (const event of journal) {
         if (event.type === EVENT_TYPES.START_WORKOUT) {
           intervalStart = event.timestamp;
-        } else if (event.type === EVENT_TYPES.PAUSE_REST && intervalStart !== null) {
-          intervals.push([intervalStart, event.timestamp]);
-          intervalStart = null;
-        } else if (
-          (event.type === EVENT_TYPES.RESUME_REST || event.type === EVENT_TYPES.NEXT_SET) &&
-          intervalStart === null
-        ) {
-          intervalStart = event.timestamp;
+          pauseReasons.clear();
+        } else if (event.type === EVENT_TYPES.PAUSE_REST || event.type === EVENT_TYPES.PAUSE_WORKOUT) {
+          const reason = event.type === EVENT_TYPES.PAUSE_REST ? 'rest' : 'workout';
+          if (!pauseReasons.has(reason) && pauseReasons.size === 0 && intervalStart !== null) {
+            intervals.push([intervalStart, event.timestamp]);
+            intervalStart = null;
+          }
+          pauseReasons.add(reason);
+        } else if (event.type === EVENT_TYPES.RESUME_REST || event.type === EVENT_TYPES.NEXT_SET) {
+          pauseReasons.delete('rest');
+          if (pauseReasons.size === 0 && intervalStart === null) intervalStart = event.timestamp;
+        } else if (event.type === EVENT_TYPES.RESUME_WORKOUT) {
+          pauseReasons.delete('workout');
+          if (pauseReasons.size === 0 && intervalStart === null) intervalStart = event.timestamp;
         }
       }
 

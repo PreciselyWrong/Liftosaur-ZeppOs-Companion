@@ -72,7 +72,7 @@ function nextSelection(outline) {
   return days[lastIndex >= 0 && lastIndex + 1 < days.length ? lastIndex + 1 : 0];
 }
 
-export function createDummyWorkoutService({ catalogService, now = Date.now } = {}) {
+export function createDummyWorkoutService({ catalogService, now = Date.now, getLocalSettings = null } = {}) {
   if (!catalogService) throw new Error('Dummy Workout service requires a catalog service');
 
   let currentWorkout = null;
@@ -148,7 +148,8 @@ export function createDummyWorkoutService({ catalogService, now = Date.now } = {
     },
 
     async getSettings() {
-      return { units: 'kg' };
+      const local = typeof getLocalSettings === 'function' ? getLocalSettings() : null;
+      return { units: 'kg', screenOnDuration: local?.screenOnDuration ?? 120 };
     },
   };
 }
