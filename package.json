@@ -1,11 +1,17 @@
 {
   "name": "liftosaur-zepp-os",
-  "version": "0.3.3",
+  "version": "0.4.1",
   "releaseStage": "beta",
-  "description": "Standalone Liftosaur Cloud client for Zepp OS watches",
+  "description": "Standalone and Workout Extension Liftosaur clients for Zepp OS watches",
   "main": "app.js",
   "scripts": {
-    "test": "node --test \"tests/**/*.test.js\""
+    "test": "node --test \"tests/**/*.test.js\"",
+    "build:companion": "node tools/build-targets.js companion",
+    "build:workout": "node tools/build-targets.js workout",
+    "build:all": "node tools/build-targets.js all",
+    "generate:extension": "node tools/generate-workout-extension.js",
+    "preview:companion": "node tools/preview-targets.js companion",
+    "preview:workout": "node tools/preview-targets.js workout"
   },
   "author": "",
   "license": "MIT",

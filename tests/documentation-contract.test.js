@@ -9,19 +9,36 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('documents the shared pointer and the isolated legacy recovery limit', () => {
-  const readme = read('README.md');
-  const apiContract = read('docs/liftosaur-api.md');
-  const architecture = read('docs/architecture.md');
+test('publishes only documentation useful to users, testers, and maintainers', () => {
+  const markdownFiles = fs
+    .readdirSync(path.join(root, 'docs'))
+    .filter((file) => file.endsWith('.md'))
+    .sort();
 
-  assert.match(readme, /Running a Workout API.*phone pointer advances automatically/is);
-  assert.match(apiContract, /legacy raw REST API.*program\.nextDay.*not exposed/is);
-  assert.match(architecture, /legacy v1 REST flow.*independent.*phone app day pointer.*Running a Workout API.*advances/is);
+  assert.deepEqual(markdownFiles, [
+    'active-2-workout-integration-test.md',
+    'privacy-policy.md',
+    'store-listing.md',
+    'tester-guide.md',
+    'workout-extension-hardware-test-plan.md',
+    'workout-extension-manual-actions.md',
+  ]);
 });
 
-test('published capability evidence contains no personal Zepp account identifier', () => {
-  const capabilities = read('docs/zepp-capabilities.md');
+test('README explains the two products and links their public guides', () => {
+  const readme = read('README.md');
 
-  assert.match(capabilities, /\| `zeus login` \| logged in \| TESTED \|/);
-  assert.doesNotMatch(capabilities, /userID\s+\d+/i);
+  assert.match(readme, /two apps are complementary and can be installed together/i);
+  assert.match(readme, /docs\/workout-extension-manual-actions\.md/);
+  assert.match(readme, /docs\/workout-extension-hardware-test-plan\.md/);
+});
+
+test('README gives the verified Active 2 path for adding Lifto to Strength Training', () => {
+  const readme = read('README.md');
+
+  assert.match(
+    readme,
+    /Workout.*Strength Training.*Settings.*More.*Data Page.*Add Page.*Lifto/is,
+  );
+  assert.match(readme, /installing.*does not.*add.*data page/is);
 });

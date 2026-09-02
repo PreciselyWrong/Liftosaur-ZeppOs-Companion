@@ -1,14 +1,15 @@
-# Privacy Policy - Lifto Companion
+# Privacy Policy - Lifto Companion and Lifto Workout
 
-Last updated: 30 August 2026.
+Last updated: 1 September 2026.
 
-Lifto Companion is an unofficial, open-source client for the public Liftosaur Cloud API,
-running on Amazfit smartwatches with Zepp OS. This policy describes all data handled
-by the application.
+Lifto Companion and Lifto Workout are unofficial, open-source clients for the public
+Liftosaur Cloud API on Amazfit smartwatches with Zepp OS. Companion is a standalone app.
+Workout is a separate extension inside the native Zepp Workout app. This policy describes
+the data handled by both products.
 
 ## Who runs this application
 
-Lifto Companion has no dedicated server, no backend, and no analytics service. There is no
+These applications have no dedicated server, no backend, and no analytics service. There is no
 intermediary operator collecting your data: the application runs entirely on your watch and phone,
 communicating directly with Liftosaur's official servers.
 
@@ -16,16 +17,17 @@ communicating directly with Liftosaur's official servers.
 
 | Data | Where it is stored | Where it is sent | Why |
 | --- | --- | --- | --- |
-| Your Liftosaur API key (`lftsk_...`) | Zepp app settings storage on your phone only | `https://www.liftosaur.com` only, as an `Authorization` header | Authenticates your Liftosaur account |
-| Client Installation ID (`X-Liftosaur-Device-Id`) | Zepp app settings storage on your phone only | `https://www.liftosaur.com` only, as an `X-Liftosaur-Device-Id` header | Anonymous random identifier created once to coordinate multi-device active workout synchronization |
-| Your programs, workouts and active session | Read from Liftosaur Cloud; active session cached in watch local storage | Synced directly to your own Liftosaur Cloud account | Delivers workout tracking and applies progression |
-| Heart rate during a session | Watch memory only, during the session | Nowhere | Displayed live on the workout screen |
+| Your Liftosaur API key (`lftsk_...`) | Each installed product's Zepp settings storage on your phone only | `https://www.liftosaur.com` only, as an `Authorization` header | Authenticates your Liftosaur account |
+| Client Installation ID (`X-Liftosaur-Device-Id`) | Each installed product's Zepp settings storage on your phone only | `https://www.liftosaur.com` only, as an `X-Liftosaur-Device-Id` header | Anonymous random identifier created once to coordinate active workout synchronization |
+| Your programs, workouts and active session | Read from Liftosaur Cloud; active session cached in that product's watch local storage | Synced directly to your own Liftosaur Cloud account | Delivers workout tracking and applies progression |
+| Heart rate in Lifto Companion | Watch memory only, during the session | Nowhere | Displayed live on the standalone workout screen |
+| Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
 
 ## What the application never does
 
 - The API key is never transmitted to the watch, never sent over the Bluetooth link, and never written to any log or diagnostic export. It stays strictly inside the phone Side Service.
-- Heart rate is never transmitted anywhere. It is not written to your Liftosaur history, not stored between sessions, and not shared with any third party.
+- Companion heart rate and Workout's native duration and calories are never sent to Liftosaur, logged, or stored between Lifto sessions.
 - No data is sent to any server other than `https://www.liftosaur.com`.
 - No advertising, tracking, third-party analytics, or remote crash reporters are included.
 
@@ -37,16 +39,18 @@ and is not affiliated with, maintained by, or endorsed by Liftosaur or its autho
 
 ## Deleting your data
 
-Open the settings page of the application in the Zepp app and tap "Disconnect / Clear Key".
-This removes the API key and device installation ID from your phone. Uninstalling the application
-removes any active session still cached on the watch. Workouts already synced to your Liftosaur
-account are managed and deleted from Liftosaur directly.
+Open the settings page of each installed Lifto product in the Zepp app and tap
+"Disconnect / Clear Key". This removes that product's API key and installation ID from your
+phone. Uninstalling a product removes its active session cached on the watch. Workouts already
+synced to your Liftosaur account are managed and deleted from Liftosaur directly. Native Zepp
+workout history is managed separately through Zepp's own controls and privacy terms.
 
 ## Permissions the application requests
 
 | Permission | Used for |
 | --- | --- |
 | `data:user.hd.heart_rate` | Showing your live heart rate during a workout |
+| `data:user.hd.workout` | Reading active native duration and calories in Lifto Workout |
 | `device:os.local_storage` | Keeping the active workout on the watch so an app restart or crash does not lose state |
 | `data:os.device.info` | Reading screen dimensions to adapt the layout for round and square watches |
 

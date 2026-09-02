@@ -1,5 +1,38 @@
 # Changelog
 
+## [0.4.1] - 2 September 2026
+
+### Changed
+- Rest times for standard sets, warmups, and supersets now follow Liftosaur account settings in both apps.
+- The local screen-on choice now behaves the same in Lifto Companion and Lifto Workout.
+- Fresh install QR codes now cover both apps and the complete 28-target preview matrix until 9 September 2026.
+
+## [0.4.0] - 1 September 2026
+
+### Added
+- Lifto Workout can now be built separately for Zepp Strength Training, with program selection, set adjustments, notes, rest, recovery, conflicts, and Liftosaur finish guidance in one tap-only view.
+- Native Zepp duration and calories appear when the Workout app provides them.
+- Lifto Workout can keep its screen visible for 60, 120, 240 seconds, or throughout the workout.
+- Separate build and temporary preview commands now cover Lifto Companion and Lifto Workout.
+
+### Changed
+- Both products now use one durable workout engine for offline sets, phone changes, crash recovery, and repeat-safe finishing.
+- Pull requests now check 454 workout, security, layout, package, and preview contracts without requiring private credentials.
+- Public documentation now focuses on installation, testing, privacy, and store submission.
+- Active 2 setup now gives the exact watch path for adding Lifto to Strength Training.
+
+### Fixed
+- Lifto Workout now opens its sample workouts without requiring a Liftosaur API key.
+- Lifto Workout keeps its Menu button fully visible on round screens.
+- Lifto Workout leaves clear space between its main action and the clock.
+- Pausing the native Zepp workout now also pauses Lifto workout and rest time.
+- Native duration and calories now keep updating while Lifto stays visible.
+- Offline sets now retry automatically after returning to Lifto or reconnecting the phone.
+
+### Known limitations
+- Lifto Workout still needs a registered Zepp App ID and physical-watch validation before a public test QR can be offered.
+- Rest alerts fire while Lifto is visible and once on return; delivery while another Workout page is visible remains unconfirmed.
+
 ## [0.3.3] - 1 September 2026
 
 ### Fixed

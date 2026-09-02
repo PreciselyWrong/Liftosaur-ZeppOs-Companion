@@ -160,6 +160,18 @@ describe('Workout Service', () => {
     assert.deepEqual(client.calls[0], { method: 'getSettings' });
   });
 
+  test('adds the local display preference to Liftosaur settings', async () => {
+    const client = createMockClient();
+    const service = createWorkoutService({
+      client,
+      catalogService: createMockCatalogService(),
+      getLocalSettings: () => ({ screenOnDuration: 'always' }),
+    });
+
+    const settings = await service.getSettings();
+    assert.equal(settings.screenOnDuration, 'always');
+  });
+
   test('is stateless and propagates client errors directly without retries', async () => {
     const failingClient = {
       async getCurrentWorkout() {

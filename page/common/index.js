@@ -21,7 +21,11 @@ import {
 } from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
 
-import { SESSION_STATES, createWorkoutSession } from '../../shared/workout-session.js';
+import { SESSION_STATES } from '../../shared/workout-session.js';
+import {
+  createWorkoutController,
+  defaultDirectSync,
+} from '../../shared/workout-controller.js';
 import {
   createFallbackStorageAdapter,
   createSessionStore,
@@ -31,7 +35,6 @@ import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
-import { createWorkoutRefreshPolicy } from '../../shared/workout-refresh-policy.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -72,6 +75,9 @@ const THEME = {
   textMuted: 0x4f5c6b,
   textDisabled: 0x607284,
 };
+
+const DEFAULT_SCREEN_ON_SECONDS = 120;
+const ALWAYS_SCREEN_ON_MS = 2147483000;
 
 /**
  * Screens are drawn in the round 480x480 design space; `LAYOUT.fit()` is the
@@ -157,6 +163,16 @@ const localStoreAdapter = createFallbackStorageAdapter(
   (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
 );
 const sessionStore = createSessionStore(localStoreAdapter);
+const workoutController = createWorkoutController({
+  store: sessionStore,
+  request: (type, payload) => send(type, payload),
+  mapWorkout: (workout, options) =>
+    workoutToDayPlan(workout, {
+      ...options,
+      units: accountSettings?.units || options?.units || null,
+    }),
+});
+const session = workoutController;
 
 let pageInstance = null;
 let screen = SCREEN.LOADING;
@@ -175,30 +191,8 @@ let dayPlan = null;
 let accountSettings = null;
 let defaultWorkoutPlan = null;
 let directSync = defaultDirectSync('LEGACY');
-const refreshPolicy = createWorkoutRefreshPolicy();
-let isPollingCurrent = false;
-let isDirectWriteInFlight = false;
-let directSyncPromise = null;
-let directStartPromise = null;
-let deferredServerWorkout = null;
 let syncWarning = null;
-let lastServerWorkoutSignature = null;
 
-function defaultDirectSync(mode = 'LEGACY') {
-  return {
-    mode,
-    startConfirmed: false,
-    acknowledgedSetCount: 0,
-    finishRequestedAt: null,
-    discardRequestedAt: null,
-    conflict: false,
-    remoteMissing: false,
-    preservedIntervals: [],
-    intervalsPreservedThrough: null,
-  };
-}
-
-let session = createWorkoutSession({ plan: null });
 let isOverviewOpen = false;
 let overviewPage = 0;
 let readyPage = 0;
@@ -223,6 +217,41 @@ let lastRenderedSecond = null;
 let lastRenderedState = null;
 let activeWidgets = [];
 let modalControls = null;
+
+function selectedScreenOnDuration() {
+  const configured = accountSettings?.screenOnDuration;
+  if (configured === 'always') return 'always';
+  const seconds = Number(configured);
+  return [60, 120, 240].includes(seconds) ? seconds : DEFAULT_SCREEN_ON_SECONDS;
+}
+
+function applyDisplayHold() {
+  const duration = selectedScreenOnDuration();
+  const durationMs = duration === 'always' ? ALWAYS_SCREEN_ON_MS : duration * 1000;
+  const gestureDuration = duration === 'always' ? 0 : durationMs;
+  try {
+    setPageBrightTime({ brightTime: durationMs });
+    pauseDropWristScreenOff({ duration: gestureDuration });
+    pausePalmScreenOff({ duration: gestureDuration });
+  } catch (err) {
+    console.log('[liftosaur] display hold unavailable:', err?.message || String(err));
+  }
+}
+
+function resetDisplayHold() {
+  try {
+    resetPageBrightTime();
+    resetDropWristScreenOff();
+    resetPalmScreenOff();
+  } catch (err) {
+    console.log('[liftosaur] display reset:', err?.message || String(err));
+  }
+}
+
+function adoptAccountSettings(payload) {
+  accountSettings = payload || {};
+  applyDisplayHold();
+}
 
 /**
  * Widgets whose text changes every second.
@@ -510,20 +539,21 @@ function loadPrograms() {
           return;
         }
 
-        loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
-        return;
+        return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+          adoptAccountSettings(settingsRes.payload);
+          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+        });
       }
 
       return send(MESSAGE_TYPES.GET_SETTINGS)
         .then((settingsRes) => {
-          accountSettings = settingsRes.payload || {};
+          adoptAccountSettings(settingsRes.payload);
           return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
         })
         .then((currentRes) => {
-          refreshPolicy.markAuthoritativeResponse();
+          workoutController.markAuthoritativeResponse();
           const currentWorkout = currentRes.payload?.workout || null;
           if (currentWorkout) {
-            lastServerWorkoutSignature = JSON.stringify(currentWorkout);
             const plan = workoutToDayPlan(currentWorkout, {
               units: accountSettings?.units || null,
               isCurrent: true,
@@ -532,7 +562,6 @@ function loadPrograms() {
               throw new Error('Workout has no unit specified');
             }
             dayPlan = plan;
-            session = createWorkoutSession({ plan: dayPlan });
             directSync = {
               mode: 'DIRECT',
               startConfirmed: true,
@@ -544,6 +573,7 @@ function loadPrograms() {
               preservedIntervals: [],
               intervalsPreservedThrough: null,
             };
+            workoutController.loadPlan(dayPlan, { sync: directSync });
             persistSession();
             isBusy = false;
             statusMessage = '';
@@ -628,9 +658,8 @@ function loadDayPlan(week, day) {
         isBusy = false;
         statusMessage = '';
         dayPlan = res.payload;
-        session = createWorkoutSession({ plan: dayPlan });
         directSync = defaultDirectSync('LEGACY');
-        sessionStore.clear();
+        workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
         finishState = null;
         isOverviewOpen = false;
         overviewPage = 0;
@@ -665,7 +694,6 @@ function loadDayPlan(week, day) {
       isBusy = false;
       statusMessage = '';
       dayPlan = plan;
-      session = createWorkoutSession({ plan: dayPlan });
       directSync = {
         mode: 'DIRECT',
         startConfirmed: false,
@@ -677,7 +705,7 @@ function loadDayPlan(week, day) {
         preservedIntervals: [],
         intervalsPreservedThrough: null,
       };
-      sessionStore.clear();
+      workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
       finishState = null;
       isOverviewOpen = false;
       overviewPage = 0;
@@ -688,58 +716,35 @@ function loadDayPlan(week, day) {
     .catch(failRequest);
 }
 
-async function ensureDirectWorkoutStarted() {
-  if (directSync.mode !== 'DIRECT' || directSync.startConfirmed) {
-    return;
+function updateControllerStatus() {
+  directSync = workoutController.sync();
+  const status = workoutController.status();
+  if (status.code === 'pending') {
+    syncWarning = 'Sync pending - will retry';
+  } else if (status.code === 'remote-missing') {
+    syncWarning = 'No active workout on phone';
+  } else if (status.code === 'conflict') {
+    syncWarning = status.detail === 'workout_already_active' || status.detail === 'workout_start_time_taken'
+      ? 'Another workout is active in Liftosaur'
+      : 'Sync needs attention';
+  } else if (status.code === 'error') {
+    syncWarning = status.error?.message || 'Sync needs attention';
+  } else {
+    syncWarning = null;
   }
-  if (directSync.conflict) {
-    const err = new Error(syncWarning || 'Workout sync conflict');
-    err.code = 'SYNC_CONFLICT';
+}
+
+async function ensureDirectWorkoutStarted() {
+  try {
+    const result = await workoutController.ensureStarted();
+    updateControllerStatus();
+    renderUI();
+    return result;
+  } catch (err) {
+    updateControllerStatus();
+    renderUI();
     throw err;
   }
-  if (directStartPromise) {
-    return directStartPromise;
-  }
-
-  const view = session.view();
-  const payload = {
-    ...(dayPlan?.programId ? { programId: dayPlan.programId } : {}),
-    ...(dayPlan?.week !== null && dayPlan?.week !== undefined ? { week: dayPlan.week } : {}),
-    ...(dayPlan?.dayInWeek !== null && dayPlan?.dayInWeek !== undefined ? { dayInWeek: dayPlan.dayInWeek } : {}),
-    startTime: view.startedAt,
-  };
-
-  directStartPromise = (async () => {
-    try {
-      const res = await send(MESSAGE_TYPES.START_WORKOUT, payload);
-      refreshPolicy.markAuthoritativeResponse();
-      const payloadObj = res ? res.payload : null;
-      const returnedWorkout = payloadObj ? payloadObj.workout : null;
-      if (returnedWorkout) {
-        if (returnedWorkout.startTime && returnedWorkout.startTime !== view.startedAt) {
-          directSync.conflict = true;
-          persistSession();
-          renderUI();
-          return;
-        }
-      }
-      directSync.startConfirmed = true;
-      syncWarning = null;
-      persistSession();
-    } catch (err) {
-      if (err?.code === 'workout_already_active' || err?.code === 'workout_start_time_taken') {
-        directSync.conflict = true;
-        syncWarning = 'Another workout is active in Liftosaur';
-        persistSession();
-        renderUI();
-      }
-      throw err;
-    } finally {
-      directStartPromise = null;
-    }
-  })();
-
-  return directStartPromise;
 }
 
 function handleStartWorkout() {
@@ -786,218 +791,48 @@ function completeCurrentSet() {
 }
 
 async function synchronizeDirectSets() {
-  if (directSync.mode !== 'DIRECT' || directSync.conflict) return;
-  if (directSyncPromise) {
-    return directSyncPromise;
+  try {
+    const result = await workoutController.syncSets();
+    updateControllerStatus();
+    renderUI();
+    return result;
+  } catch (err) {
+    updateControllerStatus();
+    renderUI();
+    throw err;
   }
-
-  directSyncPromise = (async () => {
-    try {
-      await ensureDirectWorkoutStarted();
-      if (directSync.conflict) return;
-
-      while (true) {
-        if (directSync.conflict) break;
-        const allWrites = session.getWorkoutSetWrites();
-        const pendingWrites = allWrites.slice(directSync.acknowledgedSetCount);
-        if (pendingWrites.length === 0) {
-          syncWarning = null;
-          break;
-        }
-
-        const batch = pendingWrites;
-        const batchLength = batch.length;
-
-        const res = await send(MESSAGE_TYPES.SYNC_WORKOUT_SETS, { sets: batch });
-        refreshPolicy.markAuthoritativeResponse();
-        const returnedWorkout = res.payload?.workout;
-        if (returnedWorkout) {
-          if (returnedWorkout.startTime && returnedWorkout.startTime !== session.view().startedAt) {
-            directSync.conflict = true;
-            persistSession();
-            renderUI();
-            break;
-          }
-        }
-
-        directSync.acknowledgedSetCount += batchLength;
-        syncWarning = null;
-        persistSession();
-
-        const remainingPendingCount =
-          session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-        if (returnedWorkout && remainingPendingCount === 0) {
-          const currentState = session.view().state;
-          if (currentState === SESSION_STATES.REST) {
-            deferredServerWorkout = returnedWorkout;
-            lastServerWorkoutSignature = JSON.stringify(returnedWorkout);
-          } else if (currentState === SESSION_STATES.ACTIVE_SET) {
-            applyAdoptedSnapshot(returnedWorkout);
-          }
-        }
-      }
-    } catch (err) {
-      console.log('[liftosaur] sync direct sets failed:', err?.message || String(err));
-      const retryable = !err?.code || err.code === 'NETWORK' || err.code === 'API_FAILED';
-      syncWarning = retryable ? 'Sync pending - will retry' : (err?.message || 'Sync needs attention');
-      if (!retryable) directSync.conflict = true;
-      persistSession();
-      renderUI();
-      throw err;
-    } finally {
-      directSyncPromise = null;
-    }
-  })();
-
-  return directSyncPromise;
-}
-
-function preserveDirectIntervals(capturedAt = Date.now()) {
-  if (directSync.mode !== 'DIRECT') return;
-  const through = directSync.intervalsPreservedThrough;
-  const nextIntervals = session
-    .getWorkoutIntervals(capturedAt)
-    .map(([start, end]) => [through === null ? start : Math.max(start, through), end])
-    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start);
-  directSync.preservedIntervals = [
-    ...(Array.isArray(directSync.preservedIntervals) ? directSync.preservedIntervals : []),
-    ...nextIntervals,
-  ];
-  directSync.intervalsPreservedThrough = capturedAt;
-}
-
-function getDirectWorkoutIntervals(endTime) {
-  const through = directSync.intervalsPreservedThrough;
-  const currentIntervals = session
-    .getWorkoutIntervals(endTime)
-    .map(([start, end]) => [through === null ? start : Math.max(start, through), end])
-    .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start);
-  return [
-    ...(Array.isArray(directSync.preservedIntervals) ? directSync.preservedIntervals : []),
-    ...currentIntervals,
-  ];
-}
-
-function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
-  const resumeFromEntryId = preserveNavigation ? session.view().entryId : null;
-  preserveDirectIntervals();
-  const plan = workoutToDayPlan(serverWorkout, {
-    units: accountSettings?.units || dayPlan?.unit || null,
-    isCurrent: true,
-  });
-  if (!plan || !plan.unit) return;
-  dayPlan = plan;
-  lastServerWorkoutSignature = JSON.stringify(serverWorkout);
-  session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
-  directSync.acknowledgedSetCount = session.getWorkoutSetWrites().length;
-  persistSession();
-  renderUI();
 }
 
 async function adoptCurrentWorkout() {
   beginRequest('Loading phone workout…');
   try {
-    const res = await send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
-    refreshPolicy.markAuthoritativeResponse();
-    const workout = res.payload?.workout || null;
-    if (!workout) {
-      directSync.conflict = true;
-      directSync.remoteMissing = true;
-      syncWarning = 'No active workout on phone';
-      isBusy = false;
-      statusMessage = '';
-      persistSession();
-      renderUI();
-      return;
-    }
-    directSync.conflict = false;
-    directSync.remoteMissing = false;
-    directSync.startConfirmed = true;
-    directSync.finishRequestedAt = null;
-    directSync.discardRequestedAt = null;
-    syncWarning = null;
+    await workoutController.adoptCurrent({ preserveNavigation: false });
+    dayPlan = workoutController.plan();
+    updateControllerStatus();
     isBusy = false;
     statusMessage = '';
-    applyAdoptedSnapshot(workout, { preserveNavigation: false });
+    renderUI();
   } catch (err) {
     failRequest(err);
   }
 }
 
 function handleNextSet() {
-  if (deferredServerWorkout) {
-    const sw = deferredServerWorkout;
-    deferredServerWorkout = null;
-    applyAdoptedSnapshot(sw);
-  } else {
-    session.nextSet();
-    requestWorkoutRefresh();
-  }
+  session.nextSet();
+  dayPlan = workoutController.plan();
+  updateControllerStatus();
 }
 
 function requestWorkoutRefresh() {
-  if (directSync.mode !== 'DIRECT') return;
-  refreshPolicy.request();
-  pollCurrentWorkout();
+  workoutController.requestRefresh();
 }
 
 async function pollCurrentWorkout() {
-  if (directSync.mode !== 'DIRECT' || directSync.conflict) return;
-  const currentState = session.view().state;
-  if (currentState !== SESSION_STATES.ACTIVE_SET && currentState !== SESSION_STATES.REST) return;
-  const pendingCount = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-  if (pendingCount > 0) return;
-  if (directSyncPromise || directStartPromise || isDirectWriteInFlight || isPollingCurrent) return;
-  if (!refreshPolicy.beginPoll()) return;
-  const writeCountAtPollStart = session.getWorkoutSetWrites().length;
-  isPollingCurrent = true;
-
-  try {
-    const res = await send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
-    refreshPolicy.markSuccess();
-    const serverWorkout = res.payload?.workout || null;
-    const currentWriteCount = session.getWorkoutSetWrites().length;
-    const currentPending = currentWriteCount - directSync.acknowledgedSetCount;
-    if (currentWriteCount !== writeCountAtPollStart) return;
-
-    if (!serverWorkout) {
-      if (!directSync.startConfirmed) {
-        ensureDirectWorkoutStarted().catch(() => {});
-        return;
-      }
-      directSync.conflict = true;
-      directSync.remoteMissing = true;
-      syncWarning = 'Workout ended or was discarded on phone';
-      persistSession();
-      renderUI();
-      return;
-    }
-
-    const localStartTime = session.view().startedAt;
-    if (serverWorkout.startTime && serverWorkout.startTime !== localStartTime) {
-      directSync.conflict = true;
-      persistSession();
-      renderUI();
-      return;
-    }
-
-    if (currentPending === 0 && currentWriteCount === writeCountAtPollStart) {
-      const serverSignature = JSON.stringify(serverWorkout);
-      if (serverSignature === lastServerWorkoutSignature) return;
-      const currentState = session.view().state;
-      if (currentState === SESSION_STATES.REST) {
-        deferredServerWorkout = serverWorkout;
-        lastServerWorkoutSignature = serverSignature;
-      } else {
-        applyAdoptedSnapshot(serverWorkout);
-      }
-    }
-  } catch (err) {
-    refreshPolicy.markFailure();
-    console.log('[liftosaur] poll current workout failed:', err?.message || String(err));
-  } finally {
-    isPollingCurrent = false;
-  }
+  const changed = await workoutController.pollCurrent();
+  dayPlan = workoutController.plan();
+  const previousWarning = syncWarning;
+  updateControllerStatus();
+  if (changed || previousWarning !== syncWarning) renderUI();
 }
 
 function submitWorkout() {
@@ -1005,48 +840,23 @@ function submitWorkout() {
   const view = session.view();
 
   if (directSync.mode === 'DIRECT') {
-    if (isDirectWriteInFlight) return;
-    isDirectWriteInFlight = true;
-
-    if (!directSync.finishRequestedAt) {
-      directSync.finishRequestedAt = Date.now();
-      persistSession();
-    }
-
     finishState = { status: 'SENDING', message: 'Saving to Liftosaur…' };
     renderUI();
 
     (async () => {
       try {
-        await ensureDirectWorkoutStarted();
-        if (directSync.conflict) throw new Error(syncWarning || 'Workout sync conflict');
-        await synchronizeDirectSets();
-        const pendingSetCount =
-          session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-        if (pendingSetCount > 0) throw new Error('Set sync is still pending');
-
-        const endTime = view.endedAt || Date.now();
-        const intervals = getDirectWorkoutIntervals(endTime);
-        const payload = {
-          startTime: view.startedAt,
-          endTime,
-        };
-        if (intervals && intervals.length > 0) {
-          payload.intervals = intervals;
-        }
-
-        await send(MESSAGE_TYPES.FINISH_WORKOUT, payload);
-        sessionStore.clear();
+        const result = await workoutController.finishWorkoutRemote();
+        if (!result.success) throw new Error(result.reason || 'Save failed - retry');
+        updateControllerStatus();
         finishState = {
           status: 'SAVED',
           message: 'Saved to Liftosaur',
         };
         renderUI();
       } catch (err) {
+        updateControllerStatus();
         finishState = { status: 'FAILED', message: err?.message || 'Save failed - retry' };
         renderUI();
-      } finally {
-        isDirectWriteInFlight = false;
       }
     })();
     return;
@@ -1080,7 +890,7 @@ function submitWorkout() {
                 : 'Saved to Liftosaur',
       };
       if (payload.status !== 'BASE_PROGRAM_UNAVAILABLE') {
-        sessionStore.clear();
+        workoutController.clearPersisted();
       }
       renderUI();
     })
@@ -1097,27 +907,16 @@ function handleDiscardWorkout() {
     return;
   }
 
-  const view = session.view();
-  if (!Number.isFinite(view.startedAt)) {
-    returnAfterDiscard();
-    return;
-  }
-  if (!directSync.discardRequestedAt) {
-    directSync.discardRequestedAt = Date.now();
-    persistSession();
-  }
-
   beginRequest('Discarding workout…');
 
-  send(MESSAGE_TYPES.DISCARD_WORKOUT, { startTime: view.startedAt })
-    .then(() => {
+  workoutController.discardWorkoutRemote()
+    .then((result) => {
+      updateControllerStatus();
+      if (!result.success) throw new Error(result.reason || 'Discard pending');
       returnAfterDiscard();
     })
     .catch((err) => {
-      if (err?.code === 'no_active_workout') {
-        returnAfterDiscard();
-        return;
-      }
+      updateControllerStatus();
       failRequest(err);
     });
 }
@@ -1133,9 +932,7 @@ function abandonWorkout() {
 }
 
 function returnAfterDiscard() {
-  sessionStore.clear();
-  session.cancelWorkout();
-  session = createWorkoutSession({ plan: null });
+  workoutController.clear();
   dayPlan = null;
   directSync = defaultDirectSync('LEGACY');
   listPage = 0;
@@ -1154,19 +951,13 @@ function returnAfterDiscard() {
 
 function persistSession() {
   if (!dayPlan) return;
-  sessionStore.save({
-    plan: dayPlan,
-    journal: session.getJournal(),
-    startedAt: session.view().startedAt,
-    sync: directSync,
-  });
+  workoutController.updateSync(directSync);
 }
 
 /** Persist first, render second. The account is written once, at finish. */
 function persistAndRender(action) {
   if (action) {
     action();
-    persistSession();
   }
   renderUI();
 }
@@ -1177,42 +968,10 @@ function persistAndRender(action) {
  * restored - no network needed to carry on lifting.
  */
 function restoreSession() {
-  const snapshot = sessionStore.load();
-  if (!snapshot) return false;
-
-  try {
-    dayPlan = snapshot.plan;
-    session = createWorkoutSession({ plan: snapshot.plan, initialJournal: snapshot.journal });
-    if (snapshot.sync) {
-      directSync = {
-        mode: snapshot.sync.mode || (snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY'),
-        startConfirmed: Boolean(snapshot.sync.startConfirmed),
-        acknowledgedSetCount: snapshot.sync.acknowledgedSetCount || 0,
-        finishRequestedAt: snapshot.sync.finishRequestedAt || null,
-        discardRequestedAt: snapshot.sync.discardRequestedAt || null,
-        conflict: Boolean(snapshot.sync.conflict),
-        remoteMissing: Boolean(snapshot.sync.remoteMissing),
-        preservedIntervals: Array.isArray(snapshot.sync.preservedIntervals)
-          ? snapshot.sync.preservedIntervals
-          : [],
-        intervalsPreservedThrough: Number.isFinite(snapshot.sync.intervalsPreservedThrough)
-          ? snapshot.sync.intervalsPreservedThrough
-          : null,
-      };
-    } else {
-      directSync = defaultDirectSync(snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY');
-    }
-  } catch (err) {
-    console.log('[liftosaur] could not resume session:', err?.message || String(err));
-    sessionStore.clear();
-    return false;
-  }
-
-  const view = session.view();
-  if (view.state === SESSION_STATES.NO_PLAN) {
-    sessionStore.clear();
-    return false;
-  }
+  const restored = workoutController.restore();
+  if (!restored.success) return false;
+  dayPlan = workoutController.plan();
+  directSync = workoutController.sync();
 
   console.log('[liftosaur] session resumed');
   screen = SCREEN.SESSION;
@@ -2416,7 +2175,8 @@ function renderDirectConflictScreen() {
         adoptCurrentWorkout();
         return;
       }
-      directSync.conflict = false;
+      workoutController.updateSync({ conflict: false });
+      directSync = workoutController.sync();
       syncWarning = null;
       persistSession();
       ensureDirectWorkoutStarted().catch(() => {});
@@ -3136,8 +2896,7 @@ function renderFinishedScreen(view) {
 
         const finishedPlan = dayPlan;
         const finishedProgram = programForSavedPlan(selectedProgram, programs, finishedPlan);
-        sessionStore.clear();
-        session = createWorkoutSession({ plan: null });
+        workoutController.clear();
         dayPlan = null;
         finishState = null;
         listPage = 0;
@@ -3367,14 +3126,7 @@ Page(
     build() {
       hideSquareStatusBar();
       onGesture({ callback: handleGesture });
-
-      try {
-        setPageBrightTime({ brightTime: 60000 });
-        pauseDropWristScreenOff({ duration: 0 });
-        pausePalmScreenOff({ duration: 0 });
-      } catch (err) {
-        console.log('[liftosaur] display hold unavailable:', err?.message || String(err));
-      }
+      applyDisplayHold();
 
       try {
         hrSensor = new HeartRate();
@@ -3394,11 +3146,16 @@ Page(
       const restoredState = restoreSession() ? session.view().state : null;
       if (!restoredState) {
         loadPrograms();
-      } else if (directSync.discardRequestedAt) {
+      } else {
+        send(MESSAGE_TYPES.GET_SETTINGS)
+          .then((settingsRes) => adoptAccountSettings(settingsRes.payload))
+          .catch(() => {});
+      }
+      if (restoredState && directSync.discardRequestedAt) {
         handleDiscardWorkout();
-      } else if (directSync.finishRequestedAt || restoredState === SESSION_STATES.FINISHED) {
+      } else if (restoredState && (directSync.finishRequestedAt || restoredState === SESSION_STATES.FINISHED)) {
         submitWorkout();
-      } else if (directSync.mode === 'DIRECT') {
+      } else if (restoredState && directSync.mode === 'DIRECT') {
         synchronizeDirectSets()
           .then(() => requestWorkoutRefresh())
           .catch(() => {});
@@ -3415,13 +3172,7 @@ Page(
       } catch (err) {
         console.log('[liftosaur] hr teardown:', err?.message || String(err));
       }
-      try {
-        resetPageBrightTime();
-        resetDropWristScreenOff();
-        resetPalmScreenOff();
-      } catch (err) {
-        console.log('[liftosaur] display reset:', err?.message || String(err));
-      }
+      resetDisplayHold();
       clearWidgets();
       destroyModalControls();
       pageInstance = null;
