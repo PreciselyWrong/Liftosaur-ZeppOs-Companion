@@ -29,6 +29,7 @@ function planText({ week = 1, day = 1, dayName = 'Semaine 1 - Mardi: PUSH A' } =
 function createFakeClient(overrides = {}) {
   const calls = {
     playground: [],
+    settings: 0,
     updateProgram: [],
     createHistory: [],
     updateHistory: [],
@@ -42,6 +43,11 @@ function createFakeClient(overrides = {}) {
 
     async listPrograms() {
       return [{ id: 'prog-1', name: 'Test', isCurrent: true }];
+    },
+
+    async getSettings() {
+      calls.settings += 1;
+      return { units: 'kg', timers: { warmup: 60, workout: 120, superset: 90 } };
     },
 
     async getProgram(id) {
@@ -446,7 +452,7 @@ Triceps Pushdown / 2x11 @8 / 90kg 75s / warmup: 1x8 60% / superset: A
   );
 });
 
-test('getDayPlan applies custom default rest timers from getSettings', async () => {
+test('getDayPlan applies Liftosaur timer settings from the API', async () => {
   const customProgram = `# Week 1
 ## Day 1
 Squat / 3x5 / 100kg
@@ -465,20 +471,15 @@ Triceps Pushdown / 3x12 / 20kg / superset: A
 }`,
       };
     },
-  });
-
-  const settings = {
-    defaultTimers: {
-      standardRest: 180,
-      warmupRest: 45,
-      supersetRest: 30,
+    async getSettings() {
+      return {
+        units: 'kg',
+        timers: { warmup: 45, workout: 180, superset: 30 },
+      };
     },
-  };
-
-  const service = createProgramService({
-    client,
-    getSettings: () => settings,
   });
+
+  const service = createProgramService({ client });
 
   const plan = await service.getDayPlan('prog-1', 1, 1);
   assert.equal(plan.exercises[0].sets[0].restSeconds, 180); // Standard rest

@@ -4,6 +4,7 @@ import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 import { createProgramService } from './program-service.js';
 import { createReferenceData } from './reference-data.js';
 import { createDummyProgramService } from './dummy-program-service.js';
+import { createDummyWorkoutService } from './dummy-workout-service.js';
 import { getOrCreateClientIdentity } from './client-identity.js';
 import { createWorkoutService } from './workout-service.js';
 
@@ -57,9 +58,7 @@ function getEffectiveStorage() {
 
 function getEffectiveSettings() {
   const apiKey = getEffectiveApiKey();
-  let standardRest = 120;
-  let warmupRest = 60;
-  let supersetRest = 90;
+  let screenOnDuration = 120;
 
   try {
     const storage = getEffectiveStorage();
@@ -68,39 +67,32 @@ function getEffectiveSettings() {
     }
 
     if (storage) {
-      const readVal = (key, defaultVal) => {
-        const raw = storage.getItem(key);
-        if (raw === undefined || raw === null) return defaultVal;
-        let v = raw;
-        if (typeof raw === 'string') {
-          try {
-            const parsed = JSON.parse(raw);
-            v = typeof parsed === 'object' && parsed !== null ? (parsed.value ?? parsed) : parsed;
-          } catch (e) {
-            v = raw;
-          }
-        } else if (typeof raw === 'object') {
-          v = raw.value ?? defaultVal;
+      const rawScreenDuration = storage.getItem('screenOnDuration');
+      let parsedScreenDuration = rawScreenDuration;
+      if (typeof rawScreenDuration === 'string') {
+        try {
+          parsedScreenDuration = JSON.parse(rawScreenDuration);
+        } catch (e) {
+          parsedScreenDuration = rawScreenDuration;
         }
-        const num = parseInt(v, 10);
-        return Number.isFinite(num) ? num : defaultVal;
-      };
-
-      standardRest = readVal('defaultStandardRest', 120);
-      warmupRest = readVal('defaultWarmupRest', 60);
-      supersetRest = readVal('defaultSupersetRest', 90);
+      }
+      if (typeof parsedScreenDuration === 'object' && parsedScreenDuration !== null) {
+        parsedScreenDuration = parsedScreenDuration.value;
+      }
+      if (parsedScreenDuration === 'always') {
+        screenOnDuration = 'always';
+      } else {
+        const seconds = Number(parsedScreenDuration);
+        screenOnDuration = [60, 120, 240].includes(seconds) ? seconds : 120;
+      }
     }
   } catch (err) {
-    console.log('[liftosaur-side] timer settings read failed:', err?.message || String(err));
+    console.log('[liftosaur-side] local settings read failed:', err?.message || String(err));
   }
 
   return {
     apiKey,
-    defaultTimers: {
-      standardRest: standardRest > 0 ? standardRest : null,
-      warmupRest: warmupRest > 0 ? warmupRest : null,
-      supersetRest: supersetRest > 0 ? supersetRest : null,
-    },
+    screenOnDuration,
   };
 }
 
@@ -115,11 +107,14 @@ function getServices() {
   const isDemo = !apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo';
 
   if (isDemo) {
-    if (!cachedProgramService || cachedKey !== 'dummy') {
+    if (!cachedProgramService || !cachedWorkoutService || cachedKey !== 'dummy') {
       cachedKey = 'dummy';
       cachedDeviceId = null;
       cachedProgramService = createDummyProgramService();
-      cachedWorkoutService = null;
+      cachedWorkoutService = createDummyWorkoutService({
+        catalogService: cachedProgramService,
+        getLocalSettings: getEffectiveSettings,
+      });
     }
     return {
       programService: cachedProgramService,
@@ -146,17 +141,17 @@ function getServices() {
     const client = createLiftosaurApiClient({
       apiKey,
       deviceId,
-      clientName: 'liftosaur-zepp-os/0.3.2',
+      clientName: 'liftosaur-zepp-os/0.4.0',
     });
     const referenceData = createReferenceData({ client });
     cachedProgramService = createProgramService({
       client,
       referenceData,
-      getSettings: getEffectiveSettings,
     });
     cachedWorkoutService = createWorkoutService({
       client,
       catalogService: cachedProgramService,
+      getLocalSettings: getEffectiveSettings,
     });
   }
 
