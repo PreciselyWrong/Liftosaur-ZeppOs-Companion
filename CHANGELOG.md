@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.1] - 2 September 2026
+
+### Changed
+- Rest times for standard sets, warmups, and supersets now follow Liftosaur account settings in both apps.
+- The local screen-on choice now behaves the same in Lifto Companion and Lifto Workout.
+
 ## [0.4.0] - 1 September 2026
 
 ### Added

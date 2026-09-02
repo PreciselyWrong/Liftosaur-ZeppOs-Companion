@@ -76,6 +76,9 @@ const THEME = {
   textDisabled: 0x607284,
 };
 
+const DEFAULT_SCREEN_ON_SECONDS = 120;
+const ALWAYS_SCREEN_ON_MS = 2147483000;
+
 /**
  * Screens are drawn in the round 480x480 design space; `LAYOUT.fit()` is the
  * only thing that knows about the real screen. It is the identity on round
@@ -214,6 +217,41 @@ let lastRenderedSecond = null;
 let lastRenderedState = null;
 let activeWidgets = [];
 let modalControls = null;
+
+function selectedScreenOnDuration() {
+  const configured = accountSettings?.screenOnDuration;
+  if (configured === 'always') return 'always';
+  const seconds = Number(configured);
+  return [60, 120, 240].includes(seconds) ? seconds : DEFAULT_SCREEN_ON_SECONDS;
+}
+
+function applyDisplayHold() {
+  const duration = selectedScreenOnDuration();
+  const durationMs = duration === 'always' ? ALWAYS_SCREEN_ON_MS : duration * 1000;
+  const gestureDuration = duration === 'always' ? 0 : durationMs;
+  try {
+    setPageBrightTime({ brightTime: durationMs });
+    pauseDropWristScreenOff({ duration: gestureDuration });
+    pausePalmScreenOff({ duration: gestureDuration });
+  } catch (err) {
+    console.log('[liftosaur] display hold unavailable:', err?.message || String(err));
+  }
+}
+
+function resetDisplayHold() {
+  try {
+    resetPageBrightTime();
+    resetDropWristScreenOff();
+    resetPalmScreenOff();
+  } catch (err) {
+    console.log('[liftosaur] display reset:', err?.message || String(err));
+  }
+}
+
+function adoptAccountSettings(payload) {
+  accountSettings = payload || {};
+  applyDisplayHold();
+}
 
 /**
  * Widgets whose text changes every second.
@@ -501,13 +539,15 @@ function loadPrograms() {
           return;
         }
 
-        loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
-        return;
+        return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+          adoptAccountSettings(settingsRes.payload);
+          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+        });
       }
 
       return send(MESSAGE_TYPES.GET_SETTINGS)
         .then((settingsRes) => {
-          accountSettings = settingsRes.payload || {};
+          adoptAccountSettings(settingsRes.payload);
           return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
         })
         .then((currentRes) => {
@@ -3086,14 +3126,7 @@ Page(
     build() {
       hideSquareStatusBar();
       onGesture({ callback: handleGesture });
-
-      try {
-        setPageBrightTime({ brightTime: 60000 });
-        pauseDropWristScreenOff({ duration: 0 });
-        pausePalmScreenOff({ duration: 0 });
-      } catch (err) {
-        console.log('[liftosaur] display hold unavailable:', err?.message || String(err));
-      }
+      applyDisplayHold();
 
       try {
         hrSensor = new HeartRate();
@@ -3113,11 +3146,16 @@ Page(
       const restoredState = restoreSession() ? session.view().state : null;
       if (!restoredState) {
         loadPrograms();
-      } else if (directSync.discardRequestedAt) {
+      } else {
+        send(MESSAGE_TYPES.GET_SETTINGS)
+          .then((settingsRes) => adoptAccountSettings(settingsRes.payload))
+          .catch(() => {});
+      }
+      if (restoredState && directSync.discardRequestedAt) {
         handleDiscardWorkout();
-      } else if (directSync.finishRequestedAt || restoredState === SESSION_STATES.FINISHED) {
+      } else if (restoredState && (directSync.finishRequestedAt || restoredState === SESSION_STATES.FINISHED)) {
         submitWorkout();
-      } else if (directSync.mode === 'DIRECT') {
+      } else if (restoredState && directSync.mode === 'DIRECT') {
         synchronizeDirectSets()
           .then(() => requestWorkoutRefresh())
           .catch(() => {});
@@ -3134,13 +3172,7 @@ Page(
       } catch (err) {
         console.log('[liftosaur] hr teardown:', err?.message || String(err));
       }
-      try {
-        resetPageBrightTime();
-        resetDropWristScreenOff();
-        resetPalmScreenOff();
-      } catch (err) {
-        console.log('[liftosaur] display reset:', err?.message || String(err));
-      }
+      resetDisplayHold();
       clearWidgets();
       destroyModalControls();
       pageInstance = null;
