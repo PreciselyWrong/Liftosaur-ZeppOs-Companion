@@ -64,7 +64,7 @@
 
 ## Phase 0 - Audit
 
-- [x] Read project instructions, TODO, manifest, architecture, risks, decisions and capability evidence.
+- [x] Read project instructions, TODO, manifest and implementation evidence.
 - [x] Synchronize `main`, create `feat/workout-extension`, and record the clean baseline.
 - [x] Run the baseline suite: 374 passing tests.
 
@@ -124,7 +124,7 @@
 
 ## Phase 12 - Documentation and release
 
-- [x] Complete factual Workout Extension documentation across decisions, architecture, risks, hardware test plan, manual actions, research, and capability matrix.
+- [x] Complete the public Workout Extension setup and hardware test guides.
 - [x] Draft release notes for the two-product beta.
 - [ ] Publish the Workout tester guide and store assets after physical validation.
 
@@ -162,4 +162,4 @@
 - 2026-09-01: Added pure dual-target build system and package scripts for companion, workout, and all products.
 - 2026-09-01: Implemented the click-only Lifto Workout DataWidget, rest alert resume fallback, separate session storage and recovery contracts (433 passing tests).
 - 2026-09-01: Added unit-tested dual-preview orchestration and credential-free CI without uploading a preview.
-- 2026-09-01: Completed factual Workout Extension documentation across decisions, architecture, risks, hardware test plan, manual actions, research, and capability matrix.
+- 2026-09-01: Completed the public Workout Extension setup and hardware test guides.

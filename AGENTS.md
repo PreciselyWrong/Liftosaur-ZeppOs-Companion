@@ -33,7 +33,7 @@
 - `app-side/` - protocol routing, the only HTTP client, Cloud services and stable client identity.
 - `setting/` - phone-side API key settings. Secrets never belong on the watch.
 - `tests/` - Node contract, state, security, renderer and build tests.
-- `docs/` - API evidence, ADRs, risks, test matrices and release guidance.
+- `docs/` - tester installation, Workout hardware validation, privacy and store guidance.
 
 ## Decisions
 
