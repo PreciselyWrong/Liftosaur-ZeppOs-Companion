@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   formatLoadoutLabel,
+  formatPlatesObject,
   roundToLoadable,
   parseWeightString,
   resolveEquipmentId,
@@ -132,6 +133,14 @@ test('formats a one-sided plate stack as one load', () => {
 test('does not suggest plates for an inexact or unresolved weight', () => {
   assert.equal(formatLoadoutLabel(61, BARBELL, 'kg'), null);
   assert.equal(formatLoadoutLabel(60, null, 'kg'), null);
+});
+
+test('formats direct Liftosaur plates object when loadingEquipment is null', () => {
+  assert.equal(formatLoadoutLabel(80, null, 'kg', { '20kg': 2, '10kg': 1 }), 'PER SIDE · 2×20 + 1×10 KG');
+  assert.equal(formatLoadoutLabel(40, null, 'kg', { '20kg': 1 }), 'PER SIDE · 1×20 KG');
+  assert.equal(formatLoadoutLabel(135, null, 'lb', { '45lb': 1 }), 'PER SIDE · 1×45 LB');
+  assert.equal(formatLoadoutLabel(60, { '20kg': 1 }, 'kg'), 'PER SIDE · 1×20 KG');
+  assert.equal(formatPlatesObject({ '20kg': 1, '2.5kg': 2 }, 'kg'), 'PER SIDE · 1×20 + 2×2.5 KG');
 });
 
 test('identifies an exact fixed weight without inventing plates', () => {

@@ -7,6 +7,10 @@
 - The local screen-on choice now behaves the same in Lifto Companion and Lifto Workout.
 - Fresh install QR codes now cover both apps and the complete 28-target preview matrix until 9 September 2026.
 
+### Fixed
+- Plate loading recommendations now display directly from Liftosaur Cloud running workout data when gym equipment definitions are absent.
+- Rest alert vibration in Lifto Workout now safely handles scalar and object sensor mode configurations across Zepp OS firmware variants.
+
 ## [0.4.0] - 1 September 2026
 
 ### Added
