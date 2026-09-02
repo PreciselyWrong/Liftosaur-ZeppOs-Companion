@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-453%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -23,6 +23,14 @@ The standalone app provides the least constrained watch experience: program brow
 The separate Workout Extension runs inside Zepp Strength Training. It keeps the native Zepp activity and metrics visible while the shared Lifto controller handles prescriptions, set logging, rest, recovery, and Liftosaur finalization through click-only screens.
 
 The two apps are complementary and can be installed together. Liftosaur Cloud is their shared workout handoff; credentials remain inside each app's phone Side Service.
+
+### Add Lifto to Strength Training on Active 2
+
+Installing Lifto Workout does not automatically add its data page to a workout. On the watch, open:
+
+**Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto**
+
+Lifto then appears as one of the pages inside the native Strength Training workout.
 
 Workout Extension documentation:
 

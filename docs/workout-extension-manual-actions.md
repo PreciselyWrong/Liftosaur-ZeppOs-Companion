@@ -78,8 +78,8 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run preview:workout
 
 1. On the watch, launch the system **Workout** application.
 2. Select **Strength Training**.
-3. Open Strength Training settings / Motion Extensions (or Data Pages).
-4. Add and enable **Lifto**.
+3. Open **Settings** > **More** > **Data Page** > **Add Page**.
+4. Select **Lifto**.
 
 ---
 
