@@ -9,12 +9,13 @@
 
 ### Changed
 - Both products now use one durable workout engine for offline sets, phone changes, crash recovery, and repeat-safe finishing.
-- Pull requests now check 452 workout, security, layout, package, and preview contracts without requiring private credentials.
+- Pull requests now check 453 workout, security, layout, package, and preview contracts without requiring private credentials.
 - Public documentation now focuses on installation, testing, privacy, and store submission.
 
 ### Fixed
 - Lifto Workout now opens its sample workouts without requiring a Liftosaur API key.
 - Lifto Workout keeps its Menu button fully visible on round screens.
+- Lifto Workout leaves clear space between its main action and the clock.
 
 ### Known limitations
 - Lifto Workout still needs a registered Zepp App ID and physical-watch validation before a public test QR can be offered.
