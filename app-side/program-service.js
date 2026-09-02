@@ -57,8 +57,6 @@ export function programVersion(text) {
 export function createProgramService({
   client,
   referenceData = null,
-  defaultTimers = null,
-  getSettings = null,
 } = {}) {
   if (!client) {
     throw new Error('createProgramService requires a Liftosaur API client');
@@ -252,12 +250,13 @@ export function createProgramService({
         }
       }
 
-      const timers = getSettings
-        ? getSettings()?.defaultTimers
-        : (defaultTimers || { standardRest: 120, warmupRest: 60, supersetRest: 90 });
+      const settings = await client.getSettings();
 
       const declaredExercises = parseProgramDayExercises(program.text, week, day);
-      applyProgramMetadata(plan, declaredExercises, { referenceData, defaultTimers: timers });
+      applyProgramMetadata(plan, declaredExercises, {
+        referenceData,
+        timers: settings?.timers || null,
+      });
 
       try {
         const records = await loadRecentHistory();

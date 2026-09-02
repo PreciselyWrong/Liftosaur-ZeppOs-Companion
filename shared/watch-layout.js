@@ -50,6 +50,14 @@ export const ACTIVE_SET_LAYOUT = Object.freeze({
   }),
 });
 
+export const EXTENSION_CLOCK_LAYOUT = Object.freeze({
+  x: 160,
+  y: 442,
+  width: 160,
+  height: 20,
+  minimumActionGap: 20,
+});
+
 export function shouldShowRpe(set) {
   return Boolean(set?.logRpe) || (set?.targetRpe !== null && set?.targetRpe !== undefined);
 }
@@ -65,5 +73,16 @@ export function activeSetLayout(set) {
     actionY: source.actionY,
     actionHeight: source.actionHeight,
     rows: keys.map((key, index) => ({ key, y: source.rowYs[index] })),
+  };
+}
+
+export function extensionActiveSetLayout(set) {
+  const layout = activeSetLayout(set);
+  const availableHeight =
+    EXTENSION_CLOCK_LAYOUT.y - EXTENSION_CLOCK_LAYOUT.minimumActionGap - layout.actionY;
+
+  return {
+    ...layout,
+    actionHeight: Math.min(layout.actionHeight, availableHeight),
   };
 }

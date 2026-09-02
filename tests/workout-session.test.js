@@ -1362,5 +1362,173 @@ describe('Workout API set-write journal support', () => {
     assert.equal(session.view().entryId, 'b');
     assert.equal(session.view().currentSet.setId, 'b1');
   });
+
+  test('native workout pause and resume during active set stops and resumes elapsed time', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Bench Press',
+          sets: [{ index: 1, targetReps: 5, targetWeight: 80, restSeconds: 60 }],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 10_000 });
+
+    assert.equal(session.view(20_000).elapsedSeconds, 10);
+
+    session.pauseWorkout({ timestamp: 20_000 });
+
+    assert.equal(session.view(25_000).elapsedSeconds, 10);
+    assert.equal(session.view(35_000).elapsedSeconds, 10);
+
+    session.resumeWorkout({ timestamp: 35_000 });
+
+    assert.equal(session.view(40_000).elapsedSeconds, 15);
+
+    const journal = session.getJournal();
+    assert.ok(journal.some((e) => e.type === 'PAUSE_WORKOUT' && e.timestamp === 20_000));
+    assert.ok(journal.some((e) => e.type === 'RESUME_WORKOUT' && e.timestamp === 35_000));
+  });
+
+  test('native workout pause during rest freezes rest countdown and global elapsed time', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Squat',
+          sets: [
+            { index: 1, targetReps: 5, targetWeight: 100, restSeconds: 60 },
+            { index: 2, targetReps: 5, targetWeight: 100, restSeconds: 60 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 10_000 });
+
+    assert.equal(session.view(20_000).rest.remaining, 50);
+    assert.equal(session.view(20_000).elapsedSeconds, 20);
+
+    session.pauseWorkout({ timestamp: 20_000 });
+
+    assert.equal(session.view(30_000).rest.remaining, 50);
+    assert.equal(session.view(40_000).rest.remaining, 50);
+    assert.equal(session.view(40_000).elapsedSeconds, 20);
+
+    session.resumeWorkout({ timestamp: 40_000 });
+
+    assert.equal(session.view(50_000).rest.remaining, 40);
+    assert.equal(session.view(50_000).elapsedSeconds, 30);
+  });
+
+  test('native workout resume does not undo a manual rest pause', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Deadlift',
+          sets: [
+            { index: 1, targetReps: 5, targetWeight: 140, restSeconds: 120 },
+            { index: 2, targetReps: 5, targetWeight: 140, restSeconds: 120 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 10_000 });
+
+    session.pauseRest({ timestamp: 20_000 });
+    assert.equal(session.view(20_000).rest.isPaused, true);
+    assert.equal(session.view(20_000).rest.remaining, 110);
+
+    session.pauseWorkout({ timestamp: 30_000 });
+    session.resumeWorkout({ timestamp: 40_000 });
+
+    assert.equal(session.view(50_000).rest.isPaused, true);
+    assert.equal(session.view(50_000).rest.remaining, 110);
+
+    session.resumeRest({ timestamp: 50_000 });
+    assert.equal(session.view(50_000).rest.isPaused, false);
+    assert.equal(session.view(60_000).rest.remaining, 100);
+  });
+
+  test('native workout pause survives journal replay and produces accurate intervals', () => {
+    const plan = {
+      programId: 'p1',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Bench Press',
+          sets: [
+            { index: 1, targetReps: 5, targetWeight: 80, restSeconds: 60 },
+            { index: 2, targetReps: 5, targetWeight: 80, restSeconds: 60 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.pauseWorkout({ timestamp: 3000 });
+    session.resumeWorkout({ timestamp: 6000 });
+    session.completeSet({ timestamp: 8000 });
+    session.pauseWorkout({ timestamp: 10_000 });
+    session.resumeWorkout({ timestamp: 15_000 });
+    session.nextSet({ timestamp: 18_000 });
+    session.completeSet({ timestamp: 20_000 });
+
+    const journal = session.getJournal();
+    const replayed = createWorkoutSession({ plan, initialJournal: journal });
+
+    assert.equal(replayed.view(25_000).state, SESSION_STATES.FINISHED);
+    assert.equal(replayed.view(25_000).elapsedSeconds, session.view(25_000).elapsedSeconds);
+    assert.deepEqual(replayed.getWorkoutIntervals(), session.getWorkoutIntervals());
+    assert.deepEqual(session.getWorkoutIntervals(), [
+      [1000, 3000],
+      [6000, 10_000],
+      [15_000, 20_000],
+    ]);
+  });
+
+  test('overlapping native and manual rest pauses count as one paused interval', () => {
+    const session = createWorkoutSession({ plan: makePlan() });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 10_000 });
+
+    session.pauseWorkout({ timestamp: 20_000 });
+    session.pauseRest({ timestamp: 25_000 });
+    session.resumeWorkout({ timestamp: 30_000 });
+
+    assert.equal(session.view(40_000).rest.isPaused, true);
+    assert.equal(session.view(40_000).rest.remaining, 110);
+
+    session.resumeRest({ timestamp: 40_000 });
+    assert.deepEqual(session.getWorkoutIntervals(50_000), [[0, 20_000], [40_000, 50_000]]);
+  });
+
+  test('a rest created while the native workout is paused starts frozen', () => {
+    const session = createWorkoutSession({ plan: makePlan() });
+    session.startWorkout({ timestamp: 0 });
+    session.pauseWorkout({ timestamp: 5_000 });
+    session.completeSet({ timestamp: 10_000 });
+
+    assert.equal(session.view(40_000).rest.remaining, 120);
+    session.resumeWorkout({ timestamp: 40_000 });
+    assert.equal(session.view(50_000).rest.remaining, 110);
+  });
 });
 // Server resume scenarios stay here because they exercise state reconstruction.
