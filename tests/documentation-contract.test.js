@@ -31,3 +31,13 @@ test('README explains the two products and links their public guides', () => {
   assert.match(readme, /docs\/workout-extension-manual-actions\.md/);
   assert.match(readme, /docs\/workout-extension-hardware-test-plan\.md/);
 });
+
+test('README gives the verified Active 2 path for adding Lifto to Strength Training', () => {
+  const readme = read('README.md');
+
+  assert.match(
+    readme,
+    /Workout.*Strength Training.*Settings.*More.*Data Page.*Add Page.*Lifto/is,
+  );
+  assert.match(readme, /installing.*does not.*add.*data page/is);
+});

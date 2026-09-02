@@ -63,6 +63,7 @@
 - ⛔ Invent device dimensions or hardcode renderer sizes - `getDeviceInfo()` and `LAYOUT.fit()` own geometry.
 - ⛔ Place top-row extension controls outside the visible round-screen chord - use the shared top-bar layout.
 - ⛔ Crowd the extension clock against its primary action - preserve the shared minimum gap.
+- ⛔ Direct Active 2 testers to a generic Motion Extensions menu - use Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto.
 - ⛔ Defer `BUTTON.click_func` or delete its active control - native callbacks and persistent modal controls avoid inert UI.
 - ⛔ Use `onDestroy` as a save path - it is cleanup only.
 - ⛔ Start a second heart-rate sensor in the standalone app - it already owns `@zos/sensor` HeartRate.

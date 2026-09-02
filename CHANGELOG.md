@@ -9,8 +9,9 @@
 
 ### Changed
 - Both products now use one durable workout engine for offline sets, phone changes, crash recovery, and repeat-safe finishing.
-- Pull requests now check 453 workout, security, layout, package, and preview contracts without requiring private credentials.
+- Pull requests now check 454 workout, security, layout, package, and preview contracts without requiring private credentials.
 - Public documentation now focuses on installation, testing, privacy, and store submission.
+- Active 2 setup now gives the exact watch path for adding Lifto to Strength Training.
 
 ### Fixed
 - Lifto Workout now opens its sample workouts without requiring a Liftosaur API key.
