@@ -151,7 +151,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 474 passing
+- `npm test` - 475 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`

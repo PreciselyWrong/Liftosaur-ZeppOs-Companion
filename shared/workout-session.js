@@ -753,6 +753,7 @@ export function createWorkoutSession({
           nextTargetReps: pendingSet?.reps ?? null,
           nextTargetRepsMax: pendingSet?.targetRepsMax ?? null,
           nextTargetWeightPercent: pendingSet?.targetWeightPercent ?? null,
+          nextPlates: pendingSet?.plates ?? null,
           nextUnit: pendingSet?.unit ?? unit,
           nextSupersetGroup: pending?.supersetGroup ?? null,
         };

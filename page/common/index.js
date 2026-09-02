@@ -2493,7 +2493,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(controls.rows[0].y),
     height: px(controls.rowHeight),
-    label: formatLoadoutLabel(set.weight, loadingEquipment, view.unit) || view.unit.toUpperCase(),
+    label: formatLoadoutLabel(set.weight, loadingEquipment, view.unit, set?.plates) || view.unit.toUpperCase(),
     value: set.weight === null ? '-' : String(set.weight),
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
     onPlus: () => persistAndRender(() => session.adjustWeight(1)),
@@ -2698,7 +2698,8 @@ function renderRestScreen(view) {
     const nextLoadoutLabel = formatLoadoutLabel(
       rest.nextTargetWeight,
       view.pending?.loadingEquipment,
-      rest.nextUnit
+      rest.nextUnit,
+      view.pending?.set?.plates || rest.nextPlates
     );
     const setProg = rest.nextIsWarmup
       ? `WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
