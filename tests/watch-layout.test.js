@@ -6,7 +6,9 @@ import path from 'node:path';
 import {
   TYPOGRAPHY,
   ACTIVE_SET_LAYOUT,
+  EXTENSION_CLOCK_LAYOUT,
   activeSetLayout,
+  extensionActiveSetLayout,
   shouldShowRpe,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
@@ -332,6 +334,16 @@ test('sets with RPE keep all three controls inside the design box', () => {
   assert.equal(layout.showRpe, true);
   assert.deepEqual(layout.rows.map((row) => row.key), ['weight', 'reps', 'rpe']);
   assert.ok(layout.actionY + layout.actionHeight <= 440);
+});
+
+test('Workout Extension action keeps breathing room above the clock', () => {
+  for (const set of [{ targetRpe: null }, { targetRpe: 8 }]) {
+    const layout = extensionActiveSetLayout(set);
+    const gap = EXTENSION_CLOCK_LAYOUT.y - (layout.actionY + layout.actionHeight);
+
+    assert.ok(gap >= EXTENSION_CLOCK_LAYOUT.minimumActionGap);
+    assert.ok(layout.actionHeight >= 48, 'action must remain a large touch target');
+  }
 });
 
 test('discarding a restored workout reloads programs when no outline is in memory', () => {

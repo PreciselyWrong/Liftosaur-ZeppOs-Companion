@@ -18,7 +18,8 @@ import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
-  activeSetLayout,
+  EXTENSION_CLOCK_LAYOUT,
+  extensionActiveSetLayout,
   readyExercisePage,
   formatWorkoutPosition,
   formatMarqueeText,
@@ -365,10 +366,10 @@ function renderClock() {
   if (!label) return;
   lastRenderedClock = label;
   addLiveLabel('clock', {
-    x: px(160),
-    y: px(442),
-    w: px(160),
-    h: px(20),
+    x: px(EXTENSION_CLOCK_LAYOUT.x),
+    y: px(EXTENSION_CLOCK_LAYOUT.y),
+    w: px(EXTENSION_CLOCK_LAYOUT.width),
+    h: px(EXTENSION_CLOCK_LAYOUT.height),
     color: THEME.textSecondary,
     text_size: font('micro'),
     align_h: align.CENTER_H,
@@ -1190,7 +1191,7 @@ function renderActiveSetScreen(view) {
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
-  const controls = activeSetLayout(set);
+  const controls = extensionActiveSetLayout(set);
 
   if (isResting) {
     const topBar = EXTENSION_TOP_BAR_LAYOUT;
