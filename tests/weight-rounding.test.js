@@ -140,6 +140,8 @@ test('formats direct Liftosaur plates object when loadingEquipment is null', () 
   assert.equal(formatLoadoutLabel(40, null, 'kg', { '20kg': 1 }), 'PER SIDE · 1×20 KG');
   assert.equal(formatLoadoutLabel(135, null, 'lb', { '45lb': 1 }), 'PER SIDE · 1×45 LB');
   assert.equal(formatLoadoutLabel(60, { '20kg': 1 }, 'kg'), 'PER SIDE · 1×20 KG');
+  assert.equal(formatLoadoutLabel(80, null, 'kg', { '20kg': 2 }, 80), 'PER SIDE · 2×20 KG');
+  assert.equal(formatLoadoutLabel(82.5, null, 'kg', { '20kg': 2 }, 80), null, 'suppresses stale plates on weight adjustment');
   assert.equal(formatPlatesObject({ '20kg': 1, '2.5kg': 2 }, 'kg'), 'PER SIDE · 1×20 + 2×2.5 KG');
 });
 

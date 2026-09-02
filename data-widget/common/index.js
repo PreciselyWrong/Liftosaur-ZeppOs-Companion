@@ -146,21 +146,26 @@ function stopVibration() {
   }
 }
 
+function setVibrationDurationMode() {
+  try {
+    vibrator.setMode(VIBRATOR_SCENE_DURATION);
+    return;
+  } catch (e) {
+    // Try object form below
+  }
+  try {
+    vibrator.setMode({ mode: VIBRATOR_SCENE_DURATION });
+  } catch (err) {
+    console.log('[lifto-ext] vibrator mode error:', err?.message || String(err));
+  }
+}
+
 function triggerRestVibration() {
   try {
     stopVibration();
     if (!vibrator) {
       vibrator = new Vibrator();
-      try {
-        vibrator.setMode(VIBRATOR_SCENE_DURATION);
-      } catch (err) {
-        console.log('[lifto-ext] vibrator mode error:', err?.message || String(err));
-      }
-      try {
-        vibrator.setMode({ mode: VIBRATOR_SCENE_DURATION });
-      } catch (err) {
-        console.log('[lifto-ext] vibrator mode error:', err?.message || String(err));
-      }
+      setVibrationDurationMode();
     }
     vibrator.start();
     vibrationTimer = setTimeout(() => {
@@ -1432,7 +1437,7 @@ function renderActiveSetScreen(view) {
   renderStepper({
     y: px(controls.rows[0].y),
     height: px(controls.rowHeight),
-    label: formatLoadoutLabel(set?.weight, loadingEquipment, view.unit, set?.plates) || (view.unit || 'KG').toUpperCase(),
+    label: formatLoadoutLabel(set?.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight) || (view.unit || 'KG').toUpperCase(),
     value: set?.weight === null || set?.weight === undefined ? '-' : String(set.weight),
     onMinus: () => {
       workoutController.adjustWeight(-1);
@@ -1624,7 +1629,8 @@ function renderRestScreen(view) {
       rest.nextTargetWeight,
       view.pending?.loadingEquipment,
       rest.nextUnit,
-      view.pending?.set?.plates || rest.nextPlates
+      view.pending?.set?.plates || rest.nextPlates,
+      rest.nextTargetWeight
     );
     const setProg = rest.nextIsWarmup
       ? `WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
