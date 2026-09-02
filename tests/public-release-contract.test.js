@@ -70,17 +70,30 @@ test('the README test badge matches the published test suite', () => {
   assert.match(readme, new RegExp(`tests-${testCount}%20passing-brightgreen`));
 });
 
-test('published preview documentation carries the current unified QR expiry', () => {
+test('published preview documentation carries the current Companion QR expiry', () => {
   const readme = read('README.md');
   const testerGuide = read('docs/tester-guide.md');
 
   for (const document of [readme, testerGuide]) {
     assert.match(document, /test-build-qr\.png/);
-    assert.match(document, /2026-09-08 at 15:10 UTC/);
-    assert.match(document, /17:10 Central European Summer Time/);
+    assert.match(document, /2026-09-09 at 09:30:35 UTC/);
+    assert.match(document, /11:30:35 (?:CEST|Central European Summer Time)/);
     assert.match(document, /Round/);
     assert.match(document, /Square/);
   }
+});
+
+test('the two public apps have tracked preview QR assets in the README', () => {
+  const readme = read('README.md');
+
+  for (const asset of ['docs/test-build-qr.png', 'docs/workout-extension-preview-qr.png']) {
+    assert.equal(fs.existsSync(path.join(root, asset)), true, `${asset} must be tracked with the release`);
+    assert.match(readme, new RegExp(asset.replace(/[./-]/g, '\\$&')));
+  }
+  assert.match(readme, /Lifto Companion/);
+  assert.match(readme, /Lifto Workout/);
+  assert.match(readme, /2026-09-09 at 09:31:13 UTC/);
+  assert.match(readme, /11:31:13 CEST/);
 });
 
 test('published icon assets stay below the repository audit threshold', () => {

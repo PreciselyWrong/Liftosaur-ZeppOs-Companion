@@ -79,7 +79,7 @@
 - [x] Add a separate extension manifest generator with configurable App ID.
 - [x] Add a click-only DataWidget with lifecycle logging, durable counter, absolute timer, native duration read and Side Service ping.
 - [x] Add manifest, generator, state, sport-data and lifecycle characterization tests.
-- [ ] Generate and install a real preview package; a dedicated App ID and compatible watch are required.
+- [~] Real previews are generated for Companion App ID 1123411 and Workout App ID 1125789; physical installation remains pending.
 
 ## Phase 3 - Shared controller extraction
 
@@ -138,26 +138,27 @@
 
 ## Manual external actions
 
-- Create a dedicated Workout Extension application in Zepp Developer Console and provide its numeric App ID through an environment variable.
+- Keep Companion App ID 1123411 and Workout Extension App ID 1125789 aligned with their Zepp Developer Console applications.
 - Test the preview package on a documented Workout Extension device in Developer Mode.
 
 ## Blockers
 
 | ID | Blocker | Owner | Workaround | Remaining impact |
 | --- | --- | --- | --- | --- |
-| EXT-APP-ID | Dedicated App ID has not been supplied. | Maintainer | Build with an explicit development-only environment value. | Store-ready package cannot be produced. |
 | EXT-HARDWARE | Active 2 integration retest evidence is pending. | Maintainer | Use the exact Active 2 checklist. | Refined lifecycle behaviour is not yet physically confirmed. |
 
 ## Commands verified
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 471 passing
+- `npm test` - 474 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
 - `node --test tests/preview-targets.test.js` - preview orchestration only; no upload performed
+- `npm run preview:companion` - App ID 1123411, 28 model targets, expires 9 September 2026
+- `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run preview:workout` - 28 model targets, expires 9 September 2026
 - `zeus build` - Companion passed
 - `zeus build` from generated Workout Extension - passed
 
@@ -172,3 +173,4 @@
 - 2026-09-01: Added unit-tested dual-preview orchestration and credential-free CI without uploading a preview.
 - 2026-09-01: Completed the public Workout Extension setup and hardware test guides.
 - 2026-09-02: Added configurable display hold, native pause reconciliation, live metrics, pending sync recovery and an Active 2 retest checklist.
+- 2026-09-02: Generated public Companion and Workout preview QR codes from their registered App IDs for the complete 28-target build matrix.

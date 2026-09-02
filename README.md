@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-473%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-474%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
@@ -39,36 +39,35 @@ Workout Extension documentation:
 
 ---
 
-## Try it now (test build)
+## Try both apps now (test builds)
 
-<p align="center">
-  <img src="docs/test-build-qr.png" width="240" alt="Test build QR code" />
-</p>
+| Lifto Companion | Lifto Workout Extension |
+| --- | --- |
+| <img src="docs/test-build-qr.png" width="240" alt="Lifto Companion test build QR code" /> | <img src="docs/workout-extension-preview-qr.png" width="240" alt="Lifto Workout Extension test build QR code" /> |
+| App ID `1123411` | App ID `1125789` |
+| Expires **2026-09-09 at 09:30:35 UTC** (11:30:35 CEST) | Expires **2026-09-09 at 09:31:13 UTC** (11:31:13 CEST) |
 
-> ## ⚠️ Read this before scanning
->
-> ### This QR code expires on 2026-09-08 at 15:10 UTC
->
-> That is 17:10 Central European Summer Time. After that moment it stops
-> working and returns a download error.
->
-> The deadline is not my choice: `zeus preview` uploads the build to Zepp's own
-> servers, and Zepp keeps a preview for **7 days** before deleting it. There is
-> no way to extend it. This README gets a fresh code when the current one
-> lapses, so come back to this page rather than reusing an old screenshot.
->
-> ### Supported models
->
-> This single QR code covers all 28 round and square models running Zepp OS 3.6+:
->
-> - **Round**: Active 2 (Round), Active 2 NFC (Round), Active 3 Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3, Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra, Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm), T-Rex 3 Pro (48mm), T-Rex Ultra, T-Rex Ultra 2.
-> - **Square**: Active, Active 2 (Square), Active 2 NFC (Square), Bip 6, Bip Max, Cheetah (Square).
->
-> Watches that are too old for the Zepp OS API level this project targets
-> will refuse to install whatever you scan. That is not a bug, so please do not
-> report it as one.
+Zepp keeps each preview for seven days. After its exact deadline, the QR returns
+a download error and cannot be renewed; this README must receive a newly generated code.
 
-**Version:** Lifto Companion 0.4.0 beta. The temporary QR below installs the previously published 0.3.3 build.
+### Preview build matrix
+
+Both QR codes were built for all 28 available Zepp OS 3.6+ round and square targets,
+covering 72 regional `deviceSource` variants:
+
+- **Round**: Active 2 (Round), Active 2 NFC (Round), Active 3 Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3, Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra, Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm), T-Rex 3 Pro (48mm), T-Rex Ultra, T-Rex Ultra 2.
+- **Square**: Active, Active 2 (Square), Active 2 NFC (Square), Bip 6, Bip Max, Cheetah (Square).
+
+Lifto Companion supports that full matrix. For Lifto Workout, inclusion in the preview
+bundle is not a compatibility claim: Zepp currently documents Workout Extension support
+for T-Rex 3, Cheetah Pro, Cheetah (Round), Cheetah (Square), T-Rex Ultra, and Falcon.
+This project has additionally loaded it on Active 2 (Round), firmware 7.23.0.1 at API
+level 400; the remaining models still require physical validation. See Zepp's
+[Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
+
+**Version:** Lifto Companion 0.4.1 beta.
+
+**Workout version:** Lifto Workout 0.4.1 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
@@ -182,10 +181,10 @@ npm test
 npm run build:companion
 
 # Build Strength Training Workout Extension package (requires numeric App ID)
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:workout
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout
 
 # Build both targets
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:all
 ```
 
 ### Running on Simulator or Generating Previews
@@ -197,10 +196,10 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
 npm run preview:companion
 
 # Generate Lifto Workout preview QR (requires real dedicated App ID)
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run preview:workout
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run preview:workout
 ```
 
-Both `zeus preview` QR codes are hosted by Zepp and expire after about 7 days. The Companion QR keeps its 28-device bundle. The Workout command requests the same build matrix, but compatible hardware remains unclaimed until the physical-watch plan passes. Workout preview generation requires a real dedicated App ID registered in the Zepp Developer Console.
+Both `zeus preview` QR codes are hosted by Zepp and expire after about 7 days. Both request the 28-target build matrix. Workout preview generation uses its registered App ID `1125789`; physical compatibility remains limited to the evidence stated above.
 
 ### CI Validation
 Pull requests and pushes run automated validation via GitHub Actions using Node 24 LTS (`npm ci`, `npm test`, and synthetic Workout Extension generation). No credentials or store access are required.

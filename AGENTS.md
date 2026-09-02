@@ -11,12 +11,12 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 2 September 2026 with 471 passing tests.
+- Test: `npm test` - verified on 2 September 2026 with 474 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1`, which checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
-- Build: `npm run build:companion`, `npm run build:workout` (requires `ZEPP_WORKOUT_EXTENSION_APP_ID`), or `npm run build:all`.
+- Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
 - Release from clean `main`: run `/public-release-audit`, then `.\publish.ps1 -Confirm -AuditedCommit <HEAD>`. The script tests, scans, builds, pushes and verifies `origin/main`.
-- Preview QR: `node tools/build-preview.mjs docs/test-build-qr.png 10`.
+- Preview QR: Companion uses App ID `1123411`; Workout uses App ID `1125789`. Generate both tracked README QR assets before publishing either branch.
 
 ## Map
 
@@ -45,6 +45,7 @@
 - Rest state uses absolute `restStartedAt`, `restDuration` and `restEndsAt`; display intervals only repaint.
 - Current-workout reads use a 10-second action floor, 15-second passive checks and 30/60/120-second failure backoff.
 - Standalone and Workout Extension are separate packages and App IDs sharing domain modules, not renderers or credentials.
+- The public Zepp App IDs are `1123411` for Lifto Companion and `1125789` for Lifto Workout Extension.
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
@@ -73,6 +74,8 @@
 - ⛔ Start a second `zeus dev` watcher - concurrent watchers race to refresh one simulator.
 - ⛔ Push without `/public-release-audit` - the public repository must remain free of secrets and personal data.
 - ⛔ Publish 1.0.0 while `releaseStage` is `beta` - physical-watch validation must clear the release gate.
+- ⛔ Push the public Companion or Workout branches with stale or missing README preview QR codes - testers need installable builds for both real App IDs and every claimed compatible model.
+- ⛔ Generate a public Workout preview with a synthetic App ID - only App ID `1125789` maps to the registered Lifto Workout Extension application.
 
 ## Traps
 
@@ -88,6 +91,6 @@
 
 ## State
 
-- Version 0.4.0 beta: standalone and extension workout flows, durable offline set queues, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, round and square layouts, and crash-safe finish retries are covered by 471 tests.
+- Version 0.4.1 beta: standalone and extension workout flows, durable offline set queues, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, round and square layouts, and crash-safe finish retries are covered by 474 tests. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.
