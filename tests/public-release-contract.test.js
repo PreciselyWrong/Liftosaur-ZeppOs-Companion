@@ -76,8 +76,8 @@ test('published preview documentation carries the current Companion QR expiry', 
 
   for (const document of [readme, testerGuide]) {
     assert.match(document, /test-build-qr\.png/);
-    assert.match(document, /2026-09-09 at 09:30:35 UTC/);
-    assert.match(document, /11:30:35 (?:CEST|Central European Summer Time)/);
+    assert.match(document, /2026-09-09 at 17:06:14 UTC/);
+    assert.match(document, /19:06:14 (?:CEST|Central European Summer Time)/);
     assert.match(document, /Round/);
     assert.match(document, /Square/);
   }
@@ -92,8 +92,8 @@ test('the two public apps have tracked preview QR assets in the README', () => {
   }
   assert.match(readme, /Lifto Companion/);
   assert.match(readme, /Lifto Workout/);
-  assert.match(readme, /2026-09-09 at 09:31:13 UTC/);
-  assert.match(readme, /11:31:13 CEST/);
+  assert.match(readme, /2026-09-09 at 17:06:37 UTC/);
+  assert.match(readme, /19:06:37 CEST/);
 });
 
 test('published icon assets stay below the repository audit threshold', () => {
