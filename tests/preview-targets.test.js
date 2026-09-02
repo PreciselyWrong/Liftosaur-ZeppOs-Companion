@@ -16,7 +16,7 @@ const rootDir = process.cwd();
 const defaultWorkoutDir = path.join(rootDir, 'build', 'workout-extension');
 const defaultBuilderScript = path.join(rootDir, 'tools', 'build-preview.mjs');
 const defaultCompanionQr = path.join(rootDir, 'docs', 'test-build-qr.png');
-const defaultWorkoutQr = path.join(rootDir, 'build', 'workout-extension-preview-qr.png');
+const defaultWorkoutQr = path.join(rootDir, 'docs', 'workout-extension-preview-qr.png');
 
 test('validates supported preview products', () => {
   assert.deepEqual(SUPPORTED_PREVIEW_PRODUCTS, ['companion', 'workout']);
@@ -34,7 +34,7 @@ test('validates supported preview products', () => {
 
 test('exposes default preview outputs and scale', () => {
   assert.equal(DEFAULT_PREVIEW_OUTPUTS.companion, 'docs/test-build-qr.png');
-  assert.equal(DEFAULT_PREVIEW_OUTPUTS.workout, 'build/workout-extension-preview-qr.png');
+  assert.equal(DEFAULT_PREVIEW_OUTPUTS.workout, 'docs/workout-extension-preview-qr.png');
   assert.equal(DEFAULT_PREVIEW_SCALE, 10);
 });
 

@@ -5,6 +5,7 @@
 ### Changed
 - Rest times for standard sets, warmups, and supersets now follow Liftosaur account settings in both apps.
 - The local screen-on choice now behaves the same in Lifto Companion and Lifto Workout.
+- Fresh install QR codes now cover both apps and the complete 28-target preview matrix until 9 September 2026.
 
 ## [0.4.0] - 1 September 2026
 

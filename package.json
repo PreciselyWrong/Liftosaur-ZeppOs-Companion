@@ -1,6 +1,6 @@
 {
   "name": "liftosaur-zepp-os",
-  "version": "0.4.0",
+  "version": "0.4.1",
   "releaseStage": "beta",
   "description": "Standalone and Workout Extension Liftosaur clients for Zepp OS watches",
   "main": "app.js",

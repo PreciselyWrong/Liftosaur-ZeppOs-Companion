@@ -4,20 +4,18 @@ This guide lists external actions that require human intervention in the Zepp De
 
 ---
 
-## 1. Create a Real Dedicated App ID in Zepp Developer Console
+## 1. Use the Registered App IDs
 
-1. Log in to the [Zepp Open Platform / Developer Console](https://developer.zepp.com/).
-2. Create a new application with:
-   - **App Name**: `Lifto Workout`
-   - **App Type**: Workout Extension (`extType: "workout"`)
-3. Note the positive integer `appId` assigned by the console.
-4. Set the environment variable locally:
+- **Lifto Companion**: `1123411`
+- **Lifto Workout Extension**: `1125789`
+
+Set the Workout App ID locally before its build or preview:
    ```bash
-   export ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id>
+   export ZEPP_WORKOUT_EXTENSION_APP_ID=1125789
    ```
-   Or in PowerShell:
+Or in PowerShell:
    ```powershell
-   $env:ZEPP_WORKOUT_EXTENSION_APP_ID = "<app-id>"
+   $env:ZEPP_WORKOUT_EXTENSION_APP_ID = "1125789"
    ```
 
 > **Important**: A synthetic or mock App ID (such as `999999`) is valid only for offline compilation and CI invariant checks. Only a real App ID registered in the Zepp Developer Console can produce a server-accepted, installable preview package or a Store submission.
@@ -33,16 +31,16 @@ Run the build and preview orchestrators:
 npm run build:companion
 
 # Build Lifto Workout extension (requires real App ID)
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:workout
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout
 
 # Build both product packages
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run build:all
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:all
 
 # Generate Lifto Companion preview QR (root project)
 npm run preview:companion
 
 # Generate Lifto Workout preview QR (requires real App ID)
-ZEPP_WORKOUT_EXTENSION_APP_ID=<app-id> npm run preview:workout
+ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run preview:workout
 ```
 
 ### Preview QR Expiry (~7 Days)
