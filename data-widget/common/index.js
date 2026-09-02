@@ -27,6 +27,7 @@ import { parseSportDataResult } from '../../shared/workout-extension-metrics.js'
 import { createRestAlertTracker } from '../../shared/rest-alert.js';
 import {
   EXTENSION_SCREENS,
+  EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
   formatWeightValue,
@@ -465,12 +466,13 @@ function renderSubtitle(text, { isError = false } = {}) {
 }
 
 function renderTopBar(view, onBack) {
+  const topBar = EXTENSION_TOP_BAR_LAYOUT;
   addWidget(widget.BUTTON, {
-    x: px(50),
-    y: px(40),
-    w: px(52),
-    h: px(44),
-    radius: px(22),
+    x: px(topBar.menu.x),
+    y: px(topBar.y),
+    w: px(topBar.menu.width),
+    h: px(topBar.height),
+    radius: px(topBar.height / 2),
     normal_color: THEME.card,
     press_color: THEME.cardActive,
     text: 'Menu',
@@ -479,10 +481,10 @@ function renderTopBar(view, onBack) {
   });
 
   addLiveLabel('elapsed', {
-    x: px(106),
-    y: px(40),
-    w: px(120),
-    h: px(44),
+    x: px(topBar.elapsed.x),
+    y: px(topBar.y),
+    w: px(topBar.elapsed.width),
+    h: px(topBar.height),
     color: THEME.primaryLight,
     text_size: font('button'),
     align_h: align.CENTER_H,
@@ -492,10 +494,10 @@ function renderTopBar(view, onBack) {
   });
 
   addLiveLabel('sport-metric', {
-    x: px(230),
-    y: px(40),
-    w: px(200),
-    h: px(44),
+    x: px(topBar.metric.x),
+    y: px(topBar.y),
+    w: px(topBar.metric.width),
+    h: px(topBar.height),
     color: syncWarning ? THEME.orange : THEME.textSecondary,
     text_size: font('caption'),
     align_h: align.CENTER_H,
@@ -1191,16 +1193,17 @@ function renderActiveSetScreen(view) {
   const controls = activeSetLayout(set);
 
   if (isResting) {
+    const topBar = EXTENSION_TOP_BAR_LAYOUT;
     const bannerColor = view.rest.isOvertime
       ? THEME.error
       : (view.rest.isPaused ? THEME.yellow : THEME.primaryPale);
 
     addWidget(widget.BUTTON, {
-      x: px(50),
-      y: px(40),
-      w: px(52),
-      h: px(44),
-      radius: px(22),
+      x: px(topBar.menu.x),
+      y: px(topBar.y),
+      w: px(topBar.menu.width),
+      h: px(topBar.height),
+      radius: px(topBar.height / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       text: 'Menu',
@@ -1212,11 +1215,11 @@ function renderActiveSetScreen(view) {
     });
 
     addLiveButton('restBannerText', {
-      x: px(110),
-      y: px(40),
-      w: px(320),
-      h: px(44),
-      radius: px(22),
+      x: px(topBar.restBanner.x),
+      y: px(topBar.y),
+      w: px(topBar.restBanner.width),
+      h: px(topBar.height),
+      radius: px(topBar.height / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       color: bannerColor,

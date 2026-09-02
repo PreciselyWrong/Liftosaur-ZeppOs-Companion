@@ -2,12 +2,29 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import {
   EXTENSION_SCREENS,
+  EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
   formatWeightValue,
   formatTargetRepsSummary,
   supersetColor,
 } from '../shared/workout-extension-nav.js';
+
+test('extension top bar stays inside the visible chord of a 480px round screen', () => {
+  const { y, height, menu, elapsed, metric, restBanner } = EXTENSION_TOP_BAR_LAYOUT;
+  const radius = 240;
+  const topInset = radius - Math.sqrt(radius ** 2 - (radius - y) ** 2);
+  const visibleRight = 480 - topInset;
+
+  assert.ok(menu.x >= topInset);
+  assert.ok(menu.x + menu.width <= elapsed.x);
+  assert.ok(elapsed.x + elapsed.width <= metric.x);
+  assert.ok(metric.x + metric.width <= visibleRight);
+  assert.ok(restBanner.x >= menu.x + menu.width);
+  assert.ok(restBanner.x + restBanner.width <= visibleRight);
+  assert.ok(menu.width >= 80, 'Menu needs enough width to render its full label');
+  assert.ok(y + height <= 90, 'Top bar must not overlap the rest title');
+});
 
 test('EXTENSION_SCREENS defines all required top-level screens', () => {
   assert.equal(EXTENSION_SCREENS.LOADING, 'LOADING');
