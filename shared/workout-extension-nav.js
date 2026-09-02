@@ -16,6 +16,15 @@ export const EXTENSION_SCREENS = {
   SESSION: 'SESSION',
 };
 
+export const EXTENSION_TOP_BAR_LAYOUT = Object.freeze({
+  y: 48,
+  height: 40,
+  menu: Object.freeze({ x: 100, width: 82 }),
+  elapsed: Object.freeze({ x: 186, width: 96 }),
+  metric: Object.freeze({ x: 286, width: 96 }),
+  restBanner: Object.freeze({ x: 186, width: 196 }),
+});
+
 const SUPERSET_COLORS = [
   0xff8066, // Coral / Orange
   0x2bdc9b, // Mint / Green

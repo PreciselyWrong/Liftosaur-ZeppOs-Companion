@@ -61,6 +61,7 @@
 - ⛔ Retry an ambiguous non-idempotent legacy write blindly - verify the remote result first.
 - ⛔ Replace unacknowledged local writes with a remote snapshot - drain or resolve the conflict explicitly.
 - ⛔ Invent device dimensions or hardcode renderer sizes - `getDeviceInfo()` and `LAYOUT.fit()` own geometry.
+- ⛔ Place top-row extension controls outside the visible round-screen chord - use the shared top-bar layout.
 - ⛔ Defer `BUTTON.click_func` or delete its active control - native callbacks and persistent modal controls avoid inert UI.
 - ⛔ Use `onDestroy` as a save path - it is cleanup only.
 - ⛔ Start a second heart-rate sensor in the standalone app - it already owns `@zos/sensor` HeartRate.
