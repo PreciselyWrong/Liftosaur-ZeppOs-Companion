@@ -7,11 +7,16 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 ![Tests](https://img.shields.io/badge/tests-474%20passing-brightgreen.svg)
 
 <p align="center">
+  <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
   <img src="docs/screenshots/active-set.png" width="19%" alt="Active Set" />
   <img src="docs/screenshots/rest-timer.png" width="19%" alt="Rest Timer" />
   <img src="docs/screenshots/workout-overview.png" width="19%" alt="Workout Overview" />
+</p>
+<p align="center">
   <img src="docs/screenshots/workout-summary.png" width="19%" alt="Workout Summary" />
+  <img src="docs/screenshots/exercise-details.png" width="19%" alt="Exercise Details" />
+  <img src="docs/screenshots/companion-settings.png" width="19%" alt="Companion Settings" />
 </p>
 
 ## Lifto Companion
