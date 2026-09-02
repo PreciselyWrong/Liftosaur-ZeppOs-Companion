@@ -4,6 +4,7 @@ import { createLiftosaurApiClient } from './liftosaur-api-client.js';
 import { createProgramService } from './program-service.js';
 import { createReferenceData } from './reference-data.js';
 import { createDummyProgramService } from './dummy-program-service.js';
+import { createDummyWorkoutService } from './dummy-workout-service.js';
 import { getOrCreateClientIdentity } from './client-identity.js';
 import { createWorkoutService } from './workout-service.js';
 
@@ -115,11 +116,11 @@ function getServices() {
   const isDemo = !apiKey || apiKey.toLowerCase() === 'dummy' || apiKey.toLowerCase() === 'demo';
 
   if (isDemo) {
-    if (!cachedProgramService || cachedKey !== 'dummy') {
+    if (!cachedProgramService || !cachedWorkoutService || cachedKey !== 'dummy') {
       cachedKey = 'dummy';
       cachedDeviceId = null;
       cachedProgramService = createDummyProgramService();
-      cachedWorkoutService = null;
+      cachedWorkoutService = createDummyWorkoutService({ catalogService: cachedProgramService });
     }
     return {
       programService: cachedProgramService,
