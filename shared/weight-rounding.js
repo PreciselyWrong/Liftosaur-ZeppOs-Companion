@@ -173,12 +173,14 @@ export function formatPlatesObject(platesObj, unit = 'kg') {
   parsed.sort((a, b) => (typeof a.weight === 'number' && typeof b.weight === 'number' ? b.weight - a.weight : 0));
 
   const suffix = (unit || 'kg').toUpperCase();
-  const plates = parsed.map((p) => `${p.count}×${formatNumber(p.weight)}`).join(' + ');
+  const plates = parsed
+    .map((p) => `${p.count}×${Number.isFinite(p.weight) ? formatNumber(p.weight) : String(p.weight)}`)
+    .join(' + ');
   return `PER SIDE · ${plates} ${suffix}`;
 }
 
 /** A compact watch label, returned only when the requested weight is exact. */
-export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null) {
+export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null, targetWeight = null) {
   if (equipment && typeof equipment === 'object') {
     if (Array.isArray(equipment.plates) || equipment.bar || equipment.isFixed) {
       const loadout = resolveLoadout(target, equipment, unit);
@@ -206,6 +208,13 @@ export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null
 
   const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
   if (directPlates && typeof directPlates === 'object') {
+    if (
+      Number.isFinite(target) &&
+      Number.isFinite(targetWeight) &&
+      Math.abs(target - targetWeight) > 1e-9
+    ) {
+      return null;
+    }
     return formatPlatesObject(directPlates, unit);
   }
 
