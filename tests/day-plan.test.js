@@ -176,7 +176,7 @@ test('applyProgramMetadata leaves plan untouched when alignment fails', () => {
   assert.deepEqual(plan.exercises[0].warmupSets, []);
 });
 
-test('applyProgramMetadata calculates fallback warmup weight when referenceData cannot resolve it, and defaults rest to 60s', () => {
+test('applyProgramMetadata leaves rest unknown when the API provides no timer settings', () => {
   const plan = buildDayPlan(PROBE_RESPONSE);
   // Lat Pulldown first work set is 60kg, so 50% is 30kg. When referenceData cannot
   // resolve against specific gym equipment, fallback step rounding calculates 30kg.
@@ -194,8 +194,8 @@ test('applyProgramMetadata calculates fallback warmup weight when referenceData 
 
   assert.equal(plan.exercises[0].warmupSets[0].targetWeight, 30);
   assert.equal(plan.exercises[0].warmupSets[0].targetWeightPercent, 50);
-  assert.equal(plan.exercises[0].warmupSets[0].restSeconds, 60);
-  assert.equal(plan.exercises[1].warmupSets[0].restSeconds, 60);
+  assert.equal(plan.exercises[0].warmupSets[0].restSeconds, null);
+  assert.equal(plan.exercises[1].warmupSets[0].restSeconds, null);
 });
 
 test('applies default standard rest timer when omitted in Liftoscript and preserves explicit timer', () => {
@@ -214,7 +214,7 @@ test('applies default standard rest timer when omitted in Liftoscript and preser
   ];
 
   applyProgramMetadata(plan, declared, {
-    defaultTimers: { standardRest: 180, supersetRest: 90, warmupRest: 60 },
+    timers: { workout: 180, superset: 90, warmup: 60 },
   });
 
   // T1 Squat -> gets default 180s
@@ -242,10 +242,10 @@ test('applies default superset rest timer when exercise is in a superset and has
   ];
 
   applyProgramMetadata(plan, declared, {
-    defaultTimers: { standardRest: 120, supersetRest: 45, warmupRest: 60 },
+    timers: { workout: 120, superset: 45, warmup: 60 },
   });
 
-  // Both are in superset A -> get supersetRest 45s
+  // Both are in superset A -> get the account's 45s superset timer.
   assert.equal(plan.exercises[0].sets[0].restSeconds, 45);
   assert.equal(plan.exercises[1].sets[0].restSeconds, 45);
 });
@@ -261,7 +261,7 @@ test('disables timer when setting is Off (0 or null)', () => {
   ];
 
   applyProgramMetadata(plan, declared, {
-    defaultTimers: { standardRest: 0, supersetRest: 0, warmupRest: 0 },
+    timers: { workout: 0, superset: 0, warmup: 0 },
   });
 
   assert.equal(plan.exercises[0].sets[0].restSeconds, null);

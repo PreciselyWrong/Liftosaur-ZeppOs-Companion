@@ -41,6 +41,13 @@ test('loadPrograms fetches settings and current workout before opening flow in C
   assert.match(loadPrograms, /workoutToDayPlan\(/);
 });
 
+test('companion applies the local screen-on duration received with API settings', () => {
+  const source = readWatchPage();
+  assert.match(source, /accountSettings\?\.screenOnDuration/);
+  assert.match(source, /function applyDisplayHold\(/);
+  assert.doesNotMatch(source, /setPageBrightTime\(\{\s*brightTime:\s*60000\s*\}\)/);
+});
+
 test('home screen uses the authoritative default workout without history inference', () => {
   const source = readWatchPage();
   const home = source.slice(source.indexOf('function renderHomeScreen()'), source.indexOf('function renderProgramsScreen()'));

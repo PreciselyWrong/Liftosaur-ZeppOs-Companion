@@ -58,9 +58,6 @@ function getEffectiveStorage() {
 
 function getEffectiveSettings() {
   const apiKey = getEffectiveApiKey();
-  let standardRest = 120;
-  let warmupRest = 60;
-  let supersetRest = 90;
   let screenOnDuration = 120;
 
   try {
@@ -70,28 +67,6 @@ function getEffectiveSettings() {
     }
 
     if (storage) {
-      const readVal = (key, defaultVal) => {
-        const raw = storage.getItem(key);
-        if (raw === undefined || raw === null) return defaultVal;
-        let v = raw;
-        if (typeof raw === 'string') {
-          try {
-            const parsed = JSON.parse(raw);
-            v = typeof parsed === 'object' && parsed !== null ? (parsed.value ?? parsed) : parsed;
-          } catch (e) {
-            v = raw;
-          }
-        } else if (typeof raw === 'object') {
-          v = raw.value ?? defaultVal;
-        }
-        const num = parseInt(v, 10);
-        return Number.isFinite(num) ? num : defaultVal;
-      };
-
-      standardRest = readVal('defaultStandardRest', 120);
-      warmupRest = readVal('defaultWarmupRest', 60);
-      supersetRest = readVal('defaultSupersetRest', 90);
-
       const rawScreenDuration = storage.getItem('screenOnDuration');
       let parsedScreenDuration = rawScreenDuration;
       if (typeof rawScreenDuration === 'string') {
@@ -112,16 +87,11 @@ function getEffectiveSettings() {
       }
     }
   } catch (err) {
-    console.log('[liftosaur-side] timer settings read failed:', err?.message || String(err));
+    console.log('[liftosaur-side] local settings read failed:', err?.message || String(err));
   }
 
   return {
     apiKey,
-    defaultTimers: {
-      standardRest: standardRest > 0 ? standardRest : null,
-      warmupRest: warmupRest > 0 ? warmupRest : null,
-      supersetRest: supersetRest > 0 ? supersetRest : null,
-    },
     screenOnDuration,
   };
 }
@@ -177,7 +147,6 @@ function getServices() {
     cachedProgramService = createProgramService({
       client,
       referenceData,
-      getSettings: getEffectiveSettings,
     });
     cachedWorkoutService = createWorkoutService({
       client,

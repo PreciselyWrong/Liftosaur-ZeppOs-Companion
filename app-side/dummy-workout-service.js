@@ -149,7 +149,11 @@ export function createDummyWorkoutService({ catalogService, now = Date.now, getL
 
     async getSettings() {
       const local = typeof getLocalSettings === 'function' ? getLocalSettings() : null;
-      return { units: 'kg', screenOnDuration: local?.screenOnDuration ?? 120 };
+      return {
+        units: 'kg',
+        timers: { warmup: 60, workout: 120, superset: 90 },
+        screenOnDuration: local?.screenOnDuration ?? 120,
+      };
     },
   };
 }
