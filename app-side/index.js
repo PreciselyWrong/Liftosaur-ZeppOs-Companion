@@ -61,6 +61,7 @@ function getEffectiveSettings() {
   let standardRest = 120;
   let warmupRest = 60;
   let supersetRest = 90;
+  let screenOnDuration = 120;
 
   try {
     const storage = getEffectiveStorage();
@@ -90,6 +91,25 @@ function getEffectiveSettings() {
       standardRest = readVal('defaultStandardRest', 120);
       warmupRest = readVal('defaultWarmupRest', 60);
       supersetRest = readVal('defaultSupersetRest', 90);
+
+      const rawScreenDuration = storage.getItem('screenOnDuration');
+      let parsedScreenDuration = rawScreenDuration;
+      if (typeof rawScreenDuration === 'string') {
+        try {
+          parsedScreenDuration = JSON.parse(rawScreenDuration);
+        } catch (e) {
+          parsedScreenDuration = rawScreenDuration;
+        }
+      }
+      if (typeof parsedScreenDuration === 'object' && parsedScreenDuration !== null) {
+        parsedScreenDuration = parsedScreenDuration.value;
+      }
+      if (parsedScreenDuration === 'always') {
+        screenOnDuration = 'always';
+      } else {
+        const seconds = Number(parsedScreenDuration);
+        screenOnDuration = [60, 120, 240].includes(seconds) ? seconds : 120;
+      }
     }
   } catch (err) {
     console.log('[liftosaur-side] timer settings read failed:', err?.message || String(err));
@@ -102,6 +122,7 @@ function getEffectiveSettings() {
       warmupRest: warmupRest > 0 ? warmupRest : null,
       supersetRest: supersetRest > 0 ? supersetRest : null,
     },
+    screenOnDuration,
   };
 }
 
@@ -120,7 +141,10 @@ function getServices() {
       cachedKey = 'dummy';
       cachedDeviceId = null;
       cachedProgramService = createDummyProgramService();
-      cachedWorkoutService = createDummyWorkoutService({ catalogService: cachedProgramService });
+      cachedWorkoutService = createDummyWorkoutService({
+        catalogService: cachedProgramService,
+        getLocalSettings: getEffectiveSettings,
+      });
     }
     return {
       programService: cachedProgramService,
@@ -158,6 +182,7 @@ function getServices() {
     cachedWorkoutService = createWorkoutService({
       client,
       catalogService: cachedProgramService,
+      getLocalSettings: getEffectiveSettings,
     });
   }
 

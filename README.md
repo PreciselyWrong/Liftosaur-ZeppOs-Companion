@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-454%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-471%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />

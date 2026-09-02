@@ -35,8 +35,8 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   assert.match(source, /getSportData\(\s*\{\s*type:\s*['"]duration['"]\s*\}/, 'Must query sport duration');
   assert.match(source, /getSportData\(\s*\{\s*type:\s*['"]calories['"]\s*\}/, 'Must query sport calories');
 
-  // 7. No native workout pause/stop/finish manipulation
-  assert.doesNotMatch(source, /stopWorkout|pauseWorkout|finishWorkoutNative|exitSport/, 'Must not finish or stop native workout');
+  // 7. No native workout stop/finish manipulation
+  assert.doesNotMatch(source, /stopWorkout|finishWorkoutNative|exitSport/, 'Must not finish or stop native workout');
 
   // 8. Finished screen exact instruction
   assert.match(
@@ -78,4 +78,29 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     /console\.log\([^)]*(res\.payload|workout\.entries|apiKey|JSON\.stringify\(res\))/i,
     'Must not dump payloads or secrets in logs'
   );
+
+  // 11. Screen controls from @zos/display and safe reset in onPause / onDestroy
+  assert.match(source, /from\s+['"]@zos\/display['"]/, 'Must import display controls from @zos/display');
+  assert.match(source, /setPageBrightTime/, 'Must set the focused page bright time');
+  assert.match(source, /pauseDropWristScreenOff/, 'Must prevent wrist-drop screen off while focused');
+  assert.match(source, /pausePalmScreenOff/, 'Must prevent palm screen off while focused');
+
+  const onPause = source.slice(source.indexOf('onPause()'), source.indexOf('onDestroy()'));
+  const onDestroy = source.slice(source.indexOf('onDestroy()'));
+  assert.match(onPause, /resetDisplayHold/, 'onPause must safely reset screen controls');
+  assert.match(onDestroy, /resetDisplayHold/, 'onDestroy must safely reset screen controls');
+
+  // 12. Periodic sport metrics refresh from tick
+  const tickBody = source.slice(source.indexOf('function tick('), source.indexOf('function startClock('));
+  assert.match(tickBody, /refreshSportMetrics\(\)/, 'tick must periodically refresh sport metrics');
+
+  // 13. Pause reconciliation with workout session/controller
+  assert.match(source, /pauseWorkout|resumeWorkout|reconcilePause/, 'Must perform pause reconciliation for native workout pause/resume');
+
+  // 14. retryPendingWrites on onResume
+  const onResume = source.slice(source.indexOf('onResume()'), source.indexOf('onPause()'));
+  assert.match(onResume, /retryPendingWrites\(\)/, 'onResume must call retryPendingWrites to drain queued writes');
+
+  assert.match(source, /function loadDisplaySettings/, 'Restored sessions must reload display settings');
+  assert.match(source, /syncWarning\s*\?\s*truncate\(syncWarning/, 'Metric refresh must preserve sync warnings');
 });

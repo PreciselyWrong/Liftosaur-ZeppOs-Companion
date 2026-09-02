@@ -4,6 +4,14 @@ import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
 import { Time, TIME_HOUR_FORMAT_12, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import { getSportData } from '@zos/app-access';
+import {
+  setPageBrightTime,
+  resetPageBrightTime,
+  pauseDropWristScreenOff,
+  resetDropWristScreenOff,
+  pausePalmScreenOff,
+  resetPalmScreenOff,
+} from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
 
 import { createScreenLayout } from '../../shared/screen-layout.js';
@@ -24,7 +32,11 @@ import {
   formatWorkoutPosition,
   formatMarqueeText,
 } from '../../shared/watch-layout.js';
-import { parseSportDataResult } from '../../shared/workout-extension-metrics.js';
+import {
+  parseSportDataResult,
+  parseDurationToSeconds,
+  createNativePauseReconciler,
+} from '../../shared/workout-extension-metrics.js';
 import { createRestAlertTracker } from '../../shared/rest-alert.js';
 import {
   EXTENSION_SCREENS,
@@ -65,6 +77,11 @@ const THEME = {
   textSecondary: 0xa4b0bc,
   textMuted: 0x4f5c6b,
 };
+
+const DEFAULT_SCREEN_ON_SECONDS = 120;
+const ALWAYS_SCREEN_ON_MS = 2147483000;
+const CALORIE_REFRESH_MS = 15000;
+const PENDING_SYNC_RETRY_MS = 15000;
 
 const deviceInfo = getDeviceInfo();
 const LAYOUT = createScreenLayout({
@@ -151,6 +168,7 @@ let workoutController = null;
 let restAlertTracker = createRestAlertTracker();
 let hasBuilt = false;
 let initialLoadPending = false;
+let restoredDisplaySettingsPending = false;
 let terminalActionPending = null;
 
 let screen = EXTENSION_SCREENS.LOADING;
@@ -184,6 +202,9 @@ let syncWarning = null;
 
 let sportDuration = '--';
 let sportCalories = '--';
+let lastCaloriesRefreshAt = 0;
+let lastPendingSyncRetryAt = 0;
+const nativePauseReconciler = createNativePauseReconciler();
 
 let clockTimer = null;
 let lastRenderedState = null;
@@ -249,26 +270,106 @@ function handlePollFailure(err) {
   if (previousWarning !== syncWarning) renderUI();
 }
 
+function applyNativePauseActions(actions) {
+  if (!workoutController || !Array.isArray(actions) || actions.length === 0) return;
+  for (const action of actions) {
+    if (action.type === 'pause') {
+      workoutController.pauseWorkout({ timestamp: action.timestamp });
+    } else if (action.type === 'resume') {
+      workoutController.resumeWorkout({ timestamp: action.timestamp });
+    }
+  }
+  renderUI();
+}
+
+function updateSportMetricWidget() {
+  updateLiveWidget('sport-metric', {
+    text: syncWarning ? truncate(syncWarning, 14) : formatSportBarText(),
+    color: syncWarning ? THEME.orange : THEME.textSecondary,
+  });
+}
+
 function refreshSportMetrics() {
+  const requestedAt = Date.now();
   try {
     getSportData({ type: 'duration' }, (result) => {
       const parsed = parseSportDataResult(result, 'duration');
       sportDuration = parsed.ok ? parsed.value : '--';
-      updateLiveWidget('sport-metric', { text: formatSportBarText() });
+      const durationSeconds = parsed.ok ? parseDurationToSeconds(parsed.value) : null;
+      const view = workoutController?.view();
+      if (
+        durationSeconds !== null &&
+        (view?.state === SESSION_STATES.ACTIVE_SET || view?.state === SESSION_STATES.REST)
+      ) {
+        applyNativePauseActions(
+          nativePauseReconciler.sample({ durationSeconds, timestamp: requestedAt })
+        );
+      } else if (view?.state !== SESSION_STATES.ACTIVE_SET && view?.state !== SESSION_STATES.REST) {
+        nativePauseReconciler.reset();
+      }
+      updateSportMetricWidget();
     });
   } catch (err) {
     sportDuration = '--';
   }
 
+  if (requestedAt - lastCaloriesRefreshAt < CALORIE_REFRESH_MS) return;
+  lastCaloriesRefreshAt = requestedAt;
+
   try {
     getSportData({ type: 'calories' }, (result) => {
       const parsed = parseSportDataResult(result, 'calories');
       sportCalories = parsed.ok ? `${parsed.value} kcal` : '--';
-      updateLiveWidget('sport-metric', { text: formatSportBarText() });
+      updateSportMetricWidget();
     });
   } catch (err) {
     sportCalories = '--';
   }
+}
+
+function selectedScreenOnDuration() {
+  const configured = accountSettings?.screenOnDuration;
+  if (configured === 'always') return 'always';
+  const seconds = Number(configured);
+  return [60, 120, 240].includes(seconds) ? seconds : DEFAULT_SCREEN_ON_SECONDS;
+}
+
+function applyDisplayHold() {
+  const duration = selectedScreenOnDuration();
+  const durationMs = duration === 'always' ? ALWAYS_SCREEN_ON_MS : duration * 1000;
+  const gestureDuration = duration === 'always' ? 0 : durationMs;
+  try {
+    setPageBrightTime({ brightTime: durationMs });
+    pauseDropWristScreenOff({ duration: gestureDuration });
+    pausePalmScreenOff({ duration: gestureDuration });
+  } catch (err) {
+    console.log('[lifto-ext] display hold unavailable');
+  }
+}
+
+function resetDisplayHold() {
+  try {
+    resetPageBrightTime();
+    resetDropWristScreenOff();
+    resetPalmScreenOff();
+  } catch (err) {
+    console.log('[lifto-ext] display reset unavailable');
+  }
+}
+
+function retryPendingWrites() {
+  if (!workoutController) return;
+  const requestedAt = Date.now();
+  if (requestedAt - lastPendingSyncRetryAt < PENDING_SYNC_RETRY_MS) return;
+  lastPendingSyncRetryAt = requestedAt;
+  workoutController
+    .retryPendingWrites()
+    .then((changed) => {
+      if (!changed) return;
+      updateSyncWarning();
+      renderUI();
+    })
+    .catch(handlePollFailure);
 }
 
 function formatSportBarText() {
@@ -1119,6 +1220,7 @@ function renderReadyScreen(view) {
     text_size: font('title'),
     click_func: () => {
       if (view.totalExercises === 0) return;
+      nativePauseReconciler.reset();
       workoutController.startWorkout();
       renderUI();
     },
@@ -1480,9 +1582,10 @@ function renderRestScreen(view) {
     normal_color: rest.isPaused ? THEME.yellow : THEME.card,
     press_color: THEME.cardActive,
     color: rest.isPaused ? 0x000000 : THEME.textPrimary,
-    text: rest.isPaused ? 'Resume' : 'Pause',
+    text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
     text_size: font('caption'),
     click_func: () => {
+      if (rest.isWorkoutPaused) return;
       workoutController.toggleRestPause();
       renderUI();
     },
@@ -2167,11 +2270,8 @@ function renderScreen() {
 function startInitialNetworkLoad() {
   beginRequest('Connecting to phone...');
 
-  send(MESSAGE_TYPES.GET_SETTINGS)
-    .then((settingsRes) => {
-      accountSettings = settingsRes.payload || {};
-      return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
-    })
+  loadDisplaySettings()
+    .then(() => send(MESSAGE_TYPES.GET_WORKOUT_CURRENT))
     .then((currentRes) => {
       workoutController.markAuthoritativeResponse();
       const currentWorkout = currentRes.payload?.workout || null;
@@ -2258,6 +2358,14 @@ function startInitialNetworkLoad() {
       screen = EXTENSION_SCREENS.SETUP;
       failRequest(err);
     });
+}
+
+function loadDisplaySettings() {
+  return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+    accountSettings = settingsRes.payload || {};
+    applyDisplayHold();
+    return accountSettings;
+  });
 }
 
 function loadOutline(program, { nextScreen = EXTENSION_SCREENS.WEEKS } = {}) {
@@ -2390,6 +2498,8 @@ function tick() {
   updateClock();
 
   if (screen !== EXTENSION_SCREENS.SESSION) return;
+  refreshSportMetrics();
+  retryPendingWrites();
 
   workoutController
     .pollCurrent()
@@ -2466,6 +2576,7 @@ DataWidget(
 
       const restored = workoutController.restore();
       if (restored.success) {
+        restoredDisplaySettingsPending = true;
         dayPlan = workoutController.plan();
         const sync = workoutController.sync();
         if (sync.finishRequestedAt) {
@@ -2486,6 +2597,13 @@ DataWidget(
     build() {
       console.log('[lifto-ext] data-widget build');
       hasBuilt = true;
+      applyDisplayHold();
+      if (restoredDisplaySettingsPending) {
+        restoredDisplaySettingsPending = false;
+        loadDisplaySettings().catch((err) => {
+          logRecoverableError('[lifto-ext] display settings unavailable', err);
+        });
+      }
       renderUI();
       refreshSportMetrics();
       startClock();
@@ -2504,8 +2622,12 @@ DataWidget(
     onResume() {
       console.log('[lifto-ext] data-widget onResume');
       if (!hasBuilt) return;
+      applyDisplayHold();
+      lastCaloriesRefreshAt = 0;
       refreshSportMetrics();
       startClock();
+      lastPendingSyncRetryAt = 0;
+      retryPendingWrites();
 
       if (workoutController) {
         const view = workoutController.view();
@@ -2527,6 +2649,8 @@ DataWidget(
 
     onPause() {
       console.log('[lifto-ext] data-widget onPause');
+      nativePauseReconciler.loseFocus({ timestamp: Date.now() });
+      resetDisplayHold();
       stopClock();
       stopVibration();
       if (workoutController) {
@@ -2536,6 +2660,7 @@ DataWidget(
 
     onDestroy() {
       console.log('[lifto-ext] data-widget onDestroy');
+      resetDisplayHold();
       stopClock();
       stopVibration();
       clearWidgets();

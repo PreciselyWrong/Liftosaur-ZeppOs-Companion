@@ -15,7 +15,11 @@ test('dummy workout service exposes the direct Workout contract from shared demo
   assert.equal(service.mode, 'DEMO');
   assert.equal((await service.listPrograms()).length, 3);
   assert.equal((await service.getProgramOutline('dummy-gzclp')).programId, 'dummy-gzclp');
-  assert.deepEqual(await service.getSettings(), { units: 'kg' });
+  assert.deepEqual(await service.getSettings(), {
+    units: 'kg',
+    timers: { warmup: 60, workout: 120, superset: 90 },
+    screenOnDuration: 120,
+  });
   assert.deepEqual(await service.getCurrentWorkout(), { workout: null });
 
   const response = await service.getNextWorkout();
@@ -27,6 +31,19 @@ test('dummy workout service exposes the direct Workout contract from shared demo
   assert.ok(plan.exercises[0].entryId);
   assert.ok(plan.exercises[0].sets[0].setId);
   assert.equal(plan.exercises[0].warmupSets[0].isWarmup, true);
+});
+
+test('dummy workout settings include the local display preference', async () => {
+  const service = createDummyWorkoutService({
+    catalogService: createDummyProgramService(),
+    getLocalSettings: () => ({ screenOnDuration: 240 }),
+  });
+
+  assert.deepEqual(await service.getSettings(), {
+    units: 'kg',
+    timers: { warmup: 60, workout: 120, superset: 90 },
+    screenOnDuration: 240,
+  });
 });
 
 test('dummy workout service keeps direct start, set sync, finish and discard local', async () => {

@@ -1072,3 +1072,58 @@ test('restored finish/discard intents can be resumed by a renderer', async () =>
   assert.equal(res.success, true);
   assert.equal(store.hasSession(), false);
 });
+
+test('retryPendingWrites drains durable unacknowledged direct set writes after network recovery', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  let networkAvailable = false;
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
+    if (!networkAvailable) {
+      const err = new Error('Network unavailable');
+      err.code = 'NETWORK';
+      return Promise.reject(err);
+    }
+    return Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    });
+  });
+
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  assert.equal(controller.getWorkoutSetWrites().length, 1);
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+
+  // Sync failed due to network
+  await assert.rejects(async () => {
+    await controller.syncSets();
+  });
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+  assert.equal(controller.getStatus().code, 'pending');
+
+  // Network recovers
+  networkAvailable = true;
+
+  // retryPendingWrites drains unacknowledged direct set writes
+  const success = await controller.retryPendingWrites();
+  assert.equal(success, true);
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+  assert.equal(controller.getStatus().code, 'idle');
+
+  const persisted = store.load();
+  assert.equal(persisted.sync.acknowledgedSetCount, 1);
+});

@@ -3,9 +3,27 @@ function isDemoApiKey(value) {
   return !key || key === 'demo' || key === 'dummy';
 }
 
+function normalizeScreenOnDuration(value) {
+  let candidate = value;
+  if (typeof candidate === 'string') {
+    try {
+      candidate = JSON.parse(candidate);
+    } catch (e) {
+      // Plain Select values are not JSON.
+    }
+  }
+  if (typeof candidate === 'object' && candidate !== null) {
+    candidate = candidate.value;
+  }
+  if (candidate === 'always') return 'always';
+  const seconds = Number(candidate);
+  return [60, 120, 240].includes(seconds) ? seconds : 120;
+}
+
 AppSettingsPage({
   state: {
     apiKey: '',
+    screenOnDuration: 120,
   },
 
   build(props) {
@@ -286,6 +304,60 @@ AppSettingsPage({
           ]
         ),
 
+        View(
+          {
+            style: {
+              backgroundColor: '#FFFFFF',
+              borderRadius: '12px',
+              padding: '16px',
+              marginBottom: '14px',
+              display: 'flex',
+              flexDirection: 'column',
+            },
+          },
+          [
+            Text(
+              {
+                paragraph: true,
+                style: {
+                  fontSize: '17px',
+                  fontWeight: 'bold',
+                  color: '#8356F6',
+                  textTransform: 'uppercase',
+                  marginBottom: '6px',
+                },
+              },
+              'WORKOUT DISPLAY'
+            ),
+            Text(
+              {
+                paragraph: true,
+                style: {
+                  fontSize: '16px',
+                  color: '#4B5563',
+                  marginBottom: '10px',
+                },
+              },
+              'Keep Lifto visible while you train.'
+            ),
+            Select({
+              label: 'Screen stays on',
+              value: String(this.state.screenOnDuration),
+              options: [
+                { name: '60 seconds', value: '60' },
+                { name: '120 seconds', value: '120' },
+                { name: '240 seconds', value: '240' },
+                { name: 'Always', value: 'always' },
+              ],
+              onChange: (value) => {
+                const duration = normalizeScreenOnDuration(value);
+                this.state.screenOnDuration = duration;
+                props.settingsStorage.setItem('screenOnDuration', duration);
+              },
+            }),
+          ]
+        ),
+
         // How-to Guide Card
         View(
           {
@@ -352,5 +424,8 @@ AppSettingsPage({
     } else {
       this.state.apiKey = '';
     }
+    this.state.screenOnDuration = normalizeScreenOnDuration(
+      props.settingsStorage.getItem('screenOnDuration')
+    );
   },
 });

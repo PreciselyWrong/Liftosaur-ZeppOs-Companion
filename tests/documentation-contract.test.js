@@ -16,6 +16,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
     .sort();
 
   assert.deepEqual(markdownFiles, [
+    'active-2-workout-integration-test.md',
     'privacy-policy.md',
     'store-listing.md',
     'tester-guide.md',

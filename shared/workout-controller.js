@@ -545,6 +545,14 @@ export function createWorkoutController({
     }
   }
 
+  function retryPendingWrites() {
+    const pendingCount = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
+    if (directSync.mode !== 'DIRECT' || pendingCount <= 0 || !request || directSync.conflict) {
+      return Promise.resolve(false);
+    }
+    return synchronizeDirectSets();
+  }
+
   function requestWorkoutRefresh() {
     if (directSync.mode !== 'DIRECT') return;
     policy.request();
@@ -724,6 +732,10 @@ export function createWorkoutController({
       mutateSession(() => session.pauseRest({ timestamp: options.timestamp ?? now() })),
     resumeRest: (options = {}) =>
       mutateSession(() => session.resumeRest({ timestamp: options.timestamp ?? now() })),
+    pauseWorkout: (options = {}) =>
+      mutateSession(() => session.pauseWorkout({ timestamp: options.timestamp ?? now() })),
+    resumeWorkout: (options = {}) =>
+      mutateSession(() => session.resumeWorkout({ timestamp: options.timestamp ?? now() })),
     toggleRestPause: (options = {}) =>
       mutateSession(() =>
         session.toggleRestPause({ timestamp: options.timestamp ?? now() })
@@ -760,6 +772,7 @@ export function createWorkoutController({
     ensureDirectWorkoutStarted,
     syncSets: synchronizeDirectSets,
     synchronizeDirectSets,
+    retryPendingWrites,
     pollCurrent: pollCurrentWorkout,
     pollCurrentWorkout,
     requestRefresh: requestWorkoutRefresh,
