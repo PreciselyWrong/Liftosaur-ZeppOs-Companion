@@ -370,7 +370,7 @@ test('the rest preview shows the exact loading below the next target', () => {
 
   assert.match(
     restScreen,
-    /formatLoadoutLabel\(\s*rest\.nextTargetWeight,\s*view\.pending\?\.loadingEquipment,\s*rest\.nextUnit\s*\)/,
+    /formatLoadoutLabel\(\s*rest\.nextTargetWeight,\s*view\.pending\?\.loadingEquipment,\s*rest\.nextUnit/,
   );
   assert.match(restScreen, /text:\s*nextLoadoutLabel/);
 });

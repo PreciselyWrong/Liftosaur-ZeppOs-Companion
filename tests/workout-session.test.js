@@ -925,6 +925,7 @@ describe('Workout API set-write journal support', () => {
     assert.equal(pendingSet.serverIndex, 1);
     assert.equal(pendingSet.originalWeight, '80kg');
     assert.deepEqual(pendingSet.plates, { '20kg': 2 });
+    assert.deepEqual(session.view(1000).rest.nextPlates, { '20kg': 2 });
     assert.equal(pendingSet.logRpe, true);
     assert.equal(pendingSet.askWeight, true);
     assert.equal(pendingSet.isUnilateral, true);

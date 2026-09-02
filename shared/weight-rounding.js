@@ -158,26 +158,58 @@ function formatNumber(value) {
   return String(round5(value));
 }
 
-/** A compact watch label, returned only when the requested weight is exact. */
-export function formatLoadoutLabel(target, equipment, unit = 'kg') {
-  const loadout = resolveLoadout(target, equipment, unit);
-  if (!loadout.resolved || !loadout.exact) return null;
+export function formatPlatesObject(platesObj, unit = 'kg') {
+  if (!platesObj || typeof platesObj !== 'object') return null;
+  const entries = Object.entries(platesObj).filter(([_, count]) => Number(count) > 0);
+  if (entries.length === 0) return null;
 
-  const suffix = unit.toUpperCase();
-  if (loadout.kind === 'fixed') return `USE ${formatNumber(loadout.value)} ${suffix}`;
-  if (loadout.multiplier !== 1 && loadout.multiplier !== 2) return null;
-  if (loadout.plates.length === 0) {
-    return loadout.barWeight > 0 ? `EMPTY BAR · ${formatNumber(loadout.barWeight)} ${suffix}` : null;
+  const parsed = entries.map(([plateStr, count]) => {
+    const num = parseFloat(plateStr);
+    return {
+      weight: Number.isFinite(num) ? num : plateStr,
+      count: Number(count),
+    };
+  });
+  parsed.sort((a, b) => (typeof a.weight === 'number' && typeof b.weight === 'number' ? b.weight - a.weight : 0));
+
+  const suffix = (unit || 'kg').toUpperCase();
+  const plates = parsed.map((p) => `${p.count}×${formatNumber(p.weight)}`).join(' + ');
+  return `PER SIDE · ${plates} ${suffix}`;
+}
+
+/** A compact watch label, returned only when the requested weight is exact. */
+export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null) {
+  if (equipment && typeof equipment === 'object') {
+    if (Array.isArray(equipment.plates) || equipment.bar || equipment.isFixed) {
+      const loadout = resolveLoadout(target, equipment, unit);
+      if (loadout.resolved && loadout.exact) {
+        const suffix = unit.toUpperCase();
+        if (loadout.kind === 'fixed') return `USE ${formatNumber(loadout.value)} ${suffix}`;
+        if (loadout.multiplier !== 1 && loadout.multiplier !== 2) return null;
+        if (loadout.plates.length === 0) {
+          return loadout.barWeight > 0 ? `EMPTY BAR · ${formatNumber(loadout.barWeight)} ${suffix}` : null;
+        }
+
+        const counts = new Map();
+        for (const plate of loadout.plates) counts.set(plate, (counts.get(plate) || 0) + 1);
+        const formattedPlates = [...counts.entries()]
+          .sort(([a], [b]) => b - a)
+          .map(([weight, count]) => `${count}×${formatNumber(weight)}`)
+          .join(' + ');
+        const prefix = loadout.multiplier === 2 ? 'PER SIDE' : 'LOAD';
+        return `${prefix} · ${formattedPlates} ${suffix}`;
+      }
+    } else if (!plates && !Array.isArray(equipment.plates)) {
+      plates = equipment;
+    }
   }
 
-  const counts = new Map();
-  for (const plate of loadout.plates) counts.set(plate, (counts.get(plate) || 0) + 1);
-  const plates = [...counts.entries()]
-    .sort(([a], [b]) => b - a)
-    .map(([weight, count]) => `${count}×${formatNumber(weight)}`)
-    .join(' + ');
-  const prefix = loadout.multiplier === 2 ? 'PER SIDE' : 'LOAD';
-  return `${prefix} · ${plates} ${suffix}`;
+  const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
+  if (directPlates && typeof directPlates === 'object') {
+    return formatPlatesObject(directPlates, unit);
+  }
+
+  return null;
 }
 
 /**
