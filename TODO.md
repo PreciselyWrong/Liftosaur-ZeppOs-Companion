@@ -51,7 +51,7 @@
 
 | Feature | Standalone baseline | Extension target | Status | Tests | Notes |
 | --- | --- | --- | --- | --- | --- |
-| Demo mode | available | preserve | not started | existing settings tests | Dedicated extension settings |
+| Demo mode | available | preserve | UNIT_TESTED | dummy Workout service tests | Dedicated local Workout adapter, with no Cloud writes |
 | Cloud workout resume | available | preserve | UNIT_TESTED | direct sync & widget tests | Cloud remains authoritative |
 | Set logging | available | preserve | UNIT_TESTED | workout session & widget tests | Shared controller only |
 | Weight, reps and RPE | available | preserve | UNIT_TESTED | workout session & widget tests | Click-only interaction |
