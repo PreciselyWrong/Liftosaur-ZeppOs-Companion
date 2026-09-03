@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.5] - 3 September 2026
+
+### Fixed
+- Phone changes now appear reliably after background synchronization in both watch apps.
+- Phone changes made during rest now reach the watch within two minutes.
+
 ## [0.4.4] - 3 September 2026
 
 ### Added
