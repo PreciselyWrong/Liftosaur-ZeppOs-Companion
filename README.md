@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-479%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-484%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -70,9 +70,9 @@ This project has additionally loaded it on Active 2 (Round), firmware 7.23.0.1 a
 level 400; the remaining models still require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.4.3 beta.
+**Version:** Lifto Companion 0.4.4 beta.
 
-**Workout version:** Lifto Workout 0.4.3 beta.
+**Workout version:** Lifto Workout 0.4.4 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
