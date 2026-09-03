@@ -130,3 +130,30 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   );
   assert.match(discardConfirmation, /returnAfterDiscard/, 'Discard local must clear local state directly');
 });
+
+test('overview screen includes visible Sync action wired to requestRefresh and keeps onResume refresh', () => {
+  const source = fs.readFileSync(
+    path.join(process.cwd(), 'data-widget', 'common', 'index.js'),
+    'utf8',
+  );
+
+  const overview = source.slice(
+    source.indexOf('function renderOverviewScreen('),
+    source.indexOf('function renderNotesScreen(')
+  );
+
+  assert.match(overview, /text:\s*['"]Sync['"]/, 'Overview must have a visible Sync button');
+  assert.match(
+    overview,
+    /workoutController\s*\.\s*requestRefresh\(\)/,
+    'Sync button must call workoutController.requestRefresh()'
+  );
+  assert.match(
+    overview,
+    /text:\s*['"]Sync['"][\s\S]*text:\s*['"]Finish['"][\s\S]*text:\s*['"]Discard['"]/,
+    'Action row must lay out Sync, Finish, and Discard buttons in order'
+  );
+
+  const onResume = source.slice(source.indexOf('onResume()'), source.indexOf('onPause()'));
+  assert.match(onResume, /requestRefresh\(\)/, 'onResume must maintain requestRefresh()');
+});

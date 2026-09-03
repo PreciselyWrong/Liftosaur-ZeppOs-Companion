@@ -522,7 +522,7 @@ export function createWorkoutController({
     const pendingCount = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
     if (pendingCount > 0) return false;
     if (directSyncPromise || directStartPromise || isDirectWriteInFlight || isPollingCurrent) return false;
-    if (!policy.beginPoll()) return false;
+    if (!policy.beginPoll({ allowPassive: currentState === SESSION_STATES.ACTIVE_SET })) return false;
 
     const writeCountAtPollStart = session.getWorkoutSetWrites().length;
     isPollingCurrent = true;
@@ -799,9 +799,9 @@ export function createWorkoutController({
         restorePendingOverrides(overrides);
       } else {
         mutateSession(() => session.nextSet({ timestamp: options.timestamp ?? now() }));
-        if (directSync.mode === 'DIRECT') {
-          requestWorkoutRefresh();
-        }
+      }
+      if (directSync.mode === 'DIRECT') {
+        requestWorkoutRefresh();
       }
     },
     finishWorkout: (options = {}) =>

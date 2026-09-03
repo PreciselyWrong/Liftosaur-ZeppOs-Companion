@@ -107,7 +107,7 @@ test('one refresh policy serves passive and action-triggered reads', () => {
   assert.match(source, /function requestWorkoutRefresh/);
   assert.match(source, /MESSAGE_TYPES\.GET_WORKOUT_CURRENT/);
   assert.match(source, /SESSION_STATES\.ACTIVE_SET[\s\S]*?SESSION_STATES\.REST/);
-  assert.match(source, /policy\.beginPoll\(\)/);
+  assert.match(source, /policy\.beginPoll\(\{ allowPassive:/);
 });
 
 test('meaningful workout navigation requests a coalesced refresh', () => {

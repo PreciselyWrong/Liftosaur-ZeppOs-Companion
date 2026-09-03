@@ -732,7 +732,7 @@ test('poll cannot adopt after a local write started later', async () => {
   controller.startWorkout();
   await controller.ensureStarted();
 
-  currentTime = 61000;
+  currentTime = 121000;
   const pollPromise = controller.pollCurrent();
 
   controller.completeSet();
@@ -959,7 +959,7 @@ test('missing remote workout sets remote-missing without clearing', async () => 
   controller.startWorkout();
   await controller.ensureStarted();
 
-  currentTime = 61000;
+  currentTime = 121000;
   await controller.pollCurrent();
 
   assert.equal(controller.sync().remoteMissing, true);
@@ -1166,4 +1166,136 @@ test('retryPendingWrites drains durable unacknowledged direct set writes after n
 
   const persisted = store.load();
   assert.equal(persisted.sync.acknowledgedSetCount, 1);
+});
+
+test('controller does not issue passive GET during REST after 120+ seconds', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    })
+  );
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+
+  // Advance 130s during REST
+  currentTime += 130000;
+  const pollResult = await controller.pollCurrent();
+  assert.equal(pollResult, false);
+  assert.equal(
+    transport.calls.filter((c) => c.type === MESSAGE_TYPES.GET_WORKOUT_CURRENT).length,
+    0
+  );
+});
+
+test('nextSet from REST schedules/executes one checkpoint GET when eligible without blocking the local ACTIVE_SET transition', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    })
+  );
+  let getCalls = 0;
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () => {
+    getCalls += 1;
+    return Promise.resolve({
+      type: 'WORKOUT_CURRENT_DATA',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    });
+  });
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+
+  // Eligible for checkpoint GET: >= 10s floor since last sync response
+  currentTime += 15000;
+
+  // nextSet transitions immediately to ACTIVE_SET synchronously
+  controller.nextSet();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+
+  // Allow microtasks for background refresh promise to complete
+  await new Promise((resolve) => setTimeout(resolve, 10));
+  assert.equal(getCalls, 1);
+});
+
+test('ACTIVE_SET issues safety GET at 120 seconds', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  let getCalls = 0;
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () => {
+    getCalls += 1;
+    return Promise.resolve({
+      type: 'WORKOUT_CURRENT_DATA',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    });
+  });
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+
+  // At 119 seconds: not yet due
+  currentTime = 1000 + 119000;
+  const earlyPoll = await controller.pollCurrent();
+  assert.equal(earlyPoll, false);
+  assert.equal(getCalls, 0);
+
+  // At 120 seconds: safety GET triggers
+  currentTime = 1000 + 120000;
+  const duePoll = await controller.pollCurrent();
+  assert.equal(duePoll, true);
+  assert.equal(getCalls, 1);
 });

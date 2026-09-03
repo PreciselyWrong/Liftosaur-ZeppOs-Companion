@@ -1,7 +1,7 @@
 export const MIN_REFRESH_INTERVAL_MS = 10000;
-export const PASSIVE_REFRESH_INTERVAL_MS = 60000;
+export const PASSIVE_REFRESH_INTERVAL_MS = 120000;
 
-const FAILURE_BACKOFF_MS = [30000, 60000, 120000];
+const FAILURE_BACKOFF_MS = [60000, 120000, 300000];
 
 export function createWorkoutRefreshPolicy({ now = () => Date.now() } = {}) {
   let lastRequestAt = null;
@@ -20,7 +20,10 @@ export function createWorkoutRefreshPolicy({ now = () => Date.now() } = {}) {
       refreshRequested = true;
     },
 
-    beginPoll() {
+    beginPoll({ allowPassive = true } = {}) {
+      if (!refreshRequested && !allowPassive) {
+        return false;
+      }
       const requestedAt = now();
       if (lastRequestAt !== null && requestedAt - lastRequestAt < requiredInterval()) {
         return false;

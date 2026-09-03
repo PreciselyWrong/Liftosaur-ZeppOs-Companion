@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.4] - 3 September 2026
+
+### Added
+- Workout Overview now has a Sync button for checking phone changes on demand.
+
+### Changed
+- Lifto Workout now checks for phone changes when starting the next set, with a two-minute safety check while lifting instead of downloading the workout every minute.
+- Failed background checks now wait one, two and then five minutes before trying again.
+
 ## [0.4.3] - 3 September 2026
 
 ### Changed

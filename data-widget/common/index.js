@@ -1809,7 +1809,29 @@ function renderOverviewScreen(view) {
   addWidget(widget.BUTTON, {
     x: px(64),
     y: actionY,
-    w: px(170),
+    w: px(108),
+    h: px(60),
+    radius: px(30),
+    normal_color: THEME.card,
+    press_color: THEME.cardActive,
+    text: 'Sync',
+    text_size: font('button'),
+    click_func: () => {
+      const previousWarning = syncWarning;
+      workoutController
+        .requestRefresh()
+        .then((changed) => {
+          updateSyncWarning();
+          if (changed || previousWarning !== syncWarning) renderUI();
+        })
+        .catch(handlePollFailure);
+    },
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(186),
+    y: actionY,
+    w: px(108),
     h: px(60),
     radius: px(30),
     normal_color: THEME.primary,
@@ -1824,9 +1846,9 @@ function renderOverviewScreen(view) {
   });
 
   addWidget(widget.BUTTON, {
-    x: px(246),
+    x: px(308),
     y: actionY,
-    w: px(170),
+    w: px(108),
     h: px(60),
     radius: px(30),
     normal_color: 0x3a1a1a,
