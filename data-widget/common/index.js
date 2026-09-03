@@ -27,6 +27,7 @@ import { createFallbackStorageAdapter, createSessionStore } from '../../shared/s
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
+import { withRequestTimeout } from '../../shared/request-timeout.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -50,10 +51,12 @@ import {
   formatSeconds,
   formatWeightValue,
   formatTargetRepsSummary,
+  formatTargetRpeSummary,
   formatNextTargetSummary,
   formatDots,
   supersetColor,
   truncate,
+  shouldAutoStartPreparedSet,
 } from '../../shared/workout-extension-nav.js';
 import {
   suggestedProgramIndex,
@@ -87,6 +90,7 @@ const DEFAULT_SCREEN_ON_SECONDS = 120;
 const ALWAYS_SCREEN_ON_MS = 2147483000;
 const CALORIE_REFRESH_MS = 15000;
 const PENDING_SYNC_RETRY_MS = 15000;
+const PHONE_REQUEST_TIMEOUT_MS = 20000;
 
 const deviceInfo = getDeviceInfo();
 const LAYOUT = createScreenLayout({
@@ -237,7 +241,9 @@ function send(type, payload = {}) {
   if (!widgetInstance || typeof widgetInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
-  return widgetInstance.request(createMessage({ type, payload })).then((res) => {
+  return withRequestTimeout(widgetInstance.request(createMessage({ type, payload })), {
+    timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
+  }).then((res) => {
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
@@ -1420,9 +1426,10 @@ function renderActiveSetScreen(view) {
       }`;
     }
   } else {
-    targetText = `Target: ${formatTargetRepsSummary(set)} x ${formatWeightValue(set?.targetWeight, view.unit)}${
-      set?.targetRpe !== null && set?.targetRpe !== undefined ? ` @${set.targetRpe}` : ''
-    }`;
+    targetText = `Target: ${formatTargetRepsSummary(set)} x ${formatWeightValue(
+      set?.targetWeight,
+      view.unit
+    )}${formatTargetRpeSummary(set)}`;
   }
 
   addWidget(widget.TEXT, {
@@ -2060,7 +2067,7 @@ function renderDiscardConfirmation() {
     text_size: font('button'),
     click_func: () => {
       discardConfirmationRequested = false;
-      handleDiscardWorkout();
+      returnAfterDiscard();
     },
   });
 }
@@ -2543,6 +2550,13 @@ function tick() {
     if (alertResult.shouldAlert) {
       triggerRestVibration();
     }
+    if (shouldAutoStartPreparedSet(isRestMinimized, view.rest)) {
+      isRestMinimized = false;
+      restAlertTracker.reset();
+      workoutController.nextSet();
+      renderUI();
+      return;
+    }
   }
 
   const currentSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
@@ -2659,7 +2673,7 @@ DataWidget(
           }
         }
         workoutController
-          .pollCurrent()
+          .requestRefresh()
           .then((changed) => {
             if (changed) renderUI();
           })

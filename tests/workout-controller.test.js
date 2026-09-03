@@ -732,7 +732,7 @@ test('poll cannot adopt after a local write started later', async () => {
   controller.startWorkout();
   await controller.ensureStarted();
 
-  currentTime = 20000;
+  currentTime = 61000;
   const pollPromise = controller.pollCurrent();
 
   controller.completeSet();
@@ -819,10 +819,15 @@ test('REST snapshot defers and applies only on next set', async () => {
   assert.equal(controller.view().state, SESSION_STATES.REST);
   assert.equal(controller.hasDeferredServerWorkout(), true);
 
+  controller.adjustWeight(1);
+  controller.adjustReps(1);
+
   controller.nextSet();
   assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
   assert.equal(controller.hasDeferredServerWorkout(), false);
   assert.equal(controller.view().currentSet.targetReps, 8);
+  assert.equal(controller.view().currentSet.weight, 102.5);
+  assert.equal(controller.view().currentSet.reps, 6);
 });
 
 test('start-time mismatch is conflict', async () => {
@@ -954,7 +959,7 @@ test('missing remote workout sets remote-missing without clearing', async () => 
   controller.startWorkout();
   await controller.ensureStarted();
 
-  currentTime = 20000;
+  currentTime = 61000;
   await controller.pollCurrent();
 
   assert.equal(controller.sync().remoteMissing, true);
@@ -1024,6 +1029,41 @@ test('discard without transport preserves the local session and intent', async (
   assert.equal(controller.plan(), SAMPLE_DIRECT_PLAN);
   assert.equal(controller.sync().discardRequestedAt, 1000);
   assert.equal(controller.getStatus().code, 'pending');
+});
+
+test('concurrent discard requests share one remote write', async () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let resolveDiscard;
+  let discardCalls = 0;
+  const transport = createFakeTransport();
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+  );
+  transport.on(MESSAGE_TYPES.DISCARD_WORKOUT, () => {
+    discardCalls += 1;
+    return new Promise((resolve) => {
+      resolveDiscard = resolve;
+    });
+  });
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => 1000,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  controller.updateSync({ conflict: true });
+
+  const first = controller.discardWorkoutRemote();
+  const second = controller.discardWorkoutRemote();
+  assert.equal(discardCalls, 1);
+
+  resolveDiscard({ type: 'DISCARD_WORKOUT_RESULT', payload: { deleted: true } });
+  const [firstResult, secondResult] = await Promise.all([first, second]);
+  assert.equal(firstResult.success, true);
+  assert.equal(secondResult.success, true);
+  assert.equal(store.hasSession(), false);
 });
 
 test('restored finish/discard intents can be resumed by a renderer', async () => {

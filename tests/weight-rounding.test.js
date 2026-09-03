@@ -135,14 +135,15 @@ test('does not suggest plates for an inexact or unresolved weight', () => {
   assert.equal(formatLoadoutLabel(60, null, 'kg'), null);
 });
 
-test('formats direct Liftosaur plates object when loadingEquipment is null', () => {
-  assert.equal(formatLoadoutLabel(80, null, 'kg', { '20kg': 2, '10kg': 1 }), 'PER SIDE · 2×20 + 1×10 KG');
-  assert.equal(formatLoadoutLabel(40, null, 'kg', { '20kg': 1 }), 'PER SIDE · 1×20 KG');
-  assert.equal(formatLoadoutLabel(135, null, 'lb', { '45lb': 1 }), 'PER SIDE · 1×45 LB');
-  assert.equal(formatLoadoutLabel(60, { '20kg': 1 }, 'kg'), 'PER SIDE · 1×20 KG');
-  assert.equal(formatLoadoutLabel(80, null, 'kg', { '20kg': 2 }, 80), 'PER SIDE · 2×20 KG');
-  assert.equal(formatLoadoutLabel(82.5, null, 'kg', { '20kg': 2 }, 80), null, 'suppresses stale plates on weight adjustment');
-  assert.equal(formatPlatesObject({ '20kg': 1, '2.5kg': 2 }, 'kg'), 'PER SIDE · 1×20 + 2×2.5 KG');
+test('formats the official Liftosaur per-side plates array', () => {
+  const plates = [
+    { weight: '20kg', num: 2 },
+    { weight: '10kg', num: 1 },
+  ];
+
+  assert.equal(formatPlatesObject(plates, 'kg'), 'PER SIDE · 2×20 + 1×10 KG');
+  assert.equal(formatLoadoutLabel(80, null, 'kg', plates, 80), 'PER SIDE · 2×20 + 1×10 KG');
+  assert.equal(formatLoadoutLabel(82.5, null, 'kg', plates, 80), null);
 });
 
 test('identifies an exact fixed weight without inventing plates', () => {

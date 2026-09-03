@@ -7,7 +7,8 @@ import {
   createWorkoutRefreshPolicy,
 } from '../shared/workout-refresh-policy.js';
 
-test('passive refresh becomes due after 15 seconds', () => {
+test('passive refresh becomes due after 60 seconds', () => {
+  assert.equal(PASSIVE_REFRESH_INTERVAL_MS, 60_000);
   let now = 1000;
   const policy = createWorkoutRefreshPolicy({ now: () => now });
 
