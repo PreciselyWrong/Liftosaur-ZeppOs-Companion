@@ -1,5 +1,10 @@
 # Changelog
 
+## [0.4.2] - 3 September 2026
+
+### Fixed
+- Rest completion now uses the watch's stronger reminder vibration, making it easier to notice between sets.
+
 ## [0.4.1] - 2 September 2026
 
 ### Changed
