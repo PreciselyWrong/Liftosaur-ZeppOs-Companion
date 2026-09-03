@@ -100,6 +100,7 @@
 ## Phase 6 - Rest alerts and background behavior
 
 - [x] Add pure rest alert state tracker with foreground zero-crossing and onResume expiry detection.
+- [x] Use the dedicated strong reminder vibration for Workout rest completion.
 
 ## Phase 7 - Native workout data integration
 
@@ -174,3 +175,4 @@
 - 2026-09-01: Completed the public Workout Extension setup and hardware test guides.
 - 2026-09-02: Added configurable display hold, native pause reconciliation, live metrics, pending sync recovery and an Active 2 retest checklist.
 - 2026-09-02: Generated public Companion and Workout preview QR codes from their registered App IDs for the complete 28-target build matrix.
+- 2026-09-03: Strengthened Workout rest completion with the dedicated four-pulse reminder pattern.

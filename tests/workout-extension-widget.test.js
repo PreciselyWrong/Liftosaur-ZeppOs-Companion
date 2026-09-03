@@ -103,4 +103,20 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
 
   assert.match(source, /function loadDisplaySettings/, 'Restored sessions must reload display settings');
   assert.match(source, /syncWarning\s*\?\s*truncate\(syncWarning/, 'Metric refresh must preserve sync warnings');
+
+  // 15. Rest completion must use Zepp's dedicated strong reminder pattern.
+  assert.match(
+    source,
+    /VIBRATOR_SCENE_STRONG_REMINDER/,
+    'Rest completion must use the four-pulse strong reminder vibration',
+  );
+  const vibrationMode = source.slice(
+    source.indexOf('function setRestVibrationMode()'),
+    source.indexOf('function triggerRestVibration()'),
+  );
+  assert.match(
+    vibrationMode,
+    /setMode\(VIBRATOR_SCENE_STRONG_REMINDER\)/,
+    'Rest completion must configure the strong reminder mode',
+  );
 });
