@@ -1168,7 +1168,7 @@ test('retryPendingWrites drains durable unacknowledged direct set writes after n
   assert.equal(persisted.sync.acknowledgedSetCount, 1);
 });
 
-test('controller does not issue passive GET during REST after 120+ seconds', async () => {
+test('REST issues one passive GET after 120 seconds without increasing the cadence', async () => {
   const adapter = createMemoryStorageAdapter();
   const store = createSessionStore(adapter);
   const transport = createFakeTransport();
@@ -1182,6 +1182,14 @@ test('controller does not issue passive GET during REST after 120+ seconds', asy
       payload: { workout: SAMPLE_SERVER_WORKOUT },
     })
   );
+  let getCalls = 0;
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () => {
+    getCalls += 1;
+    return Promise.resolve({
+      type: 'WORKOUT_CURRENT_DATA',
+      payload: { workout: SAMPLE_SERVER_WORKOUT },
+    });
+  });
 
   let currentTime = 1000;
   const controller = createWorkoutController({
@@ -1198,14 +1206,20 @@ test('controller does not issue passive GET during REST after 120+ seconds', asy
   await controller.syncSets();
   assert.equal(controller.view().state, SESSION_STATES.REST);
 
-  // Advance 130s during REST
-  currentTime += 130000;
-  const pollResult = await controller.pollCurrent();
+  currentTime += 119000;
+  let pollResult = await controller.pollCurrent();
   assert.equal(pollResult, false);
-  assert.equal(
-    transport.calls.filter((c) => c.type === MESSAGE_TYPES.GET_WORKOUT_CURRENT).length,
-    0
-  );
+  assert.equal(getCalls, 0);
+
+  currentTime += 1000;
+  pollResult = await controller.pollCurrent();
+  assert.equal(pollResult, false);
+  assert.equal(getCalls, 1);
+
+  currentTime += 60000;
+  pollResult = await controller.pollCurrent();
+  assert.equal(pollResult, false);
+  assert.equal(getCalls, 1);
 });
 
 test('nextSet from REST schedules/executes one checkpoint GET when eligible without blocking the local ACTIVE_SET transition', async () => {

@@ -163,9 +163,12 @@ const localStoreAdapter = createFallbackStorageAdapter(
   (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
 );
 const sessionStore = createSessionStore(localStoreAdapter);
+let controllerUiDirty = false;
 const workoutController = createWorkoutController({
   store: sessionStore,
   request: (type, payload) => send(type, payload),
+  onChange: markControllerUiDirty,
+  onStatus: markControllerUiDirty,
   mapWorkout: (workout, options) =>
     workoutToDayPlan(workout, {
       ...options,
@@ -732,6 +735,18 @@ function updateControllerStatus() {
   } else {
     syncWarning = null;
   }
+}
+
+function markControllerUiDirty() {
+  controllerUiDirty = true;
+}
+
+function consumeControllerUiChange() {
+  if (!controllerUiDirty) return false;
+  controllerUiDirty = false;
+  dayPlan = workoutController.plan();
+  updateControllerStatus();
+  return true;
 }
 
 async function ensureDirectWorkoutStarted() {
@@ -2946,6 +2961,7 @@ function renderLoadingScreen() {
 // ── Root render ──────────────────────────────────────────────────────────────
 
 function renderUI() {
+  consumeControllerUiChange();
   clearWidgets();
   if (!isNotesModalOpen) hideModalControls();
   // The backdrop is the one widget already in screen pixels: it must cover the
@@ -3023,6 +3039,10 @@ function tick() {
   updateClock();
 
   if (screen !== SCREEN.SESSION) return;
+  if (controllerUiDirty) {
+    renderUI();
+    return;
+  }
   pollCurrentWorkout();
 
   const view = session.view();

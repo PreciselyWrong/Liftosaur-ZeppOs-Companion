@@ -107,7 +107,7 @@ test('one refresh policy serves passive and action-triggered reads', () => {
   assert.match(source, /function requestWorkoutRefresh/);
   assert.match(source, /MESSAGE_TYPES\.GET_WORKOUT_CURRENT/);
   assert.match(source, /SESSION_STATES\.ACTIVE_SET[\s\S]*?SESSION_STATES\.REST/);
-  assert.match(source, /policy\.beginPoll\(\{ allowPassive:/);
+  assert.match(source, /policy\.beginPoll\(\)/);
 });
 
 test('meaningful workout navigation requests a coalesced refresh', () => {
@@ -118,6 +118,21 @@ test('meaningful workout navigation requests a coalesced refresh', () => {
   assert.match(nextSet, /requestWorkoutRefresh\(\)/);
   assert.match(gestures, /requestWorkoutRefresh\(\)/);
   assert.match(overview, /requestWorkoutRefresh\(\)/);
+});
+
+test('Companion consumes asynchronous controller changes on its existing UI tick', () => {
+  const source = readWatchPage();
+  const controllerSetup = source.slice(
+    source.indexOf('const workoutController = createWorkoutController({'),
+    source.indexOf('const session = workoutController;')
+  );
+  const tick = source.slice(source.indexOf('function tick()'), source.indexOf('function startClock()'));
+  const render = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
+
+  assert.match(controllerSetup, /onChange:\s*markControllerUiDirty/);
+  assert.match(controllerSetup, /onStatus:\s*markControllerUiDirty/);
+  assert.match(tick, /if \(controllerUiDirty\)[\s\S]*?renderUI\(\)/);
+  assert.match(render, /consumeControllerUiChange\(\)/);
 });
 
 test('poll failures back off and authoritative writes reset refresh timing', () => {
