@@ -638,7 +638,15 @@ test('rest view includes next target weight, reps, unit and warmups', () => {
           { index: 1, targetReps: 5, targetWeight: 40, targetWeightPercent: 40, restSeconds: 60 },
         ],
         sets: [
-          { index: 1, targetReps: 5, targetWeight: 100, restSeconds: 180 },
+          {
+            index: 1,
+            targetReps: 5,
+            targetWeight: 100,
+            targetRpe: 9,
+            isAmrap: true,
+            logRpe: true,
+            restSeconds: 180,
+          },
         ],
       },
     ],
@@ -661,6 +669,9 @@ test('rest view includes next target weight, reps, unit and warmups', () => {
   assert.equal(vRest.rest.nextWorkSetIndex, 1);
   assert.equal(vRest.rest.nextTargetWeight, 100);
   assert.equal(vRest.rest.nextTargetReps, 5);
+  assert.equal(vRest.rest.nextTargetRpe, 9);
+  assert.equal(vRest.rest.nextIsAmrap, true);
+  assert.equal(vRest.rest.nextLogRpe, true);
   assert.equal(vRest.rest.nextUnit, 'kg');
 });
 
@@ -876,7 +887,7 @@ describe('Workout API set-write journal support', () => {
               targetReps: 10,
               targetWeight: 40,
               originalWeight: '40kg',
-              plates: { '20kg': 1 },
+              plates: [{ weight: '20kg', num: 1 }],
               logRpe: false,
               askWeight: false,
               isUnilateral: false,
@@ -892,7 +903,7 @@ describe('Workout API set-write journal support', () => {
               targetReps: 8,
               targetWeight: 80,
               originalWeight: '80kg',
-              plates: { '20kg': 2 },
+              plates: [{ weight: '20kg', num: 2 }],
               logRpe: true,
               askWeight: true,
               isUnilateral: true,
@@ -914,7 +925,7 @@ describe('Workout API set-write journal support', () => {
     assert.equal(view.currentSet.setId, 'w1');
     assert.equal(view.currentSet.serverIndex, 0);
     assert.equal(view.currentSet.originalWeight, '40kg');
-    assert.deepEqual(view.currentSet.plates, { '20kg': 1 });
+    assert.deepEqual(view.currentSet.plates, [{ weight: '20kg', num: 1 }]);
     assert.equal(view.currentSet.logRpe, false);
     assert.equal(view.currentSet.askWeight, false);
     assert.equal(view.currentSet.isUnilateral, false);
@@ -924,8 +935,8 @@ describe('Workout API set-write journal support', () => {
     assert.equal(pendingSet.setId, 's1');
     assert.equal(pendingSet.serverIndex, 1);
     assert.equal(pendingSet.originalWeight, '80kg');
-    assert.deepEqual(pendingSet.plates, { '20kg': 2 });
-    assert.deepEqual(session.view(1000).rest.nextPlates, { '20kg': 2 });
+    assert.deepEqual(pendingSet.plates, [{ weight: '20kg', num: 2 }]);
+    assert.deepEqual(session.view(1000).rest.nextPlates, [{ weight: '20kg', num: 2 }]);
     assert.equal(pendingSet.logRpe, true);
     assert.equal(pendingSet.askWeight, true);
     assert.equal(pendingSet.isUnilateral, true);

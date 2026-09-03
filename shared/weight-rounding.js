@@ -158,25 +158,25 @@ function formatNumber(value) {
   return String(round5(value));
 }
 
-export function formatPlatesObject(platesObj, unit = 'kg') {
-  if (!platesObj || typeof platesObj !== 'object') return null;
-  const entries = Object.entries(platesObj).filter(([_, count]) => Number(count) > 0);
-  if (entries.length === 0) return null;
-
-  const parsed = entries.map(([plateStr, count]) => {
-    const num = parseFloat(plateStr);
-    return {
-      weight: Number.isFinite(num) ? num : plateStr,
-      count: Number(count),
-    };
-  });
+export function formatPlatesObject(plates, unit = 'kg') {
+  if (!Array.isArray(plates)) return null;
+  const parsed = plates
+    .filter((plate) => plate && Number(plate.num) > 0)
+    .map((plate) => {
+      const num = parseFloat(plate.weight);
+      return {
+        weight: Number.isFinite(num) ? num : plate.weight,
+        count: Number(plate.num),
+      };
+    });
+  if (parsed.length === 0) return null;
   parsed.sort((a, b) => (typeof a.weight === 'number' && typeof b.weight === 'number' ? b.weight - a.weight : 0));
 
   const suffix = (unit || 'kg').toUpperCase();
-  const plates = parsed
+  const formattedPlates = parsed
     .map((p) => `${p.count}×${Number.isFinite(p.weight) ? formatNumber(p.weight) : String(p.weight)}`)
     .join(' + ');
-  return `PER SIDE · ${plates} ${suffix}`;
+  return `PER SIDE · ${formattedPlates} ${suffix}`;
 }
 
 /** A compact watch label, returned only when the requested weight is exact. */
@@ -201,13 +201,11 @@ export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null
         const prefix = loadout.multiplier === 2 ? 'PER SIDE' : 'LOAD';
         return `${prefix} · ${formattedPlates} ${suffix}`;
       }
-    } else if (!plates && !Array.isArray(equipment.plates)) {
-      plates = equipment;
     }
   }
 
   const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
-  if (directPlates && typeof directPlates === 'object') {
+  if (Array.isArray(directPlates)) {
     if (
       Number.isFinite(target) &&
       Number.isFinite(targetWeight) &&

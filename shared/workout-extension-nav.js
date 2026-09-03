@@ -73,22 +73,38 @@ export function formatWeightValue(weight, unit = 'kg') {
 
 export function formatTargetRepsSummary(set) {
   if (!set) return '-';
+  const suffix = set.isAmrap ? '+' : '';
   if (set.targetRepsMax !== null && set.targetRepsMax !== undefined && set.targetReps !== null) {
-    return `${set.targetReps}-${set.targetRepsMax}`;
+    return `${set.targetReps}-${set.targetRepsMax}${suffix}`;
   }
   if (set.targetReps !== null && set.targetReps !== undefined) {
-    return String(set.targetReps);
+    return `${set.targetReps}${suffix}`;
   }
   return '-';
 }
 
+export function formatTargetRpeSummary(set) {
+  if (set?.targetRpe === null || set?.targetRpe === undefined) return '';
+  return ` @${set.targetRpe}${set.logRpe ? '+' : ''}`;
+}
+
 export function formatNextTargetSummary(rest) {
   if (!rest) return '';
-  const reps = rest.nextTargetRepsMax
-    ? `${rest.nextTargetReps}-${rest.nextTargetRepsMax}`
-    : (rest.nextTargetReps !== null && rest.nextTargetReps !== undefined ? String(rest.nextTargetReps) : '-');
+  const reps = formatTargetRepsSummary({
+    targetReps: rest.nextTargetReps,
+    targetRepsMax: rest.nextTargetRepsMax,
+    isAmrap: rest.nextIsAmrap,
+  });
   const weight = formatWeightValue(rest.nextTargetWeight, rest.nextUnit);
-  return `${reps} x ${weight}`;
+  const rpe = formatTargetRpeSummary({
+    targetRpe: rest.nextTargetRpe,
+    logRpe: rest.nextLogRpe,
+  });
+  return `${reps} x ${weight}${rpe}`;
+}
+
+export function shouldAutoStartPreparedSet(isPrepared, rest) {
+  return Boolean(isPrepared && rest && !rest.isPaused && rest.remaining <= 0);
 }
 
 export function formatDots(dots = []) {

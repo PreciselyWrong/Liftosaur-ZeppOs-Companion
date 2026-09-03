@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 2 September 2026 with 475 passing tests.
+- Test: `npm test` - verified on 3 September 2026 with 479 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1`, which checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -91,6 +91,6 @@
 
 ## State
 
-- Version 0.4.2 beta: standalone and extension workout flows, durable offline set queues, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, stronger Workout rest reminders, round and square layouts, and crash-safe finish retries are covered by 475 tests. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
+- Version 0.4.3 beta: standalone and extension workout flows, durable offline set queues, bounded phone requests, lower background API traffic, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, Workout target markers and plate loading, round and square layouts, and crash-safe finish retries are covered by 479 tests. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

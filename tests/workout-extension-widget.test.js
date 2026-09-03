@@ -100,6 +100,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   // 14. retryPendingWrites on onResume
   const onResume = source.slice(source.indexOf('onResume()'), source.indexOf('onPause()'));
   assert.match(onResume, /retryPendingWrites\(\)/, 'onResume must call retryPendingWrites to drain queued writes');
+  assert.match(onResume, /requestRefresh\(\)/, 'onResume must prioritize a current workout refresh');
 
   assert.match(source, /function loadDisplaySettings/, 'Restored sessions must reload display settings');
   assert.match(source, /syncWarning\s*\?\s*truncate\(syncWarning/, 'Metric refresh must preserve sync warnings');
@@ -119,4 +120,13 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     /setMode\(VIBRATOR_SCENE_STRONG_REMINDER\)/,
     'Rest completion must configure the strong reminder mode',
   );
+
+  assert.match(source, /withRequestTimeout/, 'Phone bridge requests must have a bounded timeout');
+  assert.match(source, /shouldAutoStartPreparedSet/, 'Prepare must auto-start when rest expires');
+
+  const discardConfirmation = source.slice(
+    source.indexOf('function renderDiscardConfirmation()'),
+    source.indexOf('function renderFinishedScreen()'),
+  );
+  assert.match(discardConfirmation, /returnAfterDiscard/, 'Discard local must clear local state directly');
 });
