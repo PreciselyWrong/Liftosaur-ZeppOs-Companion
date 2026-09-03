@@ -138,6 +138,7 @@
 - [x] Add the exact Active 2 integration retest checklist.
 - [x] Bound phone requests, reduce passive refresh traffic and coalesce discards.
 - [x] Render AMRAP, logged RPE and resolved plate loading from the Workout API.
+- [x] Replace minute polling with set checkpoints, a two-minute active safety check and manual refresh.
 - [ ] Run the checklist on Active 2 firmware 7.23.0.1 at API level 400 and attach evidence.
 
 ## Manual external actions
@@ -155,7 +156,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 479 passing
+- `npm test` - 484 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
@@ -180,3 +181,4 @@
 - 2026-09-02: Generated public Companion and Workout preview QR codes from their registered App IDs for the complete 28-target build matrix.
 - 2026-09-03: Strengthened Workout rest completion with the dedicated four-pulse reminder pattern.
 - 2026-09-03: Fixed stalled requests, excess polling, target markers, plate loading and prepared-set transitions in Workout.
+- 2026-09-03: Reduced server-heavy workout reads while preserving concurrent phone and watch updates.
