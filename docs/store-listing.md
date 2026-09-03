@@ -11,7 +11,7 @@ installation with no API key does by default.
 | App ID | 1123411 |
 | App name | Lifto Companion |
 | Vendor | Sni3rs |
-| Version | 0.4.4, code 29 |
+| Version | 0.4.5, code 30 |
 | Category | Health and fitness |
 | Privacy policy URL | published `docs/privacy-policy.md` (raw or Pages URL of the public repository) |
 | Support | issue tracker of the public repository |

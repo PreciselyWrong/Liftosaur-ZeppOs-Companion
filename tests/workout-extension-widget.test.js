@@ -3,6 +3,13 @@ import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 
+function readWidgetSource() {
+  return fs.readFileSync(
+    path.join(process.cwd(), 'data-widget', 'common', 'index.js'),
+    'utf8',
+  );
+}
+
 test('data-widget/common/index.js fulfills all platform and product contracts', () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), 'data-widget', 'common', 'index.js'),
@@ -129,6 +136,21 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     source.indexOf('function renderFinishedScreen()'),
   );
   assert.match(discardConfirmation, /returnAfterDiscard/, 'Discard local must clear local state directly');
+});
+
+test('Workout consumes asynchronous controller changes on its existing UI tick', () => {
+  const source = readWidgetSource();
+  const controllerSetup = source.slice(
+    source.indexOf('workoutController = createWorkoutController({'),
+    source.indexOf('const restored = workoutController.restore()')
+  );
+  const tick = source.slice(source.indexOf('function tick()'), source.indexOf('function startClock()'));
+  const render = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
+
+  assert.match(controllerSetup, /onChange:\s*markControllerUiDirty/);
+  assert.match(controllerSetup, /onStatus:\s*markControllerUiDirty/);
+  assert.match(tick, /if \(controllerUiDirty\)[\s\S]*?renderUI\(\)/);
+  assert.match(render, /consumeControllerUiChange\(\)/);
 });
 
 test('overview screen includes visible Sync action wired to requestRefresh and keeps onResume refresh', () => {

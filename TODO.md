@@ -138,7 +138,7 @@
 - [x] Add the exact Active 2 integration retest checklist.
 - [x] Bound phone requests, reduce passive refresh traffic and coalesce discards.
 - [x] Render AMRAP, logged RPE and resolved plate loading from the Workout API.
-- [x] Replace minute polling with set checkpoints, a two-minute active safety check and manual refresh.
+- [x] Replace minute polling with action checkpoints and a two-minute safety check during active sets and rest.
 - [ ] Run the checklist on Active 2 firmware 7.23.0.1 at API level 400 and attach evidence.
 
 ## Manual external actions
@@ -182,3 +182,4 @@
 - 2026-09-03: Strengthened Workout rest completion with the dedicated four-pulse reminder pattern.
 - 2026-09-03: Fixed stalled requests, excess polling, target markers, plate loading and prepared-set transitions in Workout.
 - 2026-09-03: Reduced server-heavy workout reads while preserving concurrent phone and watch updates.
+- 2026-09-03: Restored reliable background redraws and bounded synchronization during rest in both watch apps.

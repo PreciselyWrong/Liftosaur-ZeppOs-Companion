@@ -222,6 +222,7 @@ let discardConfirmationRequested = false;
 
 let finishState = null;
 let syncWarning = null;
+let controllerUiDirty = false;
 
 let sportDuration = '--';
 let sportCalories = '--';
@@ -267,6 +268,18 @@ function updateSyncWarning() {
   } else {
     syncWarning = null;
   }
+}
+
+function markControllerUiDirty() {
+  controllerUiDirty = true;
+}
+
+function consumeControllerUiChange() {
+  if (!controllerUiDirty || !workoutController) return false;
+  controllerUiDirty = false;
+  dayPlan = workoutController.plan();
+  updateSyncWarning();
+  return true;
 }
 
 function beginRequest(message) {
@@ -2263,6 +2276,7 @@ function renderConflictScreen() {
 
 function renderUI() {
   if (!hasBuilt) return;
+  consumeControllerUiChange();
   updateSyncWarning();
   clearWidgets();
 
@@ -2548,6 +2562,10 @@ function tick() {
   updateClock();
 
   if (screen !== EXTENSION_SCREENS.SESSION) return;
+  if (controllerUiDirty) {
+    renderUI();
+    return;
+  }
   refreshSportMetrics();
   retryPendingWrites();
 
@@ -2624,6 +2642,8 @@ DataWidget(
       workoutController = createWorkoutController({
         store: sessionStore,
         request: (type, payload) => send(type, payload),
+        onChange: markControllerUiDirty,
+        onStatus: markControllerUiDirty,
         mapWorkout: (workout, options) =>
           workoutToDayPlan(workout, {
             ...options,

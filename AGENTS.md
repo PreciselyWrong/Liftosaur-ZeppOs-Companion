@@ -91,6 +91,6 @@
 
 ## State
 
-- Version 0.4.4 beta: standalone and extension workout flows, durable offline set queues, event-led cross-device refresh, bounded phone requests, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, Workout target markers and plate loading, round and square layouts, and crash-safe finish retries are covered by 484 tests. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
+- Version 0.4.5 beta: standalone and extension workout flows, durable offline set queues, event-led cross-device refresh, bounded two-minute active and rest checks, conflict recovery, native pause reconciliation, configurable display hold, live native metrics, Workout target markers and plate loading, round and square layouts, and crash-safe finish retries are covered by 486 tests. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.
