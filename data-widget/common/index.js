@@ -1,7 +1,12 @@
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
-import { Time, TIME_HOUR_FORMAT_12, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
+import {
+  Time,
+  TIME_HOUR_FORMAT_12,
+  Vibrator,
+  VIBRATOR_SCENE_STRONG_REMINDER,
+} from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import { getSportData } from '@zos/app-access';
 import {
@@ -146,15 +151,15 @@ function stopVibration() {
   }
 }
 
-function setVibrationDurationMode() {
+function setRestVibrationMode() {
   try {
-    vibrator.setMode(VIBRATOR_SCENE_DURATION);
+    vibrator.setMode(VIBRATOR_SCENE_STRONG_REMINDER);
     return;
   } catch (e) {
-    // Try object form below
+    // Firmware versions disagree with the SDK typings on the accepted signature.
   }
   try {
-    vibrator.setMode({ mode: VIBRATOR_SCENE_DURATION });
+    vibrator.setMode({ mode: VIBRATOR_SCENE_STRONG_REMINDER });
   } catch (err) {
     console.log('[lifto-ext] vibrator mode error:', err?.message || String(err));
   }
@@ -165,13 +170,13 @@ function triggerRestVibration() {
     stopVibration();
     if (!vibrator) {
       vibrator = new Vibrator();
-      setVibrationDurationMode();
+      setRestVibrationMode();
     }
     vibrator.start();
     vibrationTimer = setTimeout(() => {
       vibrationTimer = null;
       stopVibration();
-    }, 1200);
+    }, 1400);
   } catch (err) {
     console.log('[lifto-ext] vibrator error:', err?.message || String(err));
   }
