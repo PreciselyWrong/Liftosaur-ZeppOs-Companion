@@ -36,7 +36,7 @@ describe('Workout API plan model adapter', () => {
               minReps: null,
               isAmrap: false,
               weight: '40kg',
-              plates: { '20kg': 1 },
+              plates: [{ weight: '20kg', num: 1 }],
               rpe: null,
               logRpe: false,
               askWeight: false,
@@ -55,7 +55,7 @@ describe('Workout API plan model adapter', () => {
               minReps: 6,
               isAmrap: false,
               weight: '80kg',
-              plates: { '20kg': 2, '10kg': 1 },
+              plates: [{ weight: '20kg', num: 2 }, { weight: '10kg', num: 1 }],
               rpe: 8,
               logRpe: true,
               askWeight: true,
@@ -106,7 +106,7 @@ describe('Workout API plan model adapter', () => {
     assert.equal(w.targetWeight, 40);
     assert.equal(w.originalWeight, '40kg');
     assert.equal(w.unit, 'kg');
-    assert.deepEqual(w.plates, { '20kg': 1 });
+    assert.deepEqual(w.plates, [{ weight: '20kg', num: 1 }]);
     assert.equal(w.rpe, null);
     assert.equal(w.logRpe, false);
     assert.equal(w.askWeight, false);
@@ -127,7 +127,7 @@ describe('Workout API plan model adapter', () => {
     assert.equal(s.targetWeight, 80);
     assert.equal(s.originalWeight, '80kg');
     assert.equal(s.unit, 'kg');
-    assert.deepEqual(s.plates, { '20kg': 2, '10kg': 1 });
+    assert.deepEqual(s.plates, [{ weight: '20kg', num: 2 }, { weight: '10kg', num: 1 }]);
     assert.equal(s.rpe, 8);
     assert.equal(s.logRpe, true);
     assert.equal(s.askWeight, true);

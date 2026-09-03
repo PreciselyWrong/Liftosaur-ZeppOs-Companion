@@ -5,8 +5,11 @@ import {
   EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
+  formatNextTargetSummary,
+  formatTargetRpeSummary,
   formatWeightValue,
   formatTargetRepsSummary,
+  shouldAutoStartPreparedSet,
   supersetColor,
 } from '../shared/workout-extension-nav.js';
 
@@ -80,7 +83,31 @@ test('formatting helpers format seconds and weight cleanly', () => {
 
   assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: null }), '8');
   assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: 12 }), '8-12');
+  assert.equal(formatTargetRepsSummary({ targetReps: 12, targetRepsMax: null, isAmrap: true }), '12+');
+  assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: 12, isAmrap: true }), '8-12+');
   assert.equal(formatTargetRepsSummary({ targetReps: null, targetRepsMax: null }), '-');
+
+  assert.equal(formatTargetRpeSummary({ targetRpe: 9, logRpe: true }), ' @9+');
+  assert.equal(formatTargetRpeSummary({ targetRpe: 8, logRpe: false }), ' @8');
+  assert.equal(formatTargetRpeSummary({ targetRpe: null, logRpe: true }), '');
+
+  assert.equal(formatNextTargetSummary({
+    nextTargetReps: 12,
+    nextTargetRepsMax: null,
+    nextIsAmrap: true,
+    nextTargetWeight: 80,
+    nextUnit: 'kg',
+    nextTargetRpe: 9,
+    nextLogRpe: true,
+  }), '12+ x 80kg @9+');
+});
+
+test('Prepare auto-starts only once rest has expired while running', () => {
+  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 0, isPaused: false }), true);
+  assert.equal(shouldAutoStartPreparedSet(true, { remaining: -1, isPaused: false }), true);
+  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 1, isPaused: false }), false);
+  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 0, isPaused: true }), false);
+  assert.equal(shouldAutoStartPreparedSet(false, { remaining: 0, isPaused: false }), false);
 });
 
 test('supersetColor maps group identifiers to distinct high-contrast colors', () => {

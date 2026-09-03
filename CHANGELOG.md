@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.3] - 3 September 2026
+
+### Changed
+- Lifto Workout now checks the shared phone workout once per minute instead of every 15 seconds, while still refreshing after actions and when returning to Lifto.
+
+### Fixed
+- Lost phone requests now return control after 20 seconds instead of leaving loading or discard screens spinning forever.
+- Discarding a missing phone workout now clears the local conflict immediately.
+- AMRAP and logged RPE targets now keep their `+` marker on active and rest screens.
+- The plate loading supplied by Liftosaur now appears below the target weight.
+- Opening Prepare during rest now starts the set automatically when the timer reaches zero.
+- Weight, rep and RPE changes made in Prepare now survive a simultaneous phone refresh.
+
 ## [0.4.2] - 3 September 2026
 
 ### Fixed

@@ -101,6 +101,7 @@
 
 - [x] Add pure rest alert state tracker with foreground zero-crossing and onResume expiry detection.
 - [x] Use the dedicated strong reminder vibration for Workout rest completion.
+- [x] Auto-start a prepared set when an active rest timer expires.
 
 ## Phase 7 - Native workout data integration
 
@@ -135,6 +136,8 @@
 - [x] Reconcile native Workout pauses with Lifto elapsed and rest time without overriding manual rest pause.
 - [x] Refresh native metrics while visible and retry durable pending set writes after focus or network loss.
 - [x] Add the exact Active 2 integration retest checklist.
+- [x] Bound phone requests, reduce passive refresh traffic and coalesce discards.
+- [x] Render AMRAP, logged RPE and resolved plate loading from the Workout API.
 - [ ] Run the checklist on Active 2 firmware 7.23.0.1 at API level 400 and attach evidence.
 
 ## Manual external actions
@@ -152,7 +155,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 475 passing
+- `npm test` - 479 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
@@ -176,3 +179,4 @@
 - 2026-09-02: Added configurable display hold, native pause reconciliation, live metrics, pending sync recovery and an Active 2 retest checklist.
 - 2026-09-02: Generated public Companion and Workout preview QR codes from their registered App IDs for the complete 28-target build matrix.
 - 2026-09-03: Strengthened Workout rest completion with the dedicated four-pulse reminder pattern.
+- 2026-09-03: Fixed stalled requests, excess polling, target markers, plate loading and prepared-set transitions in Workout.

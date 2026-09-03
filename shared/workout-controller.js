@@ -8,7 +8,7 @@
  * extension.
  */
 
-import { SESSION_STATES, createWorkoutSession } from './workout-session.js';
+import { SESSION_STATES, createWorkoutSession, weightStepFor } from './workout-session.js';
 import { MESSAGE_TYPES } from './protocol.js';
 import { workoutToDayPlan } from './workout-api-plan.js';
 import { createWorkoutRefreshPolicy } from './workout-refresh-policy.js';
@@ -95,6 +95,7 @@ export function createWorkoutController({
 
   let directSyncPromise = null;
   let directStartPromise = null;
+  let directDiscardPromise = null;
   let isDirectWriteInFlight = false;
   let isPollingCurrent = false;
   let deferredServerWorkout = null;
@@ -195,6 +196,43 @@ export function createWorkoutController({
       acknowledgedSetCount: session.getWorkoutSetWrites().length,
     });
     deferredServerWorkout = null;
+    persist();
+    notifyChange();
+  }
+
+  function capturePendingOverrides() {
+    const pending = session.view(now()).pending?.set;
+    if (!pending) return null;
+    return {
+      ...(Number.isFinite(pending.weight) && pending.weight !== pending.targetWeight
+        ? { weight: pending.weight }
+        : {}),
+      ...(Number.isFinite(pending.reps) && pending.reps !== pending.targetReps
+        ? { reps: pending.reps }
+        : {}),
+      ...(Number.isFinite(pending.rpe) && pending.rpe !== pending.targetRpe
+        ? { rpe: pending.rpe }
+        : {}),
+    };
+  }
+
+  function restorePendingOverrides(overrides) {
+    if (!overrides) return;
+    const current = session.view(now()).currentSet;
+    if (!current) return;
+    const timestamp = now();
+    if (Number.isFinite(overrides.weight) && overrides.weight !== current.weight) {
+      session.adjustWeight(
+        (overrides.weight - (current.weight ?? 0)) / weightStepFor(current.unit),
+        { timestamp }
+      );
+    }
+    if (Number.isFinite(overrides.reps) && overrides.reps !== current.reps) {
+      session.adjustReps(overrides.reps - (current.reps ?? 0), { timestamp });
+    }
+    if (Number.isFinite(overrides.rpe) && overrides.rpe !== current.rpe) {
+      session.adjustRpe(overrides.rpe - (current.rpe ?? 8), { timestamp });
+    }
     persist();
     notifyChange();
   }
@@ -554,10 +592,11 @@ export function createWorkoutController({
   }
 
   function requestWorkoutRefresh() {
-    if (directSync.mode !== 'DIRECT') return;
+    if (directSync.mode !== 'DIRECT') return Promise.resolve(false);
     policy.request();
-    pollCurrentWorkout().catch((err) => {
+    return pollCurrentWorkout().catch((err) => {
       logError('background workout refresh failed', err);
+      return false;
     });
   }
 
@@ -649,6 +688,7 @@ export function createWorkoutController({
   }
 
   async function discardWorkoutRemote() {
+    if (directDiscardPromise) return directDiscardPromise;
     if (directSync.mode !== 'DIRECT') {
       clear();
       return { success: true };
@@ -671,21 +711,27 @@ export function createWorkoutController({
       return { success: false, reason: 'NO_TRANSPORT' };
     }
 
-    try {
-      await request(MESSAGE_TYPES.DISCARD_WORKOUT, { startTime: view.startedAt });
-      clear();
-      setStatus({ code: SYNC_STATUS_CODES.IDLE });
-      return { success: true };
-    } catch (err) {
-      if (err?.code === 'no_active_workout') {
+    directDiscardPromise = (async () => {
+      try {
+        await request(MESSAGE_TYPES.DISCARD_WORKOUT, { startTime: view.startedAt });
         clear();
         setStatus({ code: SYNC_STATUS_CODES.IDLE });
         return { success: true };
+      } catch (err) {
+        if (err?.code === 'no_active_workout') {
+          clear();
+          setStatus({ code: SYNC_STATUS_CODES.IDLE });
+          return { success: true };
+        }
+        logError('discard workout remote failed', err);
+        setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'DISCARD_FAILED', error: err });
+        throw err;
+      } finally {
+        directDiscardPromise = null;
       }
-      logError('discard workout remote failed', err);
-      setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'DISCARD_FAILED', error: err });
-      throw err;
-    }
+    })();
+
+    return directDiscardPromise;
   }
 
   return {
@@ -746,9 +792,11 @@ export function createWorkoutController({
       ),
     nextSet: (options = {}) => {
       if (deferredServerWorkout) {
+        const overrides = capturePendingOverrides();
         const sw = deferredServerWorkout;
         deferredServerWorkout = null;
         applyAdoptedSnapshot(sw);
+        restorePendingOverrides(overrides);
       } else {
         mutateSession(() => session.nextSet({ timestamp: options.timestamp ?? now() }));
         if (directSync.mode === 'DIRECT') {
