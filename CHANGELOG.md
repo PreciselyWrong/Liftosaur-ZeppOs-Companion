@@ -1,5 +1,14 @@
 # Changelog
 
+## [0.4.6] - 4 September 2026
+
+### Fixed
+- Sets now sync using the started workout in both watch apps, including sets completed before the phone reconnects.
+- Startup synchronization preserves local sets, edits and rest timers.
+
+### Added
+- Active 3 Premium setup instructions and a dedicated hardware test checklist.
+
 ## [0.4.5] - 3 September 2026
 
 ### Fixed

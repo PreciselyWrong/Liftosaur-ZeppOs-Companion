@@ -75,7 +75,12 @@ Once configured, the watch connects directly to Liftosaur Cloud:
 
 ## Step 4: start the application
 
-On your watch, press the side button to open the app list: **Lifto Companion** is ready to launch.
+- **Lifto Companion**: On your watch, press the side button to open the app list: **Lifto Companion** is ready to launch.
+- **Lifto Workout Extension**: The extension runs inside the native Zepp Strength Training workout instead of the app list. Adding the data page is device-specific:
+  - **Amazfit Active 2** (firmware 7.23.0.1):
+    **Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto**
+  - **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5) [TESTED (tester report) installation; not full compatibility certification]:
+    **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
 ## Things to know
 
@@ -91,6 +96,7 @@ On your watch, press the side button to open the app list: **Lifto Companion** i
 | "Download failed" | The QR code expired after 7 days, check the README for a fresh code. |
 | Install hangs or fails | The watch lost Bluetooth connection. Reconnect the watch in the Zepp app and retry. |
 | App does not appear on watch | The watch model is not running Zepp OS 3.6 or later. |
+| Workout data page missing | Follow the device-specific path above. On Active 2, check Settings > More > Data Page. On Active 3 Premium (TESTED tester report), check Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto. |
 | Watch says cannot reach account | Check that the API key starts with `lftsk_` and was entered under Settings in Developer Mode. |
 
 ## Reporting a problem

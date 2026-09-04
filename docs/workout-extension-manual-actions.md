@@ -74,16 +74,33 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run preview:workout
 
 ## 5. Enable Lifto under Strength Training on Watch
 
+Data page setup differs between watch hardware and Zepp OS versions:
+
+### Amazfit Active 2 (firmware 7.23.0.1)
+
 1. On the watch, launch the system **Workout** application.
 2. Select **Strength Training**.
 3. Open **Settings** > **More** > **Data Page** > **Add Page**.
 4. Select **Lifto**.
 
+### Amazfit Active 3 Premium (Zepp OS 6, firmware 6.3.13.5)
+
+*Installation evidence: `TESTED (tester report)`, not full compatibility certification.*
+
+1. On the watch, open **Workout Settings**.
+2. Select **Data page**.
+3. Scroll to the bottom and select **Add page**.
+4. Select **App/Workout Data**.
+5. Tick **Lifto**.
+
 ---
 
 ## 6. Execute Physical Hardware Test Plan
 
-1. Follow the test cases in [docs/workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md).
+1. Follow the test cases in the appropriate device checklist:
+   - [Active 2 Workout Integration Test](active-2-workout-integration-test.md)
+   - [Active 3 Premium Workout Integration Test](active-3-premium-workout-integration-test.md)
+   - General plan: [docs/workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md)
 2. Record watch model, firmware version, Zepp OS version, commit hash, date, result (`pending` / `BLOCKED`), and telemetry.
 3. Capture debug logs via Zeus CLI or Zepp Developer tools where accessible.
 4. Redact all API keys, bearer tokens, and private data before saving log artifacts.
