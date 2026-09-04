@@ -97,10 +97,7 @@ Data page setup differs between watch hardware and Zepp OS versions:
 
 ## 6. Execute Physical Hardware Test Plan
 
-1. Follow the test cases in the appropriate device checklist:
-   - [Active 2 Workout Integration Test](active-2-workout-integration-test.md)
-   - [Active 3 Premium Workout Integration Test](active-3-premium-workout-integration-test.md)
-   - General plan: [docs/workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md)
+1. Follow the test cases in [docs/workout-extension-hardware-test-plan.md](workout-extension-hardware-test-plan.md).
 2. Record watch model, firmware version, Zepp OS version, commit hash, date, result (`pending` / `BLOCKED`), and telemetry.
 3. Capture debug logs via Zeus CLI or Zepp Developer tools where accessible.
 4. Redact all API keys, bearer tokens, and private data before saving log artifacts.

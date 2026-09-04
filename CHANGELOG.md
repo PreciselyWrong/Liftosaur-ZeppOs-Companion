@@ -7,7 +7,8 @@
 - Startup synchronization preserves local sets, edits and rest timers.
 
 ### Added
-- Active 3 Premium setup instructions and a dedicated hardware test checklist.
+- Active 3 Premium setup instructions for adding Lifto to Strength Training.
+- Fresh install codes for both apps, valid until 11 September 2026.
 
 ## [0.4.5] - 3 September 2026
 
