@@ -44,8 +44,6 @@ Workout Extension documentation:
 
 - [Manual Setup Actions](docs/workout-extension-manual-actions.md)
 - [Hardware Test Plan](docs/workout-extension-hardware-test-plan.md)
-- [Active 2 Hardware Test Checklist](docs/active-2-workout-integration-test.md)
-- [Active 3 Premium Hardware Test Checklist](docs/active-3-premium-workout-integration-test.md)
 
 ---
 
@@ -55,7 +53,7 @@ Workout Extension documentation:
 | --- | --- |
 | <img src="docs/test-build-qr.png" width="240" alt="Lifto Companion test build QR code" /> | <img src="docs/workout-extension-preview-qr.png" width="240" alt="Lifto Workout Extension test build QR code" /> |
 | App ID `1123411` | App ID `1125789` |
-| Expires **2026-09-10 at 15:51:39 UTC** (17:51:39 CEST) | Expires **2026-09-10 at 15:52:01 UTC** (17:52:01 CEST) |
+| Expires **2026-09-11 at 15:03:54 UTC** (17:03:54 CEST) | Expires **2026-09-11 at 15:04:33 UTC** (17:04:33 CEST) |
 
 Zepp keeps each preview for seven days. After its exact deadline, the QR returns
 a download error and cannot be renewed; this README must receive a newly generated code.
