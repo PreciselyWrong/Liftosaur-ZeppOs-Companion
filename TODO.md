@@ -139,6 +139,7 @@
 - [x] Bound phone requests, reduce passive refresh traffic and coalesce discards.
 - [x] Render AMRAP, logged RPE and resolved plate loading from the Workout API.
 - [x] Replace minute polling with action checkpoints and a two-minute safety check during active sets and rest.
+- [ ] Retest startup and per-set phone synchronization on Active 3 Premium firmware 6.3.13.5 using its dedicated checklist.
 - [ ] Run the checklist on Active 2 firmware 7.23.0.1 at API level 400 and attach evidence.
 
 ## Manual external actions
@@ -183,3 +184,7 @@
 - 2026-09-03: Fixed stalled requests, excess polling, target markers, plate loading and prepared-set transitions in Workout.
 - 2026-09-03: Reduced server-heavy workout reads while preserving concurrent phone and watch updates.
 - 2026-09-03: Restored reliable background redraws and bounded synchronization during rest in both watch apps.
+
+## Done
+
+- Bound live startup set IDs in both apps and documented Active 3 Premium installation and retesting.

@@ -8,7 +8,7 @@
  * extension.
  */
 
-import { SESSION_STATES, createWorkoutSession, weightStepFor } from './workout-session.js';
+import { EVENT_TYPES, SESSION_STATES, createWorkoutSession, weightStepFor } from './workout-session.js';
 import { MESSAGE_TYPES } from './protocol.js';
 import { workoutToDayPlan } from './workout-api-plan.js';
 import { createWorkoutRefreshPolicy } from './workout-refresh-policy.js';
@@ -367,6 +367,63 @@ export function createWorkoutController({
     notifyChange();
   }
 
+  function bindStartedWorkout(workout) {
+    const fail = (code) => {
+      const error = new Error('Started workout cannot be matched to the local plan');
+      error.code = code;
+      throw error;
+    };
+    const livePlan = mapWorkout(workout, { units: dayPlan?.unit || null });
+    if (!livePlan || !livePlan.unit) fail('INVALID_START_WORKOUT');
+    if (livePlan.week !== dayPlan.week || livePlan.dayInWeek !== dayPlan.dayInWeek) {
+      fail('DAY_MISMATCH');
+    }
+    if (livePlan.programId !== dayPlan.programId
+      || livePlan.exercises.length !== dayPlan.exercises.length) fail('START_PLAN_MISMATCH');
+
+    const setIds = new Set();
+    const exercises = dayPlan.exercises.map((exercise, index) => {
+      const live = livePlan.exercises[index];
+      // Entry IDs may repeat; validate the ordered day structure before rebinding.
+      if (!live.entryId || live.entryId !== exercise.entryId
+        || (exercise.exerciseId != null && live.exerciseId !== exercise.exerciseId)
+        || live.supersetGroup !== (exercise.supersetGroup ?? exercise.supersetTag ?? null)) {
+        fail('START_PLAN_MISMATCH');
+      }
+      const bindSets = (sets, liveSets) => {
+        if (sets.length !== liveSets.length) fail('START_PLAN_MISMATCH');
+        return sets.map((set, setIndex) => {
+          const liveSet = liveSets[setIndex];
+          if (!liveSet.setId || setIds.has(liveSet.setId)
+            || (set.serverIndex != null && set.serverIndex !== liveSet.serverIndex)) {
+            fail('START_PLAN_MISMATCH');
+          }
+          setIds.add(liveSet.setId);
+          return { ...set, setId: liveSet.setId, serverIndex: liveSet.serverIndex };
+        });
+      };
+      return {
+        ...exercise,
+        entryId: live.entryId,
+        warmupSets: bindSets(exercise.warmupSets || [], live.warmupSets),
+        sets: bindSets(exercise.sets || [], live.sets),
+      };
+    });
+    const journal = session.getJournal().map((event) => {
+      if (event.type !== EVENT_TYPES.COMPLETE_SET) return event;
+      const exercise = exercises.find((item) => item.index === event.payload.exerciseIndex);
+      const set = exercise && [...exercise.warmupSets, ...exercise.sets][event.payload.setIndex - 1];
+      if (!set) fail('START_PLAN_MISMATCH');
+      return { ...event, payload: { ...event.payload, entryId: exercise.entryId, setId: set.setId } };
+    });
+    // Rebind only identity: replay against unchanged targets to preserve local edits,
+    // navigation and absolute timers. The normal drain adopts targets after acknowledgement.
+    const plan = { ...dayPlan, exercises };
+    const reboundSession = createWorkoutSession({ plan, initialJournal: journal });
+    dayPlan = plan;
+    session = reboundSession;
+  }
+
   function ensureDirectWorkoutStarted() {
     if (directSync.mode !== 'DIRECT' || directSync.startConfirmed) {
       return Promise.resolve(false);
@@ -384,6 +441,7 @@ export function createWorkoutController({
     }
 
     const view = session.view(now());
+    const startingSession = session;
     const payload = {
       ...(dayPlan?.programId ? { programId: dayPlan.programId } : {}),
       ...(dayPlan?.week !== null && dayPlan?.week !== undefined ? { week: dayPlan.week } : {}),
@@ -393,7 +451,11 @@ export function createWorkoutController({
 
     directStartPromise = (async () => {
       try {
-        const res = await request(MESSAGE_TYPES.START_WORKOUT, payload);
+        const res = await request(MESSAGE_TYPES.START_WORKOUT, payload).catch((err) => {
+          if (session !== startingSession) return null;
+          throw err;
+        });
+        if (session !== startingSession) return false;
         policy.markAuthoritativeResponse();
         const payloadObj = res ? res.payload : null;
         const returnedWorkout = payloadObj ? payloadObj.workout : null;
@@ -406,6 +468,7 @@ export function createWorkoutController({
             return false;
           }
         }
+        bindStartedWorkout(returnedWorkout);
         directSync.startConfirmed = true;
         persist();
         setStatus({ code: SYNC_STATUS_CODES.IDLE });
@@ -449,7 +512,7 @@ export function createWorkoutController({
     directSyncPromise = (async () => {
       try {
         await ensureDirectWorkoutStarted();
-        if (directSync.conflict) return false;
+        if (directSync.conflict || !directSync.startConfirmed) return false;
 
         while (true) {
           if (directSync.conflict) break;

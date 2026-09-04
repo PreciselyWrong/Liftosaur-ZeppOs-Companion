@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-486%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-493%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -29,18 +29,23 @@ The separate Workout Extension runs inside Zepp Strength Training. It keeps the 
 
 The two apps are complementary and can be installed together. Liftosaur Cloud is their shared workout handoff; credentials remain inside each app's phone Side Service.
 
-### Add Lifto to Strength Training on Active 2
+### Add Lifto to Strength Training
 
-Installing Lifto Workout does not automatically add its data page to a workout. On the watch, open:
+Installing Lifto Workout does not automatically add its data page to a workout. Device paths differ:
 
-**Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto**
+- **Amazfit Active 2** (firmware 7.23.0.1):
+  **Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto**
+- **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5):
+  **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
-Lifto then appears as one of the pages inside the native Strength Training workout.
+Lifto then appears as one of the pages inside the native Strength Training workout. Installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
 
 Workout Extension documentation:
 
 - [Manual Setup Actions](docs/workout-extension-manual-actions.md)
 - [Hardware Test Plan](docs/workout-extension-hardware-test-plan.md)
+- [Active 2 Hardware Test Checklist](docs/active-2-workout-integration-test.md)
+- [Active 3 Premium Hardware Test Checklist](docs/active-3-premium-workout-integration-test.md)
 
 ---
 
@@ -67,12 +72,14 @@ Lifto Companion supports that full matrix. For Lifto Workout, inclusion in the p
 bundle is not a compatibility claim: Zepp currently documents Workout Extension support
 for T-Rex 3, Cheetah Pro, Cheetah (Round), Cheetah (Square), T-Rex Ultra, and Falcon.
 This project has additionally loaded it on Active 2 (Round), firmware 7.23.0.1 at API
-level 400; the remaining models still require physical validation. See Zepp's
+level 400. On Amazfit Active 3 Premium (Zepp OS 6, firmware 6.3.13.5), data page installation
+is TESTED (tester report), not a full compatibility certification. The remaining models still
+require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.4.5 beta.
+**Version:** Lifto Companion 0.4.6 beta.
 
-**Workout version:** Lifto Workout 0.4.5 beta.
+**Workout version:** Lifto Workout 0.4.6 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one

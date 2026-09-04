@@ -499,7 +499,7 @@ function createFakeTransport() {
     if (handler) {
       return handler(payload);
     }
-    return Promise.resolve({ type: `${type}_DATA`, payload: {} });
+    return Promise.resolve({ type: `${type}_DATA`, payload: type === MESSAGE_TYPES.START_WORKOUT ? { workout: { ...SAMPLE_SERVER_WORKOUT, startTime: payload.startTime } } : {} });
   }
 
   return {
@@ -599,7 +599,7 @@ test('concurrent drains share one promise and acknowledge only confirmed batch l
   let resolveSync;
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     new Promise((resolve) => {
@@ -645,7 +645,7 @@ test('retryable transport failure preserves queue and returns pending status', a
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
     const err = new Error('Network timeout');
@@ -679,7 +679,7 @@ test('non-retryable failure creates explicit conflict', async () => {
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
     const err = new Error('Invalid set index');
@@ -713,7 +713,7 @@ test('poll cannot adopt after a local write started later', async () => {
   let resolvePoll;
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () =>
     new Promise((resolve) => {
@@ -793,7 +793,7 @@ test('REST snapshot defers and applies only on next set', async () => {
   };
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({
@@ -863,7 +863,7 @@ test('finish drains then sends exact times/intervals then clears persistence onl
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
@@ -909,7 +909,7 @@ test('failed finish keeps snapshot and finish intent', async () => {
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
@@ -1037,7 +1037,7 @@ test('concurrent discard requests share one remote write', async () => {
   let discardCalls = 0;
   const transport = createFakeTransport();
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.DISCARD_WORKOUT, () => {
     discardCalls += 1;
@@ -1072,7 +1072,7 @@ test('restored finish/discard intents can be resumed by a renderer', async () =>
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: {} })
@@ -1120,7 +1120,7 @@ test('retryPendingWrites drains durable unacknowledged direct set writes after n
 
   let networkAvailable = false;
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => {
     if (!networkAvailable) {
@@ -1174,7 +1174,7 @@ test('REST issues one passive GET after 120 seconds without increasing the caden
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({
@@ -1228,7 +1228,7 @@ test('nextSet from REST schedules/executes one checkpoint GET when eligible with
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({
@@ -1278,7 +1278,7 @@ test('ACTIVE_SET issues safety GET at 120 seconds', async () => {
   const transport = createFakeTransport();
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
-    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: {} })
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
   let getCalls = 0;
   transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () => {
@@ -1312,4 +1312,187 @@ test('ACTIVE_SET issues safety GET at 120 seconds', async () => {
   const duePoll = await controller.pollCurrent();
   assert.equal(duePoll, true);
   assert.equal(getCalls, 1);
+});
+
+function startedWorkoutWithNewIds() {
+  const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  for (const entry of workout.entries) {
+    for (const set of [...(entry.warmupSets || []), ...entry.sets]) {
+      set.setId = `live-${set.setId}`;
+    }
+  }
+  return workout;
+}
+
+test('startup binds live set IDs before the first set without needing Retry sync', async () => {
+  const transport = createFakeTransport();
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const live = startedWorkoutWithNewIds();
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => Promise.resolve({ payload: { workout: live } }));
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, ({ sets }) => {
+    assert.equal(store.load().plan.exercises[0].sets[0].setId, 'live-set-1');
+    assert.equal(sets[0].setId, 'live-set-1');
+    return Promise.resolve({ payload: {} });
+  });
+  const controller = createWorkoutController({ store, request: transport.request, now: () => 1000 });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+  controller.startWorkout();
+  assert.equal(transport.calls[0].type, MESSAGE_TYPES.START_WORKOUT);
+  await controller.ensureStarted();
+  assert.equal(controller.view().currentSet.setId, 'live-set-1');
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+  assert.equal(controller.sync().conflict, false);
+  assert.equal(transport.calls.filter(({ type }) => type === MESSAGE_TYPES.START_WORKOUT).length, 1);
+});
+
+test('delayed startup rebinds queued sets durably without changing rest, edits or navigation', async () => {
+  const transport = createFakeTransport();
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let resolveStart;
+  let resolveSets;
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => new Promise((resolve) => { resolveStart = resolve; }));
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => new Promise((resolve) => { resolveSets = resolve; }));
+  let time = 1000;
+  const controller = createWorkoutController({ store, request: transport.request, now: () => time });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+  controller.startWorkout();
+  controller.adjustWeight(2);
+  time = 2000;
+  controller.completeSet({ repsLeft: 2, setTimer: 30, userVars: { effort: 7 } });
+  controller.selectExercise(1);
+  controller.adjustReps(2);
+  time = 3000;
+  controller.completeSet();
+  controller.pauseRest();
+  controller.adjustWeight(1);
+  const before = controller.view();
+  const journal = controller.getJournal();
+  const intervals = controller.getIntervals();
+  resolveStart({ payload: { workout: startedWorkoutWithNewIds() } });
+  await controller.ensureStarted();
+  const expectedJournal = journal.map((event) => event.type !== 'COMPLETE_SET' ? event : {
+    ...event, payload: { ...event.payload, setId: `live-${event.payload.setId}` },
+  });
+  assert.deepEqual(controller.getJournal(), expectedJournal);
+  assert.deepEqual(store.load().journal, expectedJournal);
+  assert.equal(controller.view().state, before.state);
+  assert.deepEqual(controller.view().rest, before.rest);
+  assert.equal(controller.view().entryId, before.entryId);
+  assert.deepEqual(controller.view().pending.set.weight, before.pending.set.weight);
+  assert.deepEqual(controller.getIntervals(), intervals);
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+  assert.deepEqual(controller.getWorkoutSetWrites().map(({ setId }) => setId), ['live-set-1', 'live-set-3']);
+  const restored = createWorkoutController({ store, now: () => time });
+  assert.equal(restored.restore().success, true);
+  assert.deepEqual(restored.getWorkoutSetWrites(), controller.getWorkoutSetWrites());
+  assert.deepEqual(restored.view(), controller.view());
+  resolveSets({ payload: {} });
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 2);
+});
+
+test('startup refuses a different day without losing queued sets or sending them', async () => {
+  const transport = createFakeTransport();
+  let resolveStart;
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => new Promise((resolve) => { resolveStart = resolve; }));
+  const controller = createWorkoutController({ request: transport.request, now: () => 1000 });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+  controller.startWorkout();
+  controller.completeSet();
+  const journal = controller.getJournal();
+  const live = startedWorkoutWithNewIds();
+  live.dayData.dayInWeek = 2;
+  resolveStart({ payload: { workout: live } });
+  await assert.rejects(controller.ensureStarted(), { code: 'DAY_MISMATCH' });
+  assert.equal(await controller.syncSets(), false);
+  assert.deepEqual(controller.getJournal(), journal);
+  assert.equal(controller.sync().startConfirmed, false);
+  assert.equal(transport.calls.some(({ type }) => type === MESSAGE_TYPES.SYNC_WORKOUT_SETS), false);
+});
+
+test('startup preserves the local journal when the live structure is unsafe to match', async () => {
+  for (const [label, change] of [
+    ['different program', (workout) => { workout.programId = 'other-program'; }],
+    ['reordered exercises', (workout) => { workout.entries.reverse(); }],
+    ['changed set count', (workout) => { workout.entries[0].sets.pop(); }],
+    ['changed set index', (workout) => { workout.entries[0].sets[0].index = 9; }],
+    ['missing set ID', (workout) => { workout.entries[0].sets[0].setId = null; }],
+    ['duplicate set ID', (workout) => { workout.entries[0].sets[1].setId = workout.entries[0].sets[0].setId; }],
+  ]) {
+    const store = createSessionStore(createMemoryStorageAdapter());
+    const transport = createFakeTransport();
+    let resolveStart;
+    transport.on(MESSAGE_TYPES.START_WORKOUT, () => new Promise((resolve) => { resolveStart = resolve; }));
+    const controller = createWorkoutController({ store, request: transport.request, now: () => 1000 });
+    controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+    controller.startWorkout();
+    controller.completeSet();
+    const plan = controller.plan();
+    const journal = controller.getJournal();
+    const live = startedWorkoutWithNewIds();
+    change(live);
+    resolveStart({ payload: { workout: live } });
+    await assert.rejects(controller.ensureStarted(), { code: 'START_PLAN_MISMATCH' }, label);
+    assert.equal(controller.sync().startConfirmed, false);
+    assert.equal(controller.sync().conflict, true);
+    assert.equal(controller.plan(), plan);
+    assert.deepEqual(store.load().journal, journal);
+    assert.equal(transport.calls.some(({ type }) => type === MESSAGE_TYPES.SYNC_WORKOUT_SETS), false);
+  }
+});
+
+test('startup rebinds warmups and repeated entry IDs by their validated positions after restart', async () => {
+  const preview = structuredClone(SAMPLE_SERVER_WORKOUT);
+  preview.entries.push(structuredClone(preview.entries[0]));
+  preview.entries[2].sets.forEach((set) => { set.setId = `repeat-${set.setId}`; });
+  preview.entries[0].warmupSets = [{ index: 0, setId: 'warmup', weight: '20kg', reps: 10, timer: 30, isWarmup: true }];
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const offline = createWorkoutController({ store, now: () => 1000 });
+  offline.loadPlan(workoutToDayPlan(preview));
+  offline.startWorkout();
+  offline.completeSet();
+  offline.selectExercise(2);
+  offline.completeSet();
+  const transport = createFakeTransport();
+  const live = structuredClone(preview);
+  for (const entry of live.entries) {
+    for (const set of [...(entry.warmupSets || []), ...entry.sets]) set.setId = `live-${set.setId}`;
+  }
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => Promise.resolve({ payload: { workout: live } }));
+  const restored = createWorkoutController({ store, request: transport.request, now: () => 2000 });
+  assert.equal(restored.restore().success, true);
+  await restored.retryPendingWrites();
+  const sets = transport.calls.find(({ type }) => type === MESSAGE_TYPES.SYNC_WORKOUT_SETS).payload.sets;
+  assert.deepEqual(sets.map(({ setId }) => setId), ['live-warmup', 'live-repeat-set-1']);
+  assert.equal(restored.sync().acknowledgedSetCount, 2);
+});
+
+test('startup cannot confirm without a live workout response', async () => {
+  const transport = createFakeTransport();
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => Promise.resolve({ payload: {} }));
+  const controller = createWorkoutController({ request: transport.request, now: () => 1000 });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+  controller.startWorkout();
+  await assert.rejects(controller.ensureStarted(), { code: 'INVALID_START_WORKOUT' });
+  assert.equal(controller.sync().startConfirmed, false);
+});
+
+test('a delayed startup response cannot rebind a replacement local session', async () => {
+  const transport = createFakeTransport();
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let resolveStart;
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () => new Promise((resolve) => { resolveStart = resolve; }));
+  const controller = createWorkoutController({ store, request: transport.request, now: () => 1000 });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT));
+  controller.startWorkout();
+  const pending = controller.ensureStarted();
+  controller.clear();
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT), { persist: true });
+  const before = store.load();
+  resolveStart({ payload: { workout: startedWorkoutWithNewIds() } });
+  assert.equal(await pending, false);
+  assert.deepEqual(store.load(), before);
+  assert.equal(controller.sync().startConfirmed, false);
 });
