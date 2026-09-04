@@ -78,6 +78,7 @@
 - ⛔ Push the public Companion or Workout branches with stale or missing README preview QR codes - testers need installable builds for both real App IDs and every claimed compatible model.
 - ⛔ Generate a public Workout preview with a synthetic App ID - only App ID `1125789` maps to the registered Lifto Workout Extension application.
 - ⛔ Infer a tested build, exact test date or root cause from report age or a generic sync screenshot - capture the build and error evidence separately.
+- ⛔ Create new checklists or ask community testers to complete them for routine fixes - keep feedback requests brief and limited to normal use.
 
 ## Traps
 
@@ -95,5 +96,5 @@
 
 - Version 0.4.6 beta: both apps bind live startup set IDs without losing offline sets, edits or rest state; 493 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
-- Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Retest with docs/active-3-premium-workout-integration-test.md.
+- Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Await feedback from normal use of 0.4.6.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.
