@@ -5,6 +5,8 @@
 ### Fixed
 - Exercise details now stay available after workout synchronization.
 - Plate loading now follows manual weight changes.
+- AMRAP repetitions and logged RPE values now keep their `+` marker.
+- Repeated weight changes now keep Lifto Workout open.
 
 ## [0.4.6] - 4 September 2026
 

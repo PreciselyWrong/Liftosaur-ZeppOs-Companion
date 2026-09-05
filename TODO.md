@@ -187,5 +187,6 @@
 
 ## Done
 
+- Marked AMRAP repetitions and logged RPE values on the exercise controls.
 - Kept exercise details and plate loading accurate across workout synchronization.
 - Bound live startup set IDs in both apps and documented Active 3 Premium installation.

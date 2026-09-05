@@ -34,6 +34,7 @@ import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
+import { formatEditableSetValue } from '../../shared/workout-extension-nav.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
 import {
   TYPOGRAPHY,
@@ -2519,7 +2520,7 @@ function renderActiveSetScreen(view) {
     y: px(controls.rows[1].y),
     height: px(controls.rowHeight),
     label: 'REPS',
-    value: set.reps === null ? '-' : String(set.reps),
+    value: formatEditableSetValue(set.reps, set.isAmrap),
     onMinus: () => persistAndRender(() => session.adjustReps(-1)),
     onPlus: () => persistAndRender(() => session.adjustReps(1)),
   });
@@ -2529,7 +2530,7 @@ function renderActiveSetScreen(view) {
       y: px(controls.rows[2].y),
       height: px(controls.rowHeight),
       label: 'RPE',
-      value: set.rpe === null ? '-' : String(set.rpe),
+      value: formatEditableSetValue(set.rpe, set.logRpe),
       onMinus: () => persistAndRender(() => session.adjustRpe(-0.5)),
       onPlus: () => persistAndRender(() => session.adjustRpe(0.5)),
     });
