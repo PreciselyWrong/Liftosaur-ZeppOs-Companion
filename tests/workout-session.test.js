@@ -675,42 +675,51 @@ test('rest view includes next target weight, reps, unit and warmups', () => {
   assert.equal(vRest.rest.nextUnit, 'kg');
 });
 
-test('exercise notes are exposed in active set and rest views', () => {
-  const plan = {
-    programId: 'p1',
-    unit: 'kg',
-    exercises: [
-      {
-        index: 1,
-        name: 'Bench Press',
-        notes: 'Pause 2s au bas',
-        sets: [
-          { index: 1, targetReps: 5, targetWeight: 80, restSeconds: 90 },
-        ],
-      },
-      {
-        index: 2,
-        name: 'Incline Dumbbell Press',
-        notes: 'Banc a 30 degres',
-        sets: [
-          { index: 1, targetReps: 8, targetWeight: 24, restSeconds: 60 },
-        ],
-      },
-    ],
-  };
+test('exercise details combine description and notes without duplicates', () => {
+  const cases = [
+    ['Technique cue', null, 'Technique cue'],
+    [null, 'Session note', 'Session note'],
+    ['Technique cue', 'Session note', 'Technique cue\n\nSession note'],
+    ['Technique cue', 'Technique cue\nSession note', 'Technique cue\nSession note'],
+  ];
 
-  const session = createWorkoutSession({ plan });
+  for (const [description, notes, expected] of cases) {
+    const session = createWorkoutSession({
+      plan: {
+        unit: 'kg',
+        exercises: [{
+          name: 'Bench Press',
+          description,
+          notes,
+          sets: [{ targetReps: 5, targetWeight: 80 }],
+        }],
+      },
+    });
+    session.startWorkout({ timestamp: 0 });
+    assert.equal(session.view(0).exerciseDetails, expected);
+  }
+});
+
+test('exercise details are exposed for the next set during rest', () => {
+  const session = createWorkoutSession({
+    plan: {
+      unit: 'kg',
+      exercises: [
+        { name: 'Bench Press', sets: [{ targetReps: 5, targetWeight: 80, restSeconds: 60 }] },
+        {
+          name: 'Incline Press',
+          description: 'Bench at 30 degrees',
+          sets: [{ targetReps: 8, targetWeight: 24 }],
+        },
+      ],
+    },
+  });
   session.startWorkout({ timestamp: 0 });
-
-  const activeView = session.view(0);
-  assert.equal(activeView.exerciseNotes, 'Pause 2s au bas');
-
-  // Complete set 1 -> rest before exercise 2
   session.completeSet({ timestamp: 1000 });
-  const restView = session.view(1000);
-  assert.equal(restView.state, SESSION_STATES.REST);
-  assert.equal(restView.rest.nextExerciseName, 'Incline Dumbbell Press');
-  assert.equal(restView.rest.nextExerciseNotes, 'Banc a 30 degres');
+
+  const view = session.view(1000);
+  assert.equal(view.rest.nextExerciseDetails, 'Bench at 30 degrees');
+  assert.equal(view.pending.exerciseDetails, 'Bench at 30 degrees');
 });
 
 test('pausing rest pauses the global workout elapsed time', () => {

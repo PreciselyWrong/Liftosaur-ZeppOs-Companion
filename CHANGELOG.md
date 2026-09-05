@@ -1,5 +1,11 @@
 # Changelog
 
+## [0.4.7] - 5 September 2026
+
+### Fixed
+- Exercise details now stay available after workout synchronization.
+- Plate loading now follows manual weight changes.
+
 ## [0.4.6] - 4 September 2026
 
 ### Fixed
