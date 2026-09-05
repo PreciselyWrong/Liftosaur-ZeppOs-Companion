@@ -53,7 +53,7 @@ Workout Extension documentation:
 | --- | --- |
 | <img src="docs/test-build-qr.png" width="240" alt="Lifto Companion test build QR code" /> | <img src="docs/workout-extension-preview-qr.png" width="240" alt="Lifto Workout Extension test build QR code" /> |
 | App ID `1123411` | App ID `1125789` |
-| Expires **2026-09-11 at 15:03:54 UTC** (17:03:54 CEST) | Expires **2026-09-11 at 15:04:33 UTC** (17:04:33 CEST) |
+| Expires **2026-09-12 at 11:23:22 UTC** (13:23:22 CEST) | Expires **2026-09-12 at 11:24:06 UTC** (13:24:06 CEST) |
 
 Zepp keeps each preview for seven days. After its exact deadline, the QR returns
 a download error and cannot be renewed; this README must receive a newly generated code.

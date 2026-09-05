@@ -21,7 +21,7 @@ You need:
   <img src="test-build-qr.png" width="220" alt="Test build QR code" />
 </p>
 
-This Companion code expires on **2026-09-11 at 15:03:54 UTC** (17:03:54 Central European Summer Time).
+This Companion code expires on **2026-09-12 at 11:23:22 UTC** (13:23:22 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -84,7 +84,7 @@ Once configured, the watch connects directly to Liftosaur Cloud:
 
 ## Things to know
 
-- **The QR code expires after 7 days** (on 2026-09-11 at 15:03:54 UTC, or 17:03:54 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
+- **The QR code expires after 7 days** (on 2026-09-12 at 11:23:22 UTC, or 13:23:22 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
 - **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
 - **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 
