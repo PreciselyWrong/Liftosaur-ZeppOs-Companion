@@ -49,6 +49,7 @@ import {
   EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
+  formatEditableSetValue,
   formatWeightValue,
   formatTargetRepsSummary,
   formatTargetRpeSummary,
@@ -1265,7 +1266,7 @@ function renderReadyScreen(view) {
   });
 }
 
-function renderStepper({ y, height, label, value, onMinus, onPlus }) {
+function renderStepper({ key, y, height, label, value, onMinus, onPlus }) {
   const buttonSize = height;
   addWidget(widget.BUTTON, {
     x: px(74),
@@ -1280,7 +1281,7 @@ function renderStepper({ y, height, label, value, onMinus, onPlus }) {
     click_func: onMinus,
   });
 
-  addWidget(widget.TEXT, {
+  addLiveLabel(`${key}-value`, {
     x: px(142),
     y,
     w: px(196),
@@ -1293,7 +1294,7 @@ function renderStepper({ y, height, label, value, onMinus, onPlus }) {
     text: value,
   });
 
-  addWidget(widget.TEXT, {
+  addLiveLabel(`${key}-label`, {
     x: px(142),
     y: y + height - px(28),
     w: px(196),
@@ -1318,6 +1319,38 @@ function renderStepper({ y, height, label, value, onMinus, onPlus }) {
     text_size: font('value'),
     click_func: onPlus,
   });
+}
+
+function refreshActiveSetControls() {
+  const view = workoutController.view();
+  const isResting = view.state === SESSION_STATES.REST && view.rest;
+  const pending = view.pending;
+  const set = (isResting && pending ? pending.set : null) || view.currentSet;
+  const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
+  if (!set) return;
+
+  consumeControllerUiChange();
+  const updates = [
+    updateLiveWidget('weight-value', {
+      text: set.weight === null || set.weight === undefined ? '-' : String(set.weight),
+    }),
+    updateLiveWidget('weight-label', {
+      text: formatLoadoutLabel(
+        set.weight,
+        loadingEquipment,
+        view.unit,
+        set.plates,
+        set.targetWeight,
+      ) || (view.unit || 'KG').toUpperCase(),
+    }),
+    updateLiveWidget('reps-value', {
+      text: formatEditableSetValue(set.reps, set.isAmrap),
+    }),
+    updateLiveWidget('rpe-value', {
+      text: formatEditableSetValue(set.rpe, set.logRpe),
+    }),
+  ];
+  if (updates.includes(false)) controllerUiDirty = true;
 }
 
 function renderActiveSetScreen(view) {
@@ -1460,48 +1493,51 @@ function renderActiveSetScreen(view) {
 
   // Steppers
   renderStepper({
+    key: 'weight',
     y: px(controls.rows[0].y),
     height: px(controls.rowHeight),
     label: formatLoadoutLabel(set?.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight) || (view.unit || 'KG').toUpperCase(),
     value: set?.weight === null || set?.weight === undefined ? '-' : String(set.weight),
     onMinus: () => {
       workoutController.adjustWeight(-1);
-      renderUI();
+      refreshActiveSetControls();
     },
     onPlus: () => {
       workoutController.adjustWeight(1);
-      renderUI();
+      refreshActiveSetControls();
     },
   });
 
   renderStepper({
+    key: 'reps',
     y: px(controls.rows[1].y),
     height: px(controls.rowHeight),
     label: 'REPS',
-    value: set?.reps === null || set?.reps === undefined ? '-' : String(set.reps),
+    value: formatEditableSetValue(set?.reps, set?.isAmrap),
     onMinus: () => {
       workoutController.adjustReps(-1);
-      renderUI();
+      refreshActiveSetControls();
     },
     onPlus: () => {
       workoutController.adjustReps(1);
-      renderUI();
+      refreshActiveSetControls();
     },
   });
 
   if (controls.showRpe) {
     renderStepper({
+      key: 'rpe',
       y: px(controls.rows[2].y),
       height: px(controls.rowHeight),
       label: 'RPE',
-      value: set?.rpe === null || set?.rpe === undefined ? '-' : String(set.rpe),
+      value: formatEditableSetValue(set?.rpe, set?.logRpe),
       onMinus: () => {
         workoutController.adjustRpe(-0.5);
-        renderUI();
+        refreshActiveSetControls();
       },
       onPlus: () => {
         workoutController.adjustRpe(0.5);
-        renderUI();
+        refreshActiveSetControls();
       },
     });
   }
