@@ -518,3 +518,107 @@ test('a history call that fails does not cost the user the day plan', async () =
   const plan = await createProgramService({ client }).getDayPlan('prog-1', 1, 1);
   assert.equal(plan.exercises.length, 2);
 });
+
+test('commitHistory fails closed when history lookup fails after lost response and does not double post on retry', async () => {
+  const recordText = '2026-08-14T09:00:00.000Z / program: "Test" / dayName: "Day A" / week: 1 / dayInWeek: 1 / duration: 3600s / exercises: {\n  Squat / 1x5 100kg\n}';
+  const startedAt = Date.parse('2026-08-14T09:00:00.000Z');
+
+  const serverRecords = [];
+  let createCalls = 0;
+  let listHistoryError = null;
+
+  const client = createFakeClient({
+    async createHistoryRecord(text) {
+      createCalls++;
+      serverRecords.push({ id: 88, text });
+      // Lookup fails after write reached server
+      listHistoryError = new Error('History service temporary failure');
+      const err = new Error('Connection lost after server write');
+      err.status = 0;
+      throw err;
+    },
+    async listHistory() {
+      if (listHistoryError) {
+        throw listHistoryError;
+      }
+      return { records: serverRecords, hasMore: false, nextCursor: null };
+    },
+  });
+
+  const firstService = createProgramService({ client });
+
+  // During first commit: preflight succeeds, create writes to server then throws lost response, lookup in catch fails
+  await assert.rejects(
+    () => firstService.commitHistory(recordText, startedAt),
+    /History service temporary failure/
+  );
+  assert.equal(createCalls, 1, 'initial write reached server once');
+
+  // Retry with a fresh service while lookup is still failing MUST NOT POST again
+  const retryService = createProgramService({ client });
+  await assert.rejects(
+    () => retryService.commitHistory(recordText, startedAt),
+    /History service temporary failure/
+  );
+  assert.equal(createCalls, 1, 'preflight lookup failure aborted before second POST');
+
+  // Once history lookup recovers, it detects the existing record and returns alreadyExisted
+  listHistoryError = null;
+  const recoveredService = createProgramService({ client });
+  const result = await recoveredService.commitHistory(recordText, startedAt);
+  assert.equal(result.id, 88);
+  assert.equal(result.alreadyExisted, true);
+  assert.equal(createCalls, 1, 'no duplicate record was created');
+});
+
+test('commitHistory preflight lookup failure produces no POST and valid absence allows one write', async () => {
+  const recordText = '2026-08-14T09:00:00.000Z / program: "Test" / dayName: "Day A" / week: 1 / dayInWeek: 1 / duration: 3600s / exercises: {\n  Squat / 1x5 100kg\n}';
+  const startedAt = Date.parse('2026-08-14T09:00:00.000Z');
+
+  let createCalls = 0;
+  let listFails = true;
+
+  const client = createFakeClient({
+    async createHistoryRecord(text) {
+      createCalls++;
+      return { id: 77, text };
+    },
+    async listHistory() {
+      if (listFails) throw new Error('Lookup offline');
+      return { records: [], hasMore: false, nextCursor: null };
+    },
+  });
+
+  const service = createProgramService({ client });
+
+  // Preflight failure: no POST
+  await assert.rejects(() => service.commitHistory(recordText, startedAt), /Lookup offline/);
+  assert.equal(createCalls, 0, 'did not POST when preflight lookup failed');
+
+  // Valid absence: exactly one write
+  listFails = false;
+  const result = await service.commitHistory(recordText, startedAt);
+  assert.equal(result.id, 77);
+  assert.equal(result.alreadyExisted, false);
+  assert.equal(createCalls, 1);
+});
+
+test('finishWorkout fails closed if history lookup fails during session check', async () => {
+  const client = createFakeClient({
+    async listHistory() {
+      throw new Error('History check unavailable');
+    },
+  });
+  const service = createProgramService({ client });
+  const payload = {
+    programId: 'prog-1',
+    week: 1,
+    day: 1,
+    startedAt: Date.parse('2026-08-14T09:00:00.000Z'),
+    durationSeconds: 3600,
+    completedSets: [{ exerciseIndex: 1, setIndex: 1, weight: 80, reps: 8, rpe: 8, unit: 'kg' }],
+  };
+
+  await assert.rejects(() => service.finishWorkout(payload), /History check unavailable/);
+  assert.equal(client.calls.createHistory.length, 0);
+});

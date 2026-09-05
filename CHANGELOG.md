@@ -3,6 +3,11 @@
 ## [0.4.7] - 5 September 2026
 
 ### Fixed
+- Finished workouts stay closed when a delayed phone update arrives.
+- Manual set adjustments survive workout updates.
+- Pauses and active workout time stay accurate after updates and exercise changes.
+- Completed exercises no longer accept extra sets.
+- Interrupted saves wait for history verification before retrying.
 - Exercise details now stay available after workout synchronization.
 - Plate loading now follows manual weight changes.
 - AMRAP repetitions and logged RPE values now keep their `+` marker.

@@ -464,12 +464,7 @@ export function createProgramService({
       typeof startedAt === 'number' ? Math.floor(startedAt / 1000) : toEpochSeconds(startedAt);
     if (expectedTime === null) return null;
 
-    let history;
-    try {
-      history = await client.listHistory({ limit: 10 });
-    } catch (err) {
-      return null;
-    }
+    const history = await client.listHistory({ limit: 10 });
 
     for (const entry of history.records) {
       const record = parseLiftohistoryRecord(entry.text);

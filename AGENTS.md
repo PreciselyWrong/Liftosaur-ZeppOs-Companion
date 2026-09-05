@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 5 September 2026 with 496 passing tests.
+- Test: `npm test` - verified on 5 September 2026 with 515 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1`, which checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -40,11 +40,11 @@
 - Liftosaur Cloud is authoritative for programs, prescriptions, active workout state and progression. The watch does not execute Liftoscript.
 - Users choose a program, 1-based week and 1-based day within that week. History may highlight but never select.
 - The Side Service is the only Cloud gateway. Critical watch events persist before rendering and sync asynchronously.
-- Plan and journal persist together. A remote snapshot is adopted only after local writes are acknowledged.
+- Plan and journal persist together. A remote snapshot is adopted only after local writes are acknowledged; same-workout adoption preserves local set edits and pause timing, and late polls cannot reopen a finished session.
 - Startup binds the live set IDs to the validated preview structure and local journal before draining queued sets.
 - Set and finish writes are repeat-safe. Pending sets block finish and preserve the local session.
 - Rest state uses absolute `restStartedAt`, `restDuration` and `restEndsAt`; display intervals only repaint.
-- Current-workout reads use a 10-second action floor, 15-second passive checks and 30/60/120-second failure backoff.
+- Current-workout reads use a 10-second action floor, two-minute passive checks and 60/120/300-second failure backoff.
 - Standalone and Workout Extension are separate packages and App IDs sharing domain modules, not renderers or credentials.
 - The public Zepp App IDs are `1123411` for Lifto Companion and `1125789` for Lifto Workout Extension.
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
@@ -94,7 +94,7 @@
 
 ## State
 
-- Version 0.4.7 beta: both apps retain exercise details and equipment metadata across live workout updates; 496 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
+- Version 0.4.7 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 515 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Await feedback from normal use of 0.4.6.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

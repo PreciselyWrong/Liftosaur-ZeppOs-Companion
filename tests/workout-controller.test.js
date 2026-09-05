@@ -1571,3 +1571,284 @@ test('a delayed startup response cannot rebind a replacement local session', asy
   assert.deepEqual(store.load(), before);
   assert.equal(controller.sync().startConfirmed, false);
 });
+
+function createAlwaysDueRefreshPolicy() {
+  return {
+    beginPoll: () => true,
+    markSuccess: () => {},
+    markFailure: () => {},
+    markAuthoritativeResponse: () => {},
+    request: () => {},
+  };
+}
+
+function directControllerOptions(overrides = {}) {
+  return {
+    refreshPolicy: createAlwaysDueRefreshPolicy(),
+    ...overrides,
+  };
+}
+
+test('late poll response cannot replace a finished session', async () => {
+  let resolvePoll;
+  const controller = createWorkoutController(directControllerOptions({
+    now: () => 2000,
+    request: () => new Promise((resolve) => { resolvePoll = resolve; }),
+  }));
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+
+  const pending = controller.pollCurrent();
+  controller.finishWorkout();
+  resolvePoll({ payload: { workout: SAMPLE_SERVER_WORKOUT } });
+
+  assert.equal(await pending, false);
+  assert.equal(controller.view().state, SESSION_STATES.FINISHED);
+});
+
+test('late poll response cannot replace a cleared session', async () => {
+  let resolvePoll;
+  const controller = createWorkoutController(directControllerOptions({
+    now: () => 2000,
+    request: () => new Promise((resolve) => { resolvePoll = resolve; }),
+  }));
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+
+  const pending = controller.pollCurrent();
+  controller.clear();
+  resolvePoll({ payload: { workout: SAMPLE_SERVER_WORKOUT } });
+
+  assert.equal(await pending, false);
+  assert.equal(controller.view().state, SESSION_STATES.NO_PLAN);
+});
+
+test('late poll response cannot replace a reloaded session', async () => {
+  let resolvePoll;
+  const controller = createWorkoutController(directControllerOptions({
+    now: () => 2000,
+    request: () => new Promise((resolve) => { resolvePoll = resolve; }),
+  }));
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+
+  const pending = controller.pollCurrent();
+  const replacementWorkout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  replacementWorkout.programId = 'replacement';
+  replacementWorkout.entries[0].sets[0].weight = '60kg';
+  controller.loadPlan(workoutToDayPlan(replacementWorkout, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+  resolvePoll({ payload: { workout: SAMPLE_SERVER_WORKOUT } });
+
+  assert.equal(await pending, false);
+  assert.equal(controller.view().programId, 'replacement');
+  assert.equal(controller.view().currentSet.weight, 60);
+});
+
+test('snapshot adoption preserves edited current fields and refreshes untouched targets', async () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let resolvePoll;
+  const controller = createWorkoutController(directControllerOptions({
+    store,
+    now: () => 2000,
+    request: () => new Promise((resolve) => { resolvePoll = resolve; }),
+  }));
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+    persist: true,
+  });
+  controller.adjustWeight(2);
+  controller.adjustRpe(1);
+
+  const pending = controller.pollCurrent();
+  controller.adjustReps(1);
+  const refreshed = structuredClone(SAMPLE_SERVER_WORKOUT);
+  refreshed.entries[0].sets[0].weight = '110kg';
+  refreshed.entries[0].sets[0].reps = 8;
+  refreshed.entries[0].sets[0].rpe = 6;
+  refreshed.entries[0].sets[1].weight = '107.5kg';
+  resolvePoll({ payload: { workout: refreshed } });
+
+  assert.equal(await pending, true);
+  assert.equal(controller.view().currentSet.weight, 105);
+  assert.equal(controller.view().currentSet.reps, 6);
+  assert.equal(controller.view().currentSet.rpe, 9);
+  assert.equal(controller.plan().exercises[0].sets[1].targetWeight, 107.5);
+
+  const restored = createWorkoutController({ store, now: () => 2000 });
+  assert.equal(restored.restore().success, true);
+  assert.equal(restored.view().currentSet.weight, 105);
+  assert.equal(restored.view().currentSet.reps, 6);
+  assert.equal(restored.view().currentSet.rpe, 9);
+});
+
+test('snapshot adoption uses server values for untouched fields and a different set identity', async () => {
+  const refreshed = structuredClone(SAMPLE_SERVER_WORKOUT);
+  refreshed.entries[0].sets[0].weight = '110kg';
+  refreshed.entries[0].sets[0].reps = 8;
+  refreshed.entries[0].sets[0].rpe = 7;
+  const controller = createWorkoutController({ now: () => 2000 });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+  controller.applyAdoptedSnapshot(refreshed);
+  assert.equal(controller.view().currentSet.weight, 110);
+  assert.equal(controller.view().currentSet.reps, 8);
+  assert.equal(controller.view().currentSet.rpe, 7);
+
+  controller.adjustWeight(2);
+  const replacedSet = structuredClone(refreshed);
+  replacedSet.entries[0].sets[0].setId = 'replacement-set';
+  replacedSet.entries[0].sets[0].weight = '80kg';
+  controller.applyAdoptedSnapshot(replacedSet);
+  assert.equal(controller.view().currentSet.setId, 'replacement-set');
+  assert.equal(controller.view().currentSet.weight, 80);
+});
+
+test('successful set sync preserves edits made to the next active set', async () => {
+  const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  workout.entries[0].sets[0].timer = 0;
+  let resolveSync;
+  const controller = createWorkoutController({
+    now: () => 2000,
+    request: (type) => {
+      assert.equal(type, MESSAGE_TYPES.SYNC_WORKOUT_SETS);
+      return new Promise((resolve) => { resolveSync = resolve; });
+    },
+  });
+  controller.loadPlan(workoutToDayPlan(workout, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+
+  controller.completeSet();
+  controller.adjustWeight(2);
+  controller.adjustReps(1);
+  controller.adjustRpe(1);
+  const syncPromise = controller.syncSets();
+  await Promise.resolve();
+  const refreshed = structuredClone(workout);
+  refreshed.entries[0].sets[0].completed = { weight: '100kg', reps: 5 };
+  refreshed.entries[0].sets[1].weight = '120kg';
+  refreshed.entries[0].sets[1].reps = 8;
+  resolveSync({ payload: { workout: refreshed } });
+  await syncPromise;
+
+  assert.equal(controller.view().currentSet.setId, 'set-2');
+  assert.equal(controller.view().currentSet.weight, 105);
+  assert.equal(controller.view().currentSet.reps, 6);
+  assert.equal(controller.view().currentSet.rpe, 9);
+});
+
+test('snapshot adoption preserves an open native pause across resume and restore', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let time = 11000;
+  const controller = createWorkoutController({ store, now: () => time });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+    persist: true,
+  });
+  controller.pauseWorkout();
+  time = 21000;
+  controller.applyAdoptedSnapshot(SAMPLE_SERVER_WORKOUT);
+
+  assert.equal(controller.view().elapsedSeconds, 10);
+  assert.deepEqual(controller.getIntervals(), [[1000, 11000]]);
+
+  const pausedRestore = createWorkoutController({ store, now: () => time });
+  assert.equal(pausedRestore.restore().success, true);
+  assert.equal(pausedRestore.view().elapsedSeconds, 10);
+  assert.deepEqual(pausedRestore.getIntervals(), [[1000, 11000]]);
+
+  time = 31000;
+  pausedRestore.resumeWorkout();
+  time = 36000;
+  assert.equal(pausedRestore.view().elapsedSeconds, 15);
+  assert.deepEqual(pausedRestore.getIntervals(), [[1000, 11000], [31000, 36000]]);
+});
+
+test('snapshot adoption preserves a closed native pause across restore', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let time = 11000;
+  const controller = createWorkoutController({ store, now: () => time });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+    persist: true,
+  });
+  controller.pauseWorkout();
+  time = 21000;
+  controller.resumeWorkout();
+  time = 31000;
+  controller.applyAdoptedSnapshot(SAMPLE_SERVER_WORKOUT);
+
+  assert.equal(controller.view().elapsedSeconds, 20);
+  assert.deepEqual(controller.getIntervals(), [[1000, 11000], [21000, 31000]]);
+
+  const restored = createWorkoutController({ store, now: () => time });
+  assert.equal(restored.restore().success, true);
+  assert.equal(restored.view().elapsedSeconds, 20);
+  assert.deepEqual(restored.getIntervals(), [[1000, 11000], [21000, 31000]]);
+});
+
+test('snapshot adoption preserves overlapping manual rest and native pauses', () => {
+  const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  let time = 2000;
+  const controller = createWorkoutController({ now: () => time });
+  controller.loadPlan(workoutToDayPlan(workout, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+  controller.completeSet();
+  time = 11000;
+  controller.pauseRest();
+  time = 16000;
+  controller.pauseWorkout();
+  time = 21000;
+  controller.resumeRest();
+  time = 26000;
+  controller.applyAdoptedSnapshot(workout);
+
+  assert.equal(controller.view().elapsedSeconds, 10);
+  assert.deepEqual(controller.getIntervals(), [[1000, 11000]]);
+
+  time = 31000;
+  controller.resumeWorkout();
+  time = 36000;
+  assert.equal(controller.view().elapsedSeconds, 15);
+  assert.deepEqual(controller.getIntervals(), [[1000, 11000], [31000, 36000]]);
+});
+
+test('adopting a different workout does not carry edits, pauses, or intervals', () => {
+  let time = 11000;
+  const controller = createWorkoutController({ now: () => time });
+  controller.loadPlan(workoutToDayPlan(SAMPLE_SERVER_WORKOUT, { isCurrent: true }), {
+    sync: { mode: 'DIRECT', startConfirmed: true },
+  });
+  controller.adjustWeight(2);
+  controller.pauseWorkout();
+  const replacement = structuredClone(SAMPLE_SERVER_WORKOUT);
+  replacement.startTime = 5000;
+  replacement.entries[0].sets[0].weight = '80kg';
+  time = 15000;
+  controller.applyAdoptedSnapshot(replacement);
+
+  assert.equal(controller.view().startedAt, 5000);
+  assert.equal(controller.view().currentSet.weight, 80);
+  assert.equal(controller.view().elapsedSeconds, 10);
+  assert.deepEqual(controller.getIntervals(), [[5000, 15000]]);
+
+  controller.adjustWeight(2);
+  controller.pauseWorkout();
+  const otherProgram = structuredClone(replacement);
+  otherProgram.programId = 'other-program';
+  otherProgram.entries[0].sets[0].weight = '70kg';
+  time = 20000;
+  controller.applyAdoptedSnapshot(otherProgram);
+
+  assert.equal(controller.view().programId, 'other-program');
+  assert.equal(controller.view().currentSet.weight, 70);
+  assert.equal(controller.view().elapsedSeconds, 15);
+  assert.deepEqual(controller.getIntervals(), [[5000, 20000]]);
+});
