@@ -14,6 +14,9 @@
 - Repeated weight changes now keep Lifto Workout open.
 - Recent exercise comments now appear before the exercise description.
 
+### Changed
+- Fresh install codes are available until 12 September 2026.
+
 ## [0.4.6] - 4 September 2026
 
 ### Fixed
