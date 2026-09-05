@@ -180,13 +180,37 @@ export function createWorkoutController({
     ];
   }
 
+  function preserveLocalExerciseMetadata(serverPlan) {
+    const localExercises = dayPlan?.exercises;
+    const serverExercises = serverPlan?.exercises;
+    if (!Array.isArray(localExercises) || !Array.isArray(serverExercises)) return serverPlan;
+    if (localExercises.length !== serverExercises.length) return serverPlan;
+    if (serverExercises.some((exercise, index) =>
+      !exercise.entryId || exercise.entryId !== localExercises[index]?.entryId
+    )) return serverPlan;
+
+    return {
+      ...serverPlan,
+      exercises: serverExercises.map((exercise, index) => {
+        const local = localExercises[index];
+        return {
+          ...exercise,
+          description: exercise.description ?? local.description ?? null,
+          notes: exercise.notes ?? local.notes ?? null,
+          loadingEquipment: exercise.loadingEquipment ?? local.loadingEquipment ?? null,
+        };
+      }),
+    };
+  }
+
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
     const resumeFromEntryId = preserveNavigation ? session.view(now()).entryId : null;
     preserveIntervals(now());
-    const plan = mapWorkout(serverWorkout, {
+    const mappedPlan = mapWorkout(serverWorkout, {
       units: dayPlan?.unit || null,
       isCurrent: true,
     });
+    const plan = preserveLocalExerciseMetadata(mappedPlan);
     if (!plan || !plan.unit) return;
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
