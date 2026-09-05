@@ -1325,7 +1325,7 @@ function renderActiveSetScreen(view) {
   const pending = view.pending;
   const set = (isResting && pending ? pending.set : null) || view.currentSet;
   const exerciseName = isResting && pending ? pending.exerciseName : view.exerciseName;
-  const exerciseNotes = isResting && pending ? pending.exerciseNotes : view.exerciseNotes;
+  const exerciseDetails = isResting && pending ? pending.exerciseDetails : view.exerciseDetails;
   const supersetGroup = isResting && pending ? pending.supersetGroup : view.supersetGroup;
   const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
@@ -1381,7 +1381,7 @@ function renderActiveSetScreen(view) {
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(92),
-    w: exerciseNotes ? px(290) : px(356),
+    w: exerciseDetails ? px(290) : px(356),
     h: px(30),
     color: THEME.textPrimary,
     text_size: font('title'),
@@ -1391,7 +1391,7 @@ function renderActiveSetScreen(view) {
     text: truncate(exerciseName, 20),
   });
 
-  if (exerciseNotes) {
+  if (exerciseDetails) {
     addWidget(widget.BUTTON, {
       x: px(356),
       y: px(88),
@@ -1403,7 +1403,7 @@ function renderActiveSetScreen(view) {
       color: THEME.primaryLight,
       text: 'Info',
       text_size: font('micro'),
-      click_func: () => openNotes('Exercise details', `${exerciseName}\n\n${exerciseNotes}`),
+      click_func: () => openNotes('Exercise details', `${exerciseName}\n\n${exerciseDetails}`),
     });
   }
 
@@ -1673,7 +1673,7 @@ function renderRestScreen(view) {
     addWidget(widget.TEXT, {
       x: px(60),
       y: px(250),
-      w: rest.nextExerciseNotes ? px(300) : px(360),
+      w: rest.nextExerciseDetails ? px(300) : px(360),
       h: px(26),
       color: THEME.textPrimary,
       text_size: font('body'),
@@ -1683,7 +1683,7 @@ function renderRestScreen(view) {
       text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
 
-    if (rest.nextExerciseNotes) {
+    if (rest.nextExerciseDetails) {
       addWidget(widget.BUTTON, {
         x: px(356),
         y: px(246),
@@ -1695,7 +1695,7 @@ function renderRestScreen(view) {
         color: THEME.primaryLight,
         text: 'Info',
         text_size: font('micro'),
-        click_func: () => openNotes('Exercise details', `${rest.nextExerciseName}\n\n${rest.nextExerciseNotes}`),
+        click_func: () => openNotes('Exercise details', `${rest.nextExerciseName}\n\n${rest.nextExerciseDetails}`),
       });
     }
 

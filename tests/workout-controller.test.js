@@ -11,6 +11,7 @@ import { SESSION_STATES } from '../shared/workout-session.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { createWorkoutRefreshPolicy } from '../shared/workout-refresh-policy.js';
+import { formatLoadoutLabel } from '../shared/weight-rounding.js';
 
 const SAMPLE_PLAN = {
   programId: 'prog-1',
@@ -64,6 +65,17 @@ const SAMPLE_PLAN = {
 const SAMPLE_DIRECT_PLAN = {
   ...SAMPLE_PLAN,
   source: 'WORKOUT_API',
+};
+
+const BARBELL = {
+  bar: { kg: '20kg' },
+  multiplier: 2,
+  isFixed: false,
+  plates: [
+    { weight: '20kg', num: 2 },
+    { weight: '10kg', num: 2 },
+    { weight: '1.25kg', num: 2 },
+  ],
 };
 
 test('initializes with default empty state when no plan is provided', () => {
@@ -557,6 +569,69 @@ const SAMPLE_SERVER_WORKOUT = {
     },
   ],
 };
+
+test('adopting a matching snapshot preserves local details and equipment for adjusted plates', () => {
+  const controller = createWorkoutController({ now: () => 1000 });
+  const plan = {
+    ...SAMPLE_DIRECT_PLAN,
+    exercises: SAMPLE_DIRECT_PLAN.exercises.map((exercise, index) => index === 1
+      ? {
+          ...exercise,
+          description: 'Keep shoulders pinned',
+          notes: 'Bench at notch 2',
+          loadingEquipment: BARBELL,
+        }
+      : exercise),
+  };
+  const serverWorkout = {
+    ...SAMPLE_SERVER_WORKOUT,
+    entries: SAMPLE_SERVER_WORKOUT.entries.map((entry, index) => index === 1
+      ? {
+          ...entry,
+          description: null,
+          notes: null,
+          sets: entry.sets.map((set) => ({
+            ...set,
+            plates: [
+              { weight: '20kg', num: 1 },
+              { weight: '10kg', num: 1 },
+            ],
+          })),
+        }
+      : entry),
+  };
+
+  controller.loadPlan(plan);
+  controller.startWorkout();
+  controller.applyAdoptedSnapshot(serverWorkout);
+  controller.selectExercise(1);
+
+  assert.equal(controller.view().exerciseDetails, 'Keep shoulders pinned\n\nBench at notch 2');
+  assert.equal(controller.view().loadingEquipment, BARBELL);
+  assert.equal(
+    formatLoadoutLabel(
+      controller.view().currentSet.weight,
+      controller.view().loadingEquipment,
+      controller.view().unit,
+      controller.view().currentSet.plates,
+      controller.view().currentSet.targetWeight
+    ),
+    'PER SIDE · 1×20 + 1×10 KG'
+  );
+
+  controller.adjustWeight(1);
+
+  assert.equal(
+    formatLoadoutLabel(
+      controller.view().currentSet.weight,
+      controller.view().loadingEquipment,
+      controller.view().unit,
+      controller.view().currentSet.plates,
+      controller.view().currentSet.targetWeight
+    ),
+    'PER SIDE · 1×20 + 1×10 + 1×1.25 KG'
+  );
+});
 
 test('local set persists before the first transport call', async () => {
   const adapter = createMemoryStorageAdapter();

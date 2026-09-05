@@ -146,6 +146,20 @@ test('formats the official Liftosaur per-side plates array', () => {
   assert.equal(formatLoadoutLabel(82.5, null, 'kg', plates, 80), null);
 });
 
+test('manual weight changes recalculate plates from equipment instead of retaining direct plates', () => {
+  const plates = [
+    { weight: '20kg', num: 1 },
+    { weight: '10kg', num: 1 },
+  ];
+
+  assert.equal(formatLoadoutLabel(80, BARBELL, 'kg', plates, 80), 'PER SIDE · 1×20 + 1×10 KG');
+  assert.equal(
+    formatLoadoutLabel(82.5, BARBELL, 'kg', plates, 80),
+    'PER SIDE · 1×20 + 1×10 + 1×1.25 KG'
+  );
+  assert.equal(formatLoadoutLabel(82.5, null, 'kg', plates, 80), null);
+});
+
 test('identifies an exact fixed weight without inventing plates', () => {
   assert.equal(formatLoadoutLabel(17.5, DUMBBELL, 'kg'), 'USE 17.5 KG');
   assert.equal(formatLoadoutLabel(16, DUMBBELL, 'kg'), null);
