@@ -1551,5 +1551,129 @@ describe('Workout API set-write journal support', () => {
     session.resumeWorkout({ timestamp: 40_000 });
     assert.equal(session.view(50_000).rest.remaining, 110);
   });
+
+  function makeNavigationPlan() {
+    return {
+      programId: 'navigation-test',
+      unit: 'kg',
+      exercises: [1, 2].map(index => ({
+        index,
+        entryId: 'entry-' + index,
+        name: 'Exercise ' + index,
+        sets: [{ setId: 'set-' + index, index: 1, targetReps: 5, targetWeight: 50, restSeconds: 120 }],
+      })),
+    };
+  }
+
+  test('rejects navigation to completed exercise and prevents out-of-range completion', () => {
+    const plan = makeNavigationPlan();
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+    assert.equal(session.view().totalCompletedSetsCount, 1);
+
+    session.selectExercise(1, { timestamp: 2500 });
+    assert.equal(session.view().exerciseName, 'Exercise 2');
+
+    session.selectExercise(0, { timestamp: 3000 });
+    assert.equal(session.view().exerciseName, 'Exercise 2', 'navigation to completed exercise is rejected');
+
+    session.completeSet({ timestamp: 3500 });
+    assert.equal(session.view().totalCompletedSetsCount, 2);
+    assert.equal(session.view().state, SESSION_STATES.FINISHED);
+
+    const completed = session.getCompletedSets();
+    assert.equal(completed.length, 2);
+    assert.equal(completed[0].exerciseIndex, 1);
+    assert.equal(completed[1].exerciseIndex, 2);
+
+    session.selectExercise(0, { timestamp: 4000 });
+    assert.equal(session.view().state, SESSION_STATES.FINISHED);
+    session.selectExercise(1, { timestamp: 4500 });
+    assert.equal(session.view().state, SESSION_STATES.FINISHED);
+    session.completeSet({ timestamp: 5000 });
+    assert.equal(session.getCompletedSets().length, 2, 'no extra set recorded in terminal state');
+  });
+
+  test('defensively ignores out-of-range completion during journal replay', () => {
+    const plan = {
+      programId: 'p-replay',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Squat',
+          sets: [{ setId: 'sq-1', index: 1, targetReps: 5, targetWeight: 100 }],
+        },
+      ],
+    };
+    const malformedJournal = [
+      { type: 'START_WORKOUT', timestamp: 1000 },
+      { type: 'COMPLETE_SET', timestamp: 2000, payload: { setId: 'sq-1', weight: 100, reps: 5, rpe: 8 } },
+      { type: 'COMPLETE_SET', timestamp: 3000, payload: { setId: null, weight: 100, reps: 5, rpe: 8 } },
+    ];
+    const session = createWorkoutSession({ plan, initialJournal: malformedJournal });
+    assert.equal(session.view().totalCompletedSetsCount, 1);
+    assert.equal(session.getCompletedSets().length, 1);
+  });
+
+  test('selecting unfinished exercise resumes rest pause in workout intervals', () => {
+    const plan = makeNavigationPlan();
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+    session.pauseRest({ timestamp: 3000 });
+    session.selectExercise(1, { timestamp: 4000 });
+    session.finishWorkout({ timestamp: 10000 });
+
+    assert.equal(session.view(10000).elapsedSeconds, 8);
+    assert.deepEqual(session.getWorkoutIntervals(), [
+      [1000, 3000],
+      [4000, 10000],
+    ]);
+
+    const replayed = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+    assert.deepEqual(replayed.getWorkoutIntervals(), [
+      [1000, 3000],
+      [4000, 10000],
+    ]);
+  });
+
+  test('selecting completed or invalid exercise does not resume rest pause in intervals', () => {
+    const plan = makeNavigationPlan();
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+    session.pauseRest({ timestamp: 3000 });
+    session.selectExercise(0, { timestamp: 4000 });
+    session.selectExercise(99, { timestamp: 5000 });
+    session.resumeRest({ timestamp: 6000 });
+    session.finishWorkout({ timestamp: 10000 });
+
+    assert.deepEqual(session.getWorkoutIntervals(), [
+      [1000, 3000],
+      [6000, 10000],
+    ]);
+  });
+
+  test('selecting unfinished exercise with overlapping native pause does not resume intervals', () => {
+    const plan = makeNavigationPlan();
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+    session.pauseRest({ timestamp: 3000 });
+    session.pauseWorkout({ timestamp: 3500 });
+    session.selectExercise(1, { timestamp: 4000 });
+    session.resumeWorkout({ timestamp: 5000 });
+    session.finishWorkout({ timestamp: 10000 });
+
+    assert.deepEqual(session.getWorkoutIntervals(), [
+      [1000, 3000],
+      [5000, 10000],
+    ]);
+  });
 });
-// Server resume scenarios stay here because they exercise state reconstruction.

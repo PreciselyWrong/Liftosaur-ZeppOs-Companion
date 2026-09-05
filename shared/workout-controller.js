@@ -204,17 +204,32 @@ export function createWorkoutController({
   }
 
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
-    const resumeFromEntryId = preserveNavigation ? session.view(now()).entryId : null;
-    preserveIntervals(now());
+    const capturedAt = now();
+    const localView = session.view(capturedAt);
     const mappedPlan = mapWorkout(serverWorkout, {
       units: dayPlan?.unit || null,
       isCurrent: true,
     });
-    const plan = preserveLocalExerciseMetadata(mappedPlan);
+    if (!mappedPlan || !mappedPlan.unit) return;
+    const isSameWorkout =
+      mappedPlan.programId != null &&
+      mappedPlan.programId === localView.programId &&
+      Number.isFinite(mappedPlan.startTime) &&
+      mappedPlan.startTime === localView.startedAt;
+    const localState = isSameWorkout ? captureAdoptionState(capturedAt, localView) : null;
+    const resumeFromEntryId = preserveNavigation && isSameWorkout ? localView.entryId : null;
+    if (isSameWorkout) {
+      preserveIntervals(capturedAt);
+    } else {
+      directSync.preservedIntervals = [];
+      directSync.intervalsPreservedThrough = null;
+    }
+    const plan = isSameWorkout ? preserveLocalExerciseMetadata(mappedPlan) : mappedPlan;
     if (!plan || !plan.unit) return;
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
+    restoreAdoptionState(localState);
     directSync = normalizeDirectSync({
       ...directSync,
       acknowledgedSetCount: session.getWorkoutSetWrites().length,
@@ -224,26 +239,79 @@ export function createWorkoutController({
     notifyChange();
   }
 
-  function capturePendingOverrides() {
-    const pending = session.view(now()).pending?.set;
-    if (!pending) return null;
+  function captureAdoptionState(capturedAt, view = session.view(capturedAt)) {
+    const pending = view.pending?.set;
+    const pendingSet = pending?.entryId && pending?.setId
+      ? {
+          entryId: pending.entryId,
+          setId: pending.setId,
+          ...(Number.isFinite(pending.weight) && pending.weight !== pending.targetWeight
+            ? { weight: pending.weight }
+            : {}),
+          ...(Number.isFinite(pending.reps) && pending.reps !== pending.targetReps
+            ? { reps: pending.reps }
+            : {}),
+          ...(Number.isFinite(pending.rpe) && pending.rpe !== pending.targetRpe
+            ? { rpe: pending.rpe }
+            : {}),
+        }
+      : null;
+
+    let isWorkoutPaused = false;
+    for (const event of session.getJournal()) {
+      if (event.type === EVENT_TYPES.PAUSE_WORKOUT) isWorkoutPaused = true;
+      if (event.type === EVENT_TYPES.RESUME_WORKOUT) isWorkoutPaused = false;
+    }
+
     return {
-      ...(Number.isFinite(pending.weight) && pending.weight !== pending.targetWeight
-        ? { weight: pending.weight }
-        : {}),
-      ...(Number.isFinite(pending.reps) && pending.reps !== pending.targetReps
-        ? { reps: pending.reps }
-        : {}),
-      ...(Number.isFinite(pending.rpe) && pending.rpe !== pending.targetRpe
-        ? { rpe: pending.rpe }
-        : {}),
+      pendingSet,
+      timingEvents: buildTimingEvents(
+        view.startedAt,
+        capturedAt,
+        session.getWorkoutIntervals(capturedAt),
+        isWorkoutPaused
+      ),
     };
   }
 
-  function restorePendingOverrides(overrides) {
-    if (!overrides) return;
-    const current = session.view(now()).currentSet;
-    if (!current) return;
+  // Rebuild pause gaps so snapshot adoption and journal replay retain the same elapsed time.
+  function buildTimingEvents(startedAt, capturedAt, activeIntervals, keepFinalPauseOpen) {
+    if (!Number.isFinite(startedAt) || !Number.isFinite(capturedAt)) return [];
+    const events = [];
+    let cursor = startedAt;
+    for (const [start, end] of activeIntervals) {
+      if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
+      if (start > cursor) {
+        events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: cursor });
+        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, timestamp: start });
+      }
+      cursor = Math.max(cursor, end);
+    }
+    if (cursor < capturedAt) {
+      events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: cursor });
+      if (!keepFinalPauseOpen) {
+        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, timestamp: capturedAt });
+      }
+    } else if (keepFinalPauseOpen) {
+      events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: capturedAt });
+    }
+    return events;
+  }
+
+  function restoreAdoptionState(localState) {
+    if (!localState) return;
+    for (const event of localState.timingEvents) {
+      if (event.type === EVENT_TYPES.PAUSE_WORKOUT) {
+        session.pauseWorkout({ timestamp: event.timestamp });
+      } else {
+        session.resumeWorkout({ timestamp: event.timestamp });
+      }
+    }
+
+    const overrides = localState.pendingSet;
+    const current = session.view(now()).pending?.set;
+    if (!overrides || !current) return;
+    if (overrides.entryId !== current.entryId || overrides.setId !== current.setId) return;
     const timestamp = now();
     if (Number.isFinite(overrides.weight) && overrides.weight !== current.weight) {
       session.adjustWeight(
@@ -257,8 +325,6 @@ export function createWorkoutController({
     if (Number.isFinite(overrides.rpe) && overrides.rpe !== current.rpe) {
       session.adjustRpe(overrides.rpe - (current.rpe ?? 8), { timestamp });
     }
-    persist();
-    notifyChange();
   }
 
   function loadPlan(
@@ -612,6 +678,7 @@ export function createWorkoutController({
     if (!policy.beginPoll()) return false;
 
     const writeCountAtPollStart = session.getWorkoutSetWrites().length;
+    const sessionAtPollStart = session;
     isPollingCurrent = true;
 
     try {
@@ -619,6 +686,11 @@ export function createWorkoutController({
       policy.markSuccess();
       const payloadObj = res ? res.payload : null;
       const serverWorkout = payloadObj ? payloadObj.workout : null;
+      const stateNow = session.view(now()).state;
+      if (
+        session !== sessionAtPollStart ||
+        (stateNow !== SESSION_STATES.ACTIVE_SET && stateNow !== SESSION_STATES.REST)
+      ) return false;
       const currentWriteCount = session.getWorkoutSetWrites().length;
       const currentPending = currentWriteCount - directSync.acknowledgedSetCount;
 
@@ -651,7 +723,6 @@ export function createWorkoutController({
       if (currentPending === 0 && currentWriteCount === writeCountAtPollStart) {
         const serverSignature = JSON.stringify(serverWorkout);
         if (serverSignature === lastServerWorkoutSignature) return false;
-        const stateNow = session.view(now()).state;
         if (stateNow === SESSION_STATES.REST) {
           deferredServerWorkout = serverWorkout;
           lastServerWorkoutSignature = serverSignature;
@@ -879,11 +950,9 @@ export function createWorkoutController({
       ),
     nextSet: (options = {}) => {
       if (deferredServerWorkout) {
-        const overrides = capturePendingOverrides();
         const sw = deferredServerWorkout;
         deferredServerWorkout = null;
         applyAdoptedSnapshot(sw);
-        restorePendingOverrides(overrides);
       } else {
         mutateSession(() => session.nextSet({ timestamp: options.timestamp ?? now() }));
       }
