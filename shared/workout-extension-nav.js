@@ -71,6 +71,11 @@ export function formatWeightValue(weight, unit = 'kg') {
   return `${rounded}${unit || ''}`;
 }
 
+export function formatEditableSetValue(value, requiresEntry = false) {
+  if (value === null || value === undefined) return '-';
+  return `${value}${requiresEntry ? '+' : ''}`;
+}
+
 export function formatTargetRepsSummary(set) {
   if (!set) return '-';
   const suffix = set.isAmrap ? '+' : '';

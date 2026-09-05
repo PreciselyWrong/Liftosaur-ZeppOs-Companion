@@ -5,6 +5,7 @@ import {
   EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
+  formatEditableSetValue,
   formatNextTargetSummary,
   formatTargetRpeSummary,
   formatWeightValue,
@@ -80,6 +81,10 @@ test('formatting helpers format seconds and weight cleanly', () => {
   assert.equal(formatWeightValue(null, 'kg'), '-');
   assert.equal(formatWeightValue(60, 'kg'), '60kg');
   assert.equal(formatWeightValue(135.5, 'lb'), '135.5lb');
+
+  assert.equal(formatEditableSetValue(8, false), '8');
+  assert.equal(formatEditableSetValue(8, true), '8+');
+  assert.equal(formatEditableSetValue(null, true), '-');
 
   assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: null }), '8');
   assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: 12 }), '8-12');

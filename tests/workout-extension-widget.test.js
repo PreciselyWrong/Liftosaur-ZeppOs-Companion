@@ -153,6 +153,34 @@ test('Workout consumes asynchronous controller changes on its existing UI tick',
   assert.match(render, /consumeControllerUiChange\(\)/);
 });
 
+test('active steppers do not destroy their native button during click callbacks', () => {
+  const source = readWidgetSource();
+  const stepper = source.slice(
+    source.indexOf('function renderStepper('),
+    source.indexOf('function refreshActiveSetControls('),
+  );
+  const activeSet = source.slice(
+    source.indexOf('function renderActiveSetScreen('),
+    source.indexOf('function renderRestScreen('),
+  );
+
+  assert.match(stepper, /addLiveLabel\(`\$\{key\}-value`/);
+  assert.match(stepper, /addLiveLabel\(`\$\{key\}-label`/);
+
+  for (const adjustment of ['adjustWeight', 'adjustReps', 'adjustRpe']) {
+    assert.doesNotMatch(
+      activeSet,
+      new RegExp(`${adjustment}\\([^;]+;\\s*renderUI\\(\\)`),
+      `${adjustment} must not synchronously redraw and delete the active native button`,
+    );
+  }
+  assert.match(
+    activeSet,
+    /refreshActiveSetControls\(\)/,
+    'stepper callbacks must update persistent controls in place',
+  );
+});
+
 test('overview screen includes visible Sync action wired to requestRefresh and keeps onResume refresh', () => {
   const source = fs.readFileSync(
     path.join(process.cwd(), 'data-widget', 'common', 'index.js'),
