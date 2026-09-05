@@ -7,6 +7,7 @@
 - Plate loading now follows manual weight changes.
 - AMRAP repetitions and logged RPE values now keep their `+` marker.
 - Repeated weight changes now keep Lifto Workout open.
+- Recent exercise comments now appear before the exercise description.
 
 ## [0.4.6] - 4 September 2026
 

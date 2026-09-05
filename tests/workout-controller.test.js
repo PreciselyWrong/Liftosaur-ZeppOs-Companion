@@ -606,7 +606,7 @@ test('adopting a matching snapshot preserves local details and equipment for adj
   controller.applyAdoptedSnapshot(serverWorkout);
   controller.selectExercise(1);
 
-  assert.equal(controller.view().exerciseDetails, 'Keep shoulders pinned\n\nBench at notch 2');
+  assert.equal(controller.view().exerciseDetails, 'Bench at notch 2\n\nKeep shoulders pinned');
   assert.equal(controller.view().loadingEquipment, BARBELL);
   assert.equal(
     formatLoadoutLabel(

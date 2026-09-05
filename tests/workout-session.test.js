@@ -675,11 +675,11 @@ test('rest view includes next target weight, reps, unit and warmups', () => {
   assert.equal(vRest.rest.nextUnit, 'kg');
 });
 
-test('exercise details combine description and notes without duplicates', () => {
+test('exercise details show recent notes before the description without duplicates', () => {
   const cases = [
     ['Technique cue', null, 'Technique cue'],
     [null, 'Session note', 'Session note'],
-    ['Technique cue', 'Session note', 'Technique cue\n\nSession note'],
+    ['Technique cue', 'Session note', 'Session note\n\nTechnique cue'],
     ['Technique cue', 'Technique cue\nSession note', 'Technique cue\nSession note'],
   ];
 

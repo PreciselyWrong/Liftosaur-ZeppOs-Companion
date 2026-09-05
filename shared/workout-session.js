@@ -47,7 +47,7 @@ function combineExerciseDetails(description, notes) {
   if (!notesText) return descriptionText;
   if (descriptionText === notesText || notesText.includes(descriptionText)) return notesText;
   if (descriptionText.includes(notesText)) return descriptionText;
-  return `${descriptionText}\n\n${notesText}`;
+  return `${notesText}\n\n${descriptionText}`;
 }
 
 export function createWorkoutSession({
