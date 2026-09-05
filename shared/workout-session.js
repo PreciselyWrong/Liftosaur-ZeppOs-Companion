@@ -149,6 +149,8 @@ export function createWorkoutSession({
   const activePauseReasons = new Set();
   let restInfo = null;
   let journal = [];
+  const intervals = [];
+  let intervalStart = null;
 
   const progress = exercises.map((exercise) => ({
     currentSetIndex: 0,
@@ -199,6 +201,7 @@ export function createWorkoutSession({
     }
 
     workoutStartTime = Number.isFinite(plan.startTime) ? plan.startTime : null;
+    intervalStart = workoutStartTime;
     const anchorIndex = resumeFromEntryId === null
       ? -1
       : exercises.findIndex((exercise) => exercise.entryId === resumeFromEntryId);
@@ -348,6 +351,12 @@ export function createWorkoutSession({
     return firstUnfinishedExercise(currentIdx + 1);
   }
 
+  function canSelectExercise(index) {
+    if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN || !Number.isInteger(index)) return false;
+    const exercise = exercises[index];
+    return Boolean(exercise && progress[index].completedSets.length < exercise.sets.length);
+  }
+
   function applyEvent(event) {
     journal.push(event);
 
@@ -355,22 +364,23 @@ export function createWorkoutSession({
       case EVENT_TYPES.START_WORKOUT: {
         state = SESSION_STATES.ACTIVE_SET;
         workoutStartTime = event.timestamp;
+        intervalStart = event.timestamp;
+        intervals.length = 0;
+        activePauseReasons.clear();
+        pauseStartedAt = null;
         loadSetTargets(currentExerciseIndex, 0);
         break;
       }
 
       case EVENT_TYPES.SELECT_EXERCISE: {
-        const target = event.payload.exerciseIndex;
-        if (target >= 0 && target < exercises.length) {
-          currentExerciseIndex = target;
-          const prog = currentProgress();
-          loadSetTargets(target, prog.completedSets.length);
-          if (prog.completedSets.length < exercises[target].sets.length) {
-            state = SESSION_STATES.ACTIVE_SET;
-            restInfo = null;
-            endPause('rest', event.timestamp);
-          }
-        }
+        const target = event.payload?.exerciseIndex;
+        if (!canSelectExercise(target)) break;
+        const targetProg = progress[target];
+        currentExerciseIndex = target;
+        loadSetTargets(target, targetProg.completedSets.length);
+        state = SESSION_STATES.ACTIVE_SET;
+        restInfo = null;
+        endPause('rest', event.timestamp);
         break;
       }
 
@@ -402,12 +412,14 @@ export function createWorkoutSession({
         const exercise = currentExercise();
         if (!prog || !exercise) break;
 
-        if (workoutStartTime === null) {
-          workoutStartTime = event.timestamp;
-        }
-
         const setIndex = prog.currentSetIndex;
         const target = exercise.sets[setIndex];
+        if (!target || prog.completedSets.length >= exercise.sets.length) break;
+
+        if (workoutStartTime === null) {
+          workoutStartTime = event.timestamp;
+          if (intervalStart === null) intervalStart = event.timestamp;
+        }
 
         const payload = event.payload;
         const completedWeight = payload?.weight !== undefined ? payload.weight : prog.currentWeight;
@@ -556,7 +568,9 @@ export function createWorkoutSession({
       case EVENT_TYPES.FINISH_WORKOUT: {
         clearPauses(event.timestamp);
         state = SESSION_STATES.FINISHED;
-        workoutEndTime = event.timestamp;
+        if (workoutEndTime === null) {
+          workoutEndTime = event.timestamp;
+        }
         restInfo = null;
         break;
       }
@@ -569,6 +583,8 @@ export function createWorkoutSession({
         pauseStartedAt = null;
         activePauseReasons.clear();
         restInfo = null;
+        intervals.length = 0;
+        intervalStart = null;
         currentExerciseIndex = 0;
         progress.forEach((prog, i) => {
           prog.completedSets = [];
@@ -585,15 +601,26 @@ export function createWorkoutSession({
 
   function beginPause(reason, timestamp) {
     if (activePauseReasons.has(reason)) return;
-    if (activePauseReasons.size === 0) pauseStartedAt = timestamp;
+    if (activePauseReasons.size === 0) {
+      pauseStartedAt = timestamp;
+      if (intervalStart !== null) {
+        intervals.push([intervalStart, timestamp]);
+        intervalStart = null;
+      }
+    }
     activePauseReasons.add(reason);
   }
 
   function endPause(reason, timestamp) {
     if (!activePauseReasons.delete(reason)) return;
-    if (activePauseReasons.size === 0 && pauseStartedAt !== null) {
-      totalPausedWorkoutDurationMs += Math.max(0, timestamp - pauseStartedAt);
-      pauseStartedAt = null;
+    if (activePauseReasons.size === 0) {
+      if (pauseStartedAt !== null) {
+        totalPausedWorkoutDurationMs += Math.max(0, timestamp - pauseStartedAt);
+        pauseStartedAt = null;
+      }
+      if (intervalStart === null && (state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST)) {
+        intervalStart = timestamp;
+      }
     }
   }
 
@@ -862,6 +889,7 @@ export function createWorkoutSession({
     },
 
     selectExercise(exerciseIndex, { timestamp = Date.now() } = {}) {
+      if (!canSelectExercise(exerciseIndex)) return;
       applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex }, timestamp });
     },
 
@@ -893,6 +921,7 @@ export function createWorkoutSession({
       const prog = currentProgress();
       const setIndex = prog ? prog.currentSetIndex : 0;
       const target = exercise?.sets[setIndex] || null;
+      if (!exercise || !prog || !target || prog.completedSets.length >= exercise.sets.length) return;
 
       const payload = {
         exerciseIndex: exercise?.index ?? currentExerciseIndex + 1,
@@ -952,6 +981,7 @@ export function createWorkoutSession({
     },
 
     finishWorkout({ timestamp = Date.now() } = {}) {
+      if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN) return;
       applyEvent({ type: EVENT_TYPES.FINISH_WORKOUT, timestamp });
     },
 
@@ -989,34 +1019,11 @@ export function createWorkoutSession({
     },
 
     getWorkoutIntervals(endTime = workoutEndTime) {
-      const intervals = [];
-      let intervalStart = workoutStartTime;
-      const pauseReasons = new Set();
-
-      for (const event of journal) {
-        if (event.type === EVENT_TYPES.START_WORKOUT) {
-          intervalStart = event.timestamp;
-          pauseReasons.clear();
-        } else if (event.type === EVENT_TYPES.PAUSE_REST || event.type === EVENT_TYPES.PAUSE_WORKOUT) {
-          const reason = event.type === EVENT_TYPES.PAUSE_REST ? 'rest' : 'workout';
-          if (!pauseReasons.has(reason) && pauseReasons.size === 0 && intervalStart !== null) {
-            intervals.push([intervalStart, event.timestamp]);
-            intervalStart = null;
-          }
-          pauseReasons.add(reason);
-        } else if (event.type === EVENT_TYPES.RESUME_REST || event.type === EVENT_TYPES.NEXT_SET) {
-          pauseReasons.delete('rest');
-          if (pauseReasons.size === 0 && intervalStart === null) intervalStart = event.timestamp;
-        } else if (event.type === EVENT_TYPES.RESUME_WORKOUT) {
-          pauseReasons.delete('workout');
-          if (pauseReasons.size === 0 && intervalStart === null) intervalStart = event.timestamp;
-        }
+      const result = intervals.map((interval) => [...interval]);
+      if (intervalStart !== null && Number.isFinite(endTime) && endTime >= intervalStart) {
+        result.push([intervalStart, endTime]);
       }
-
-      if (intervalStart !== null && Number.isFinite(endTime)) {
-        intervals.push([intervalStart, endTime]);
-      }
-      return intervals;
+      return result;
     },
 
     isAllCompleted: allSetsDone,

@@ -1,5 +1,13 @@
 # Workout Extension Integration TODO
 
+## Now
+
+- Validate the refined Workout Extension on Active 2 firmware 7.23.0.1 at API level 400.
+
+## Next
+
+- Collect normal-use feedback from additional physical watches.
+
 ## Metadata
 
 - Branch: `feat/workout-extension`
@@ -187,6 +195,7 @@
 
 ## Done
 
+- Fixed stale workout updates, lost set edits and pauses, phantom sets, truncated duration and uncertain legacy save retries.
 - Placed recent exercise comments before the exercise description.
 - Marked AMRAP repetitions and logged RPE values on the exercise controls.
 - Kept exercise details and plate loading accurate across workout synchronization.
