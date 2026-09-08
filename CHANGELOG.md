@@ -7,6 +7,9 @@
 - Exercise Info stays visible and includes exercise notes and recent session comments.
 
 ### Changed
+- Exercise Info groups recent sessions, exercise notes and program instructions into readable pages.
+- Supersets show the current round and following exercise without adding rows.
+- A discreet footer shows whether completed sets are on the watch or synced.
 - Start set fills the bottom action row when rest ends.
 - Plate labels now show only the plates and unit.
 - Workout now shows heart rate in the top-right corner instead of scrolling time and calories.

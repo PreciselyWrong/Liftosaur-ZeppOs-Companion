@@ -65,9 +65,9 @@ export function extensionRestActionsLayout(remaining) {
 }
 
 export const EXTENSION_CLOCK_LAYOUT = Object.freeze({
-  x: 160,
+  x: 130,
   y: 442,
-  width: 160,
+  width: 220,
   height: 20,
   minimumActionGap: 20,
 });
