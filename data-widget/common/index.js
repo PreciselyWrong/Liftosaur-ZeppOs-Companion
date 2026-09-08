@@ -2081,6 +2081,23 @@ function renderDiscardConfirmation() {
   });
 }
 
+function renderFinishSwipeHint() {
+  // A text widget leaves the native Workout swipe entirely in Zepp's control.
+  const props = LAYOUT.fit({
+    x: px(130), y: px(348), w: px(60), h: px(58),
+    color: THEME.primaryPale, text_size: font('timer'),
+    align_h: align.CENTER_H, align_v: align.CENTER_V,
+    text_style: text_style.NONE, text: '>>',
+  });
+  liveWidgets.finishSwipe = { widget: addRawWidget(widget.TEXT, props), props };
+  updateFinishSwipeHint();
+}
+
+function updateFinishSwipeHint(now = Date.now()) {
+  if (!liveWidgets.finishSwipe) return;
+  updateLiveWidget('finishSwipe', { x: px(130 + (Math.floor(now / 1000) % 3) * 80) });
+}
+
 function renderFinishedScreen(view) {
   renderTitle('Workout complete', THEME.success);
   renderSubtitle(truncate(view.dayName || '', 30));
@@ -2121,7 +2138,7 @@ function renderFinishedScreen(view) {
       : THEME.error;
 
   const displayMessage = isSaved
-    ? 'Liftosaur saved. Finish the Zepp workout with native controls.'
+    ? 'Liftosaur saved.\nSwipe right, then finish\nthe native Zepp workout.'
     : (status.message || (isSending ? 'Saving to Liftosaur...' : ''));
 
   addWidget(widget.TEXT, {
@@ -2139,25 +2156,7 @@ function renderFinishedScreen(view) {
 
   if (!isSending) {
     if (isSaved) {
-      addWidget(widget.BUTTON, {
-        x: px(120),
-        y: px(340),
-        w: px(240),
-        h: px(66),
-        radius: px(33),
-        normal_color: THEME.primary,
-        press_color: THEME.primaryDeep,
-        text: 'Done',
-        text_size: font('title'),
-        click_func: () => {
-          workoutController.clear();
-          dayPlan = null;
-          finishState = null;
-          listPage = 0;
-          screen = EXTENSION_SCREENS.HOME;
-          renderUI();
-        },
-      });
+      renderFinishSwipeHint();
     } else if (isFailed) {
       addWidget(widget.BUTTON, {
         x: px(78),
@@ -2534,6 +2533,7 @@ function adoptCurrentWorkout() {
 
 function tick() {
   updateClock();
+  if (liveWidgets.finishSwipe) updateFinishSwipeHint();
 
   if (screen !== EXTENSION_SCREENS.SESSION) return;
   if (controllerUiDirty) {

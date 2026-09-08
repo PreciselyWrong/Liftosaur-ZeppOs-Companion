@@ -7,6 +7,7 @@
 - Exercise Info stays visible and includes exercise notes and recent session comments.
 
 ### Changed
+- After saving, Workout shows an animated rightward swipe reminder to finish the native activity.
 - Exercise Info groups recent sessions, exercise notes and program instructions into readable pages.
 - Supersets show the current round and following exercise without adding rows.
 - A discreet footer shows whether completed sets are on the watch or synced.
