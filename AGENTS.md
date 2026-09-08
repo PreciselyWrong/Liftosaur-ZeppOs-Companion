@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 8 September 2026 with 545 passing tests.
+- Test: `npm test` - verified on 8 September 2026 with 546 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -109,7 +109,7 @@
 
 ## State
 
-- Version 0.4.8 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 545 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
+- Version 0.4.8 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 546 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Await feedback from normal use of 0.4.6.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

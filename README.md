@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-545%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-546%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -18,6 +18,8 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
   <img src="docs/screenshots/exercise-details.png" width="19%" alt="Exercise Details" />
   <img src="docs/screenshots/companion-settings.png" width="19%" alt="Companion Settings" />
 </p>
+
+Screenshots above illustrate an earlier demo build; the QR codes below install the current beta.
 
 ## Lifto Companion
 
@@ -40,6 +42,8 @@ Installing Lifto Workout does not automatically add its data page to a workout. 
 
 Lifto then appears as one of the pages inside the native Strength Training workout. Installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
 
+After Liftosaur confirms the save, swipe from left to right to open the native Workout controls and finish the Zepp activity. The animated chevrons on the finish screen remind you of this final step.
+
 Workout Extension documentation:
 
 - [Manual Setup Actions](docs/workout-extension-manual-actions.md)
@@ -53,7 +57,7 @@ Workout Extension documentation:
 | --- | --- |
 | <img src="docs/test-build-qr.png" width="240" alt="Lifto Companion test build QR code" /> | <img src="docs/workout-extension-preview-qr.png" width="240" alt="Lifto Workout Extension test build QR code" /> |
 | App ID `1123411` | App ID `1125789` |
-| Expires **2026-09-12 at 11:23:22 UTC** (13:23:22 CEST) | Expires **2026-09-12 at 11:24:06 UTC** (13:24:06 CEST) |
+| Expires **2026-09-15 at 04:46:36 UTC** (06:46:36 CEST) | Expires **2026-09-15 at 04:47:40 UTC** (06:47:40 CEST) |
 
 Zepp keeps each preview for seven days. After its exact deadline, the QR returns
 a download error and cannot be renewed; this README must receive a newly generated code.
@@ -108,7 +112,10 @@ continued on either device via `GET /workout/current`.
 - **Authoritative set logging**: `POST /workout/sets` drains queued sets in order; responses apply server update scripts immediately.
 - **Atomic finalisation**: `POST /workout/finish` sends start time, end time, and pause intervals, atomically saving history, progression, and the official phone next-day pointer.
 - **Repeat-safe synchronization**: set writes and workout finish are safe to repeat; duplicate requests return confirmed server state.
-- **Live heart rate** via `@zos/sensor`, with zone colouring.
+- **Live heart rate**: Companion uses its own sensor; Workout displays native activity BPM without a scrolling time/calorie ticker.
+- **Readable exercise Info**: separate pages for recent sessions, exercise notes and program instructions.
+- **Compact superset context**: current round and following exercise, with prepared sets retained when rest ends.
+- **Recording status**: the footer distinguishes sets recorded on the watch from sets acknowledged by Liftosaur.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.
 - **Display wake lock** during active workouts (`@zos/display`).
 - **Crash-proof sessions**: the plan, journal, write queue, pause intervals, and finish intent are persisted locally. An interrupted app resumes on the exact active set.

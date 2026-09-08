@@ -2095,7 +2095,7 @@ function renderFinishSwipeHint() {
 
 function updateFinishSwipeHint(now = Date.now()) {
   if (!liveWidgets.finishSwipe) return;
-  updateLiveWidget('finishSwipe', { x: px(130 + (Math.floor(now / 1000) % 3) * 80) });
+  updateLiveWidget('finishSwipe', { x: LAYOUT.fit({ x: px(130 + (Math.floor(now / 1000) % 3) * 80) }).x });
 }
 
 function renderFinishedScreen(view) {

@@ -195,6 +195,11 @@
 
 ## Done
 
+- User validated compact superset context, exercise Info and the full-width expired-rest action in demo.
+- Added the animated reminder to finish the native Workout activity after saving.
+
+- Added the local/synced recording status.
+
 - Replaced the expired rest action row with one full-width Start set button.
 
 - Simplified plate labels to the plate breakdown and unit.
