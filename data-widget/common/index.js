@@ -1,4 +1,4 @@
-import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
+import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
 import {
@@ -89,7 +89,6 @@ const THEME = {
 
 const DEFAULT_SCREEN_ON_SECONDS = 120;
 const ALWAYS_SCREEN_ON_MS = 2147483000;
-const CALORIE_REFRESH_MS = 15000;
 const PENDING_SYNC_RETRY_MS = 15000;
 const PHONE_REQUEST_TIMEOUT_MS = 20000;
 
@@ -225,9 +224,6 @@ let finishState = null;
 let syncWarning = null;
 let controllerUiDirty = false;
 
-let sportDuration = '--';
-let sportCalories = '--';
-let lastCaloriesRefreshAt = 0;
 let lastPendingSyncRetryAt = 0;
 const nativePauseReconciler = createNativePauseReconciler();
 
@@ -321,19 +317,11 @@ function applyNativePauseActions(actions) {
   renderUI();
 }
 
-function updateSportMetricWidget() {
-  updateLiveWidget('sport-metric', {
-    text: syncWarning ? truncate(syncWarning, 14) : formatSportBarText(),
-    color: syncWarning ? THEME.orange : THEME.textSecondary,
-  });
-}
-
 function refreshSportMetrics() {
   const requestedAt = Date.now();
   try {
     getSportData({ type: 'duration' }, (result) => {
       const parsed = parseSportDataResult(result, 'duration');
-      sportDuration = parsed.ok ? parsed.value : '--';
       const durationSeconds = parsed.ok ? parseDurationToSeconds(parsed.value) : null;
       const view = workoutController?.view();
       if (
@@ -346,23 +334,10 @@ function refreshSportMetrics() {
       } else if (view?.state !== SESSION_STATES.ACTIVE_SET && view?.state !== SESSION_STATES.REST) {
         nativePauseReconciler.reset();
       }
-      updateSportMetricWidget();
     });
   } catch (err) {
-    sportDuration = '--';
-  }
-
-  if (requestedAt - lastCaloriesRefreshAt < CALORIE_REFRESH_MS) return;
-  lastCaloriesRefreshAt = requestedAt;
-
-  try {
-    getSportData({ type: 'calories' }, (result) => {
-      const parsed = parseSportDataResult(result, 'calories');
-      sportCalories = parsed.ok ? `${parsed.value} kcal` : '--';
-      updateSportMetricWidget();
-    });
-  } catch (err) {
-    sportCalories = '--';
+    // A missing duration sample cannot establish a pause or resume.
+    return;
   }
 }
 
@@ -409,15 +384,6 @@ function retryPendingWrites() {
       renderUI();
     })
     .catch(handlePollFailure);
-}
-
-function formatSportBarText() {
-  if (sportDuration !== '--' && sportCalories !== '--') {
-    return `${sportDuration} | ${sportCalories}`;
-  }
-  if (sportDuration !== '--') return sportDuration;
-  if (sportCalories !== '--') return sportCalories;
-  return '--';
 }
 
 function clearWidgets() {
@@ -616,7 +582,8 @@ function renderTopBar(view, onBack) {
     radius: px(topBar.height / 2),
     normal_color: THEME.card,
     press_color: THEME.cardActive,
-    text: 'Menu',
+    text: syncWarning ? 'Sync!' : 'Menu',
+    color: syncWarning ? THEME.orange : THEME.textPrimary,
     text_size: font('button'),
     click_func: onBack,
   });
@@ -634,17 +601,22 @@ function renderTopBar(view, onBack) {
     text: formatSeconds(view.elapsedSeconds),
   });
 
-  addLiveLabel('sport-metric', {
+  addWidget(widget.SPORT_DATA, {
     x: px(topBar.metric.x),
     y: px(topBar.y),
     w: px(topBar.metric.width),
     h: px(topBar.height),
-    color: syncWarning ? THEME.orange : THEME.textSecondary,
+    edit_id: 1,
+    category: edit_widget_group_type.SPORTS,
+    default_type: sport_data.HR,
     text_size: font('caption'),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: syncWarning ? truncate(syncWarning, 14) : formatSportBarText(),
+    text_color: THEME.textSecondary,
+    text_x: 0,
+    text_y: 0,
+    text_w: px(topBar.metric.width),
+    text_h: px(topBar.height),
+    sub_text_visible: false,
+    rect_visible: false,
   });
 }
 
@@ -1380,7 +1352,8 @@ function renderActiveSetScreen(view) {
       radius: px(topBar.height / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
-      text: 'Menu',
+      text: syncWarning ? 'Sync!' : 'Menu',
+      color: syncWarning ? THEME.orange : THEME.textPrimary,
       text_size: font('button'),
       click_func: () => {
         isOverviewOpen = true;
@@ -2736,7 +2709,6 @@ DataWidget(
       console.log('[lifto-ext] data-widget onResume');
       if (!hasBuilt) return;
       applyDisplayHold();
-      lastCaloriesRefreshAt = 0;
       refreshSportMetrics();
       startClock();
       lastPendingSyncRetryAt = 0;
