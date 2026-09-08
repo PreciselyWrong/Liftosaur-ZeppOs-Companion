@@ -10,6 +10,8 @@
  * Service.
  */
 
+import { formatExerciseDetails } from './exercise-notes.js';
+
 export const SESSION_STATES = {
   NO_PLAN: 'NO_PLAN',
   READY: 'READY',
@@ -40,12 +42,7 @@ export function weightStepFor(unit) {
 }
 
 function combineExerciseDetails(exercise) {
-  const texts = [exercise.historyNotes, exercise.notes, exercise.exerciseNotes, exercise.description]
-    .filter((text) => typeof text === 'string' && text.trim())
-    .map((text) => text.trim());
-  const distinct = [...new Set(texts)];
-  return distinct.filter((text) => !distinct.some((other) => other !== text && other.includes(text)))
-    .join('\n\n') || null;
+  return formatExerciseDetails(exercise);
 }
 
 export function createWorkoutSession({
@@ -287,23 +284,23 @@ export function createWorkoutSession({
     return exercises.every((exercise, i) => progress[i].completedSets.length >= exercise.sets.length);
   }
 
-  function firstUnfinishedExercise(from = 0) {
+  function firstUnfinishedExercise(from = 0, completedCount = index => progress[index].completedSets.length) {
     for (let i = from; i < exercises.length; i++) {
-      if (progress[i].completedSets.length < exercises[i].sets.length) return i;
+      if (completedCount(i) < exercises[i].sets.length) return i;
     }
     for (let i = 0; i < from; i++) {
-      if (progress[i].completedSets.length < exercises[i].sets.length) return i;
+      if (completedCount(i) < exercises[i].sets.length) return i;
     }
     return -1;
   }
 
-  function findNextExerciseIndex(currentIdx) {
+  function findNextExerciseIndex(currentIdx, completedCount = index => progress[index].completedSets.length) {
     const curEx = exercises[currentIdx];
     const curProg = progress[currentIdx];
 
     // If current exercise still has warmups to do, finish warmups first
-    if (curEx && curProg && curProg.completedSets.length < curEx.sets.length) {
-      const isWarmup = curProg.completedSets.length < curEx.warmupSetsCount;
+    if (curEx && curProg && completedCount(currentIdx) < curEx.sets.length) {
+      const isWarmup = completedCount(currentIdx) < curEx.warmupSetsCount;
       if (isWarmup) return currentIdx;
     }
 
@@ -315,40 +312,58 @@ export function createWorkoutSession({
         if (exercises[i].supersetGroup === group) groupIndices.push(i);
       }
 
-      const curWorkSets = Math.max(0, curProg.completedSets.length - curEx.warmupSetsCount);
+      const curWorkSets = Math.max(0, completedCount(currentIdx) - curEx.warmupSetsCount);
 
       // If current exercise just finished warmups and has not completed Work Set 1 yet
-      if (curProg && curProg.completedSets.length < curEx.sets.length && curWorkSets === 0) {
+      if (curProg && completedCount(currentIdx) < curEx.sets.length && curWorkSets === 0) {
         return currentIdx;
       }
 
       // 1. Look for any partner in group with FEWER completed work sets than current
       for (let offset = 1; offset <= groupIndices.length; offset++) {
         const idx = groupIndices[(groupIndices.indexOf(currentIdx) + offset) % groupIndices.length];
-        const p = progress[idx];
         const ex = exercises[idx];
-        const pWorkSets = Math.max(0, p.completedSets.length - ex.warmupSetsCount);
-        if (p.completedSets.length < ex.sets.length && pWorkSets < curWorkSets) {
+        const pWorkSets = Math.max(0, completedCount(idx) - ex.warmupSetsCount);
+        if (completedCount(idx) < ex.sets.length && pWorkSets < curWorkSets) {
           return idx;
         }
       }
 
       // 2. If all partners have reached this level, start next round at the first unfinished in group
       for (const idx of groupIndices) {
-        const p = progress[idx];
         const ex = exercises[idx];
-        if (p.completedSets.length < ex.sets.length) {
+        if (completedCount(idx) < ex.sets.length) {
           return idx;
         }
       }
     }
 
     // If not in a superset, or superset is completely done:
-    if (curProg && curProg.completedSets.length < curEx.sets.length) {
+    if (curProg && completedCount(currentIdx) < curEx.sets.length) {
       return currentIdx;
     }
 
-    return firstUnfinishedExercise(currentIdx + 1);
+    return firstUnfinishedExercise(currentIdx + 1, completedCount);
+  }
+
+  function describeSuperset(exerciseIndex, setIndex) {
+    const exercise = exercises[exerciseIndex];
+    if (state === SESSION_STATES.FINISHED || !exercise?.supersetGroup || !exercise.sets[setIndex]) return null;
+    const members = exercises.filter(candidate => candidate.supersetGroup === exercise.supersetGroup);
+    if (members.length < 2) return null;
+    const nextIndex = findNextExerciseIndex(exerciseIndex, index =>
+      index === exerciseIndex
+        ? Math.max(progress[index].completedSets.length, setIndex + 1)
+        : progress[index].completedSets.length
+    );
+    return {
+      group: exercise.supersetGroup,
+      position: members.indexOf(exercise) + 1,
+      size: members.length,
+      round: setIndex < exercise.warmupSetsCount ? null : setIndex - exercise.warmupSetsCount + 1,
+      totalRounds: Math.max(...members.map(member => member.workSetsCount)),
+      nextExerciseName: exercises[nextIndex]?.name ?? null,
+    };
   }
 
   function canSelectExercise(index) {
@@ -676,6 +691,7 @@ export function createWorkoutSession({
       equipment: exercise.equipment ?? null,
       loadingEquipment: exercise.loadingEquipment ?? null,
       supersetGroup: exercise.supersetGroup ?? null,
+      supersetContext: describeSuperset(idx, setIdx),
       setIndex: setIdx,
       totalSets: exercise.sets.length,
       setsDots: exercise.sets.map((_, i) =>
@@ -797,6 +813,7 @@ export function createWorkoutSession({
           nextPlates: pendingSet?.plates ?? null,
           nextUnit: pendingSet?.unit ?? unit,
           nextSupersetGroup: pending?.supersetGroup ?? null,
+          nextSupersetContext: pending?.supersetContext ?? null,
         };
       }
 
@@ -851,6 +868,7 @@ export function createWorkoutSession({
           entryId: null,
           exerciseName: null,
           supersetGroup: null,
+          supersetContext: null,
           totalSets: 0,
           currentSetIndex: 0,
           exerciseSetsDots: [],
@@ -869,6 +887,7 @@ export function createWorkoutSession({
         exerciseDetails: combineExerciseDetails(exercise),
         loadingEquipment: exercise.loadingEquipment ?? null,
         supersetGroup: exercise.supersetGroup,
+        supersetContext: describeSuperset(currentExerciseIndex, prog.currentSetIndex),
         totalSets: exercise.sets.length,
         currentSetIndex: prog.currentSetIndex,
         exerciseSetsDots: exercise.sets.map((_, setIdx) => {

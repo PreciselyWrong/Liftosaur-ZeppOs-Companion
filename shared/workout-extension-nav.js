@@ -71,6 +71,11 @@ export function formatWeightValue(weight, unit = 'kg') {
   return `${rounded}${unit || ''}`;
 }
 
+export function formatSupersetProgress(context) {
+  if (!context || context.round === null) return '';
+  return `${truncate(String(context.group), 8)} ${context.position}/${context.size} - Round ${context.round}/${context.totalRounds}`;
+}
+
 export function formatEditableSetValue(value, requiresEntry = false) {
   if (value === null || value === undefined) return '-';
   return `${value}${requiresEntry ? '+' : ''}`;

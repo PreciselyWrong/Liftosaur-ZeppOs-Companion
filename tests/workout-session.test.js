@@ -3,6 +3,58 @@ import assert from 'node:assert/strict';
 
 import { createWorkoutSession, SESSION_STATES, weightStepFor } from '../shared/workout-session.js';
 
+test('superset context follows actual pending progression without changing the journal', () => {
+  for (const counts of [[2, 2], [2, 2, 2], [1, 3, 2]]) {
+    const session = createWorkoutSession({ plan: makePlan({ exercises: counts.map((count, i) => ({
+      id: `member-${i}`, name: `Member ${i + 1}`, supersetGroup: 'A',
+      warmupSets: Array.from({ length: i }, () => ({ targetReps: 5, restSeconds: 30 })),
+      sets: Array.from({ length: count }, () => ({ targetReps: 8, restSeconds: 30 })),
+    })) }) });
+    session.startWorkout({ timestamp: 0 });
+    let timestamp = 1000;
+    let wrapped = false;
+    while (!session.isAllCompleted()) {
+      const journal = session.getJournal();
+      const active = session.view(timestamp);
+      const context = active.supersetContext;
+      assert.deepEqual(context, {
+        group: 'A', position: active.currentExerciseIndex + 1, size: counts.length,
+        round: active.currentSet.isWarmup ? null : active.currentSet.workSetIndex,
+        totalRounds: Math.max(...counts), nextExerciseName: context.nextExerciseName,
+      });
+      if (context.round > 1) wrapped = true;
+      assert.deepEqual(session.view(timestamp), active);
+      assert.deepEqual(session.getJournal(), journal);
+      session.completeSet({ timestamp });
+      const resting = session.view(timestamp);
+      if (session.isAllCompleted()) {
+        assert.equal(context.nextExerciseName, null);
+      } else {
+        assert.equal(context.nextExerciseName, resting.pending.exerciseName);
+        assert.deepEqual(resting.rest.nextSupersetContext, resting.pending.supersetContext);
+        session.nextSet({ timestamp: ++timestamp });
+        assert.deepEqual(session.view(timestamp).supersetContext, resting.pending.supersetContext);
+      }
+      timestamp += 1000;
+    }
+    assert.equal(wrapped, true);
+    session.finishWorkout({ timestamp });
+    assert.equal(session.view(timestamp).supersetContext, null);
+    assert.equal(session.view(timestamp).pending.supersetContext, null);
+  }
+});
+
+test('superset context is absent without multiple group members', () => {
+  for (const group of [null, 'A']) {
+    const session = createWorkoutSession({ plan: makePlan({ exercises: [{
+      id: 'alone', name: 'Alone', supersetGroup: group, sets: [{ targetReps: 8 }],
+    }] }) });
+    assert.equal(session.view().supersetContext, null);
+    assert.equal(session.view().pending.supersetContext, null);
+  }
+  assert.equal(createWorkoutSession({ plan: null }).view().supersetContext, null);
+});
+
 function makePlan(overrides = {}) {
   return {
     programId: 'prog-1',
@@ -677,10 +729,10 @@ test('rest view includes next target weight, reps, unit and warmups', () => {
 
 test('exercise details show recent notes before the description without duplicates', () => {
   const cases = [
-    ['Technique cue', null, 'Technique cue'],
-    [null, 'Session note', 'Session note'],
-    ['Technique cue', 'Session note', 'Session note\n\nTechnique cue'],
-    ['Technique cue', 'Technique cue\nSession note', 'Technique cue\nSession note'],
+    ['Technique cue', null, '## Program\nTechnique cue'],
+    [null, 'Session note', '## This session\nSession note'],
+    ['Technique cue', 'Session note', '## This session\nSession note\n\n## Program\nTechnique cue'],
+    ['Technique cue', 'Technique cue\nSession note', '## This session\nTechnique cue\nSession note\n\n## Program\nTechnique cue'],
   ];
 
   for (const [description, notes, expected] of cases) {
@@ -718,8 +770,8 @@ test('exercise details are exposed for the next set during rest', () => {
   session.completeSet({ timestamp: 1000 });
 
   const view = session.view(1000);
-  assert.equal(view.rest.nextExerciseDetails, 'Bench at 30 degrees');
-  assert.equal(view.pending.exerciseDetails, 'Bench at 30 degrees');
+  assert.equal(view.rest.nextExerciseDetails, '## Program\nBench at 30 degrees');
+  assert.equal(view.pending.exerciseDetails, '## Program\nBench at 30 degrees');
 });
 
 test('pausing rest pauses the global workout elapsed time', () => {

@@ -1,3 +1,5 @@
+import { recordingLabel } from '../../shared/recording-status.js';
+import { paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
@@ -34,7 +36,7 @@ import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
-import { formatEditableSetValue } from '../../shared/workout-extension-nav.js';
+import { formatEditableSetValue, formatSupersetProgress } from '../../shared/workout-extension-nav.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
 import {
   TYPOGRAPHY,
@@ -1063,57 +1065,6 @@ function supersetColor(group) {
 
 let notesPage = 0;
 
-function formatNotesMarkdown(raw) {
-  if (!raw) return 'No notes for this exercise.';
-  return String(raw)
-    .replace(/\r\n/g, '\n')
-    .replace(/^#{1,6}\s+(.*)$/gm, '$1') // remove markdown headers
-    .replace(/^[\*\-]\s+(.*)$/gm, '• $1') // list bullets
-    .replace(/^\d+\.\s+(.*)$/gm, '• $1') // numbered lists
-    .replace(/\*\*(.*?)\*\*/g, '$1') // bold
-    .replace(/\*(.*?)\*/g, '$1') // italic
-    .replace(/`(.*?)`/g, '$1') // code
-    .replace(/\[(.*?)\]\(.*?\)/g, '$1') // links
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function paginateNotes(text, maxCharsPerPage = 70, maxLinesPerPage = 5) {
-  const formatted = formatNotesMarkdown(text);
-  const visualLines = [];
-
-  for (const line of formatted.split('\n')) {
-    if (!line.trim()) {
-      visualLines.push('');
-      continue;
-    }
-
-    let wrapped = '';
-    for (const word of line.split(' ')) {
-      const candidate = wrapped ? `${wrapped} ${word}` : word;
-      if (candidate.length > 28 && wrapped) {
-        visualLines.push(wrapped);
-        wrapped = word;
-      } else {
-        wrapped = candidate;
-      }
-    }
-    if (wrapped) visualLines.push(wrapped);
-  }
-
-  const pages = [];
-  let pageLines = [];
-  for (const line of visualLines) {
-    const candidate = [...pageLines, line].join('\n').trim();
-    if (pageLines.length >= maxLinesPerPage || (candidate.length > maxCharsPerPage && pageLines.length > 0)) {
-      pages.push(pageLines.join('\n').trim());
-      pageLines = [];
-    }
-    pageLines.push(line);
-  }
-  if (pageLines.length > 0) pages.push(pageLines.join('\n').trim());
-  return pages.length > 0 ? pages : [formatted];
-}
 
 function closeTextModal() {
   isNotesModalOpen = false;
@@ -1122,7 +1073,7 @@ function closeTextModal() {
 }
 
 function moveNotesPage(delta) {
-  const pages = paginateNotes(activeNotesContent);
+  const pages = paginateNotes(activeNotesContent, 90, 6);
   const totalPages = pages.length;
   notesPage = (notesPage + delta + totalPages) % totalPages;
   updateLiveWidget('modal-content', { text: pages[notesPage] || 'No notes for this exercise.' });
@@ -1131,7 +1082,7 @@ function moveNotesPage(delta) {
 }
 
 function renderNotesModal() {
-  const pages = paginateNotes(activeNotesContent);
+  const pages = paginateNotes(activeNotesContent, 90, 6);
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -1488,13 +1439,13 @@ function currentClockLabel() {
  * and the one row of the design box no button ever occupies.
  */
 function renderClock() {
-  const label = currentClockLabel();
+  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
   if (!label) return;
   lastRenderedClock = label;
   addLiveLabel('clock', {
-    x: px(160),
+    x: px(130),
     y: px(CLOCK_Y),
-    w: px(160),
+    w: px(220),
     h: px(20),
     color: THEME.textSecondary,
     text_size: font('micro'),
@@ -2376,6 +2327,7 @@ function renderActiveSetScreen(view) {
   const exerciseName = isResting && pending ? pending.exerciseName : view.exerciseName;
   const exerciseDetails = isResting && pending ? pending.exerciseDetails : view.exerciseDetails;
   const supersetGroup = isResting && pending ? pending.supersetGroup : view.supersetGroup;
+  const supersetContext = isResting && pending ? pending.supersetContext : view.supersetContext;
   const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
@@ -2451,7 +2403,7 @@ function renderActiveSetScreen(view) {
       color: THEME.primaryLight,
       text: 'Info',
       text_size: font('caption'),
-      click_func: () => openTextModal('Exercise details', `${exerciseName}\n\n${exerciseDetails}`),
+      click_func: () => openTextModal(exerciseName, exerciseDetails),
     });
   }
 
@@ -2472,7 +2424,7 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${setLabel}   ${formatDots(setsDots)}`,
+    text: formatSupersetProgress(supersetContext) || `${setLabel}   ${formatDots(setsDots)}`,
   });
 
   let targetText;
@@ -2502,7 +2454,9 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: targetText,
+    text: supersetContext
+      ? (supersetContext.nextExerciseName ? `Next: ${truncate(supersetContext.nextExerciseName, 28)}` : 'Last set')
+      : targetText,
   });
 
   // Weight stepper
@@ -2756,7 +2710,7 @@ function renderRestScreen(view) {
         color: THEME.primaryLight,
         text: 'Info',
         text_size: font('caption'),
-        click_func: () => openTextModal('Exercise details', `${rest.nextExerciseName}\n\n${rest.nextExerciseDetails}`),
+        click_func: () => openTextModal(rest.nextExerciseName, rest.nextExerciseDetails),
       });
     }
 
@@ -2770,7 +2724,7 @@ function renderRestScreen(view) {
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: setProg,
+      text: formatSupersetProgress(rest.nextSupersetContext) || setProg,
     });
 
     addWidget(widget.TEXT, {
@@ -3026,7 +2980,7 @@ function renderScreen() {
  * countdown skipping this file already had to fix once.
  */
 function updateClock() {
-  const label = currentClockLabel();
+  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
   if (!updateLiveWidget('clock', { text: label })) renderUI();

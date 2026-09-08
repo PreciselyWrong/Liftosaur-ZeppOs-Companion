@@ -1,3 +1,5 @@
+import { recordingLabel } from '../../shared/recording-status.js';
+import { paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
@@ -56,6 +58,7 @@ import {
   formatTargetRpeSummary,
   formatNextTargetSummary,
   formatDots,
+  formatSupersetProgress,
   supersetColor,
   truncate,
   shouldAutoStartPreparedSet,
@@ -469,7 +472,7 @@ function currentClockLabel() {
 }
 
 function renderClock() {
-  const label = currentClockLabel();
+  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
   if (!label) return;
   lastRenderedClock = label;
   addLiveLabel('clock', {
@@ -487,45 +490,12 @@ function renderClock() {
 }
 
 function updateClock() {
-  const label = currentClockLabel();
+  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
   updateLiveWidget('clock', { text: label });
 }
 
-function formatNotesMarkdown(raw) {
-  if (!raw) return 'No notes for this exercise.';
-  return String(raw)
-    .replace(/\r\n/g, '\n')
-    .replace(/^#{1,6}\s+(.*)$/gm, '$1')
-    .replace(/^[\*\-]\s+(.*)$/gm, '- $1')
-    .replace(/^\d+\.\s+(.*)$/gm, '- $1')
-    .replace(/\*\*(.*?)\*\*/g, '$1')
-    .replace(/\*(.*?)\*/g, '$1')
-    .replace(/`(.*?)`/g, '$1')
-    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-    .replace(/\n{3,}/g, '\n\n')
-    .trim();
-}
-
-function paginateNotes(text, maxCharsPerPage = 80) {
-  const formatted = formatNotesMarkdown(text);
-  const words = formatted.split(/\s+/);
-  const pages = [];
-  let currentPage = '';
-
-  for (const word of words) {
-    const candidate = currentPage ? `${currentPage} ${word}` : word;
-    if (candidate.length > maxCharsPerPage && currentPage.length > 0) {
-      pages.push(currentPage);
-      currentPage = word;
-    } else {
-      currentPage = candidate;
-    }
-  }
-  if (currentPage) pages.push(currentPage);
-  return pages.length > 0 ? pages : [formatted];
-}
 
 function openNotes(title, content) {
   notesPage = 0;
@@ -547,8 +517,8 @@ function renderExerciseInfo(exerciseName, details, y, height) {
     color: THEME.primaryLight,
     text: 'Info',
     text_size: font('micro'),
-    click_func: () => openNotes('Exercise details',
-      `${exerciseName}\n\n${details || 'No exercise notes or description available.'}`),
+    click_func: () => openNotes(exerciseName,
+      details || 'No exercise notes or description available.'),
   });
 }
 
@@ -1350,6 +1320,7 @@ function renderActiveSetScreen(view) {
   const exerciseName = isResting && pending ? pending.exerciseName : view.exerciseName;
   const exerciseDetails = isResting && pending ? pending.exerciseDetails : view.exerciseDetails;
   const supersetGroup = isResting && pending ? pending.supersetGroup : view.supersetGroup;
+  const supersetContext = isResting && pending ? pending.supersetContext : view.supersetContext;
   const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
@@ -1434,7 +1405,7 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: `${setLabel}   ${formatDots(setsDots)}`,
+    text: formatSupersetProgress(supersetContext) || `${setLabel}   ${formatDots(setsDots)}`,
   });
 
   let targetText;
@@ -1465,7 +1436,9 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: targetText,
+    text: supersetContext
+      ? (supersetContext.nextExerciseName ? `Next: ${truncate(supersetContext.nextExerciseName, 28)}` : 'Last set')
+      : targetText,
   });
 
   // Steppers
@@ -1708,7 +1681,7 @@ function renderRestScreen(view) {
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
-      text: setProg,
+      text: formatSupersetProgress(rest.nextSupersetContext) || setProg,
     });
 
     addWidget(widget.TEXT, {

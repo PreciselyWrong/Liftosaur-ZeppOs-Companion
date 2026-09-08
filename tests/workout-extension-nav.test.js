@@ -5,6 +5,7 @@ import {
   EXTENSION_TOP_BAR_LAYOUT,
   checkRequiredPhoneInput,
   formatSeconds,
+  formatSupersetProgress,
   formatEditableSetValue,
   formatNextTargetSummary,
   formatTargetRpeSummary,
@@ -13,6 +14,14 @@ import {
   shouldAutoStartPreparedSet,
   supersetColor,
 } from '../shared/workout-extension-nav.js';
+
+test('superset progress uses one short row and does not label warmups as rounds', () => {
+  const context = { group: 'A', position: 1, size: 2, round: 2, totalRounds: 3 };
+  assert.equal(formatSupersetProgress(context), 'A 1/2 - Round 2/3');
+  assert.equal(formatSupersetProgress({ ...context, round: null }), '');
+  assert.equal(formatSupersetProgress(null), '');
+  assert.equal(formatSupersetProgress({ ...context, group: 'An unusually long group' }), 'An un... 1/2 - Round 2/3');
+});
 
 test('extension top bar stays inside the visible chord of a 480px round screen', () => {
   const { y, height, menu, elapsed, metric, restBanner } = EXTENSION_TOP_BAR_LAYOUT;

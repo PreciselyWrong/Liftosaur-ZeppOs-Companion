@@ -246,14 +246,16 @@ test('exercise Info stays available with missing details and explains the empty 
   for (const details of [null, '', 'Keep shoulders pinned']) {
     let button;
     let opened;
+    let openedTitle;
     const render = new Function('addWidget', 'widget', 'px', 'font', 'THEME', 'openNotes',
       `${extractFunction(source, 'renderExerciseInfo')}; return renderExerciseInfo;`)(
       (type, props) => { button = props; }, { BUTTON: 'button' }, x => x,
-      () => 20, {}, (title, content) => { opened = content; });
+      () => 20, {}, (title, content) => { opened = content; openedTitle = title; });
     render('Bench Press', details, 88, 36);
     assert.equal(button.text, 'Info');
     button.click_func();
-    assert.match(opened, /Bench Press/);
+    assert.equal(openedTitle, 'Bench Press');
+    assert.doesNotMatch(opened, /Bench Press/);
     assert.ok(opened.includes(details || 'No exercise notes or description available.'));
   }
   for (const name of ['renderActiveSetScreen', 'renderRestScreen']) {
