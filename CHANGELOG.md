@@ -3,6 +3,8 @@
 ## [0.4.8] - 8 September 2026
 
 ### Fixed
+- Long headings in exercise notes no longer prevent Info from opening.
+- The finish reminder stays aligned on square screens.
 - Prepared superset exercises no longer change when the rest timer ends.
 - Exercise Info stays visible and includes exercise notes and recent session comments.
 

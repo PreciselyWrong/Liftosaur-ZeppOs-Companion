@@ -52,13 +52,16 @@ export function paginateNotes(text, maxCharsPerPage = 90, maxLinesPerPage = 6, m
   }
   const pages = [];
   for (const section of sections) {
-    const body = plain(section.lines.join('\n')).trim();
-    if (!body) continue;
-    const title = section.title ? wrap(section.title, maxCharsPerLine) : [];
-    const prefixLength = title.length ? title.join('\n').length + 1 : 0;
+    let body = plain(section.lines.join('\n')).trim();
+    let title = section.title ? wrap(section.title, maxCharsPerLine) : [];
+    let prefixLength = title.length ? title.join('\n').length + 1 : 0;
     if (title.length >= maxLinesPerPage || prefixLength >= maxCharsPerPage) {
-      throw new RangeError('Notes page budget must leave room below the section title');
+      // Authored headings may exceed a page; flow them once as ordinary content.
+      body = `${section.title}\n${body}`;
+      title = [];
+      prefixLength = 0;
     }
+    if (!body) continue;
     const lines = wrap(body, Math.min(maxCharsPerLine, maxCharsPerPage - prefixLength));
     let page = [...title];
     for (const line of lines) {

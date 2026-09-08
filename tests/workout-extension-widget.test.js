@@ -344,11 +344,11 @@ test('saved extension finish shows a rightward hint instead of a misleading Done
   assert.equal(nativeUpdates.length, 1);
   assert.equal(nativeUpdates[0].text, '>>');
   const positions = [];
-  const env = { liveWidgets: { finishSwipe: {} }, px: x => x,
+  const env = { liveWidgets: { finishSwipe: {} }, px: x => x, LAYOUT: { fit: props => ({ ...props, x: props.x + 12 }) },
     updateLiveWidget: (_, props) => positions.push(props.x) };
   const update = new Function('env', `with (env) { ${extractFunction(source, 'updateFinishSwipeHint')}; return updateFinishSwipeHint; }`)(env);
   for (const now of [0, 1000, 2000, 3000]) update(now);
-  assert.deepEqual(positions, [130, 210, 290, 130]);
+  assert.deepEqual(positions, [142, 222, 302, 142]);
   env.liveWidgets = {};
   update(4000);
   assert.equal(positions.length, 4);

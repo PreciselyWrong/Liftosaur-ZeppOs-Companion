@@ -35,3 +35,16 @@ test('pagination respects character and visual line budgets without losing text'
   }
   assert.equal(pages.join('').replace(/\s/g, ''), text.replace(/\s/g, ''));
 });
+
+test('oversized authored headings paginate without crashing or dropping text', () => {
+  const title = 'Long exercise instruction '.repeat(5).trim();
+  const details = formatExerciseDetails({ notes: `## ${title}\nKeep elbows tucked` });
+  const pages = paginateNotes(details);
+  assert.equal(pages.join('').replace(/\s/g, ''), `${title}Keep elbows tucked`.replace(/\s/g, ''));
+  for (const page of pages) {
+    assert.ok(page.length <= 90);
+    assert.ok(page.split('\n').length <= 6);
+    assert.ok(page.split('\n').every(line => line.length <= 23));
+  }
+  assert.equal(paginateNotes(`## ${title}`).join('').replace(/\s/g, ''), title.replace(/\s/g, ''));
+});
