@@ -130,3 +130,10 @@ test('fitting a square screen never shrinks text a second time', () => {
   const deviceTextSize = 18;
   assert.ok(layout.fit({ text_size: deviceTextSize }).text_size >= deviceTextSize);
 });
+
+test('native sport text bounds fit with their containing widget', () => {
+  const layout = createScreenLayout(BIP_6);
+  const fitted = layout.fit({ w: 96, h: 40, text_w: 96, text_h: 40 });
+  assert.equal(fitted.text_w, fitted.w);
+  assert.equal(fitted.text_h, fitted.h);
+});

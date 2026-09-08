@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-515%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-517%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -160,7 +160,7 @@ Shared, platform-independent modules:
 | `shared/weight-rounding.js` | Loadable-weight plate math and weight string parsing |
 | `shared/rest-alert.js` | Rest alert state tracking, foreground zero-crossing, and resume expiry |
 | `shared/workout-extension-nav.js` | Extension screen names and formatting helpers |
-| `shared/workout-extension-metrics.js` | Defensive native duration and calorie response parsing |
+| `shared/workout-extension-metrics.js` | Defensive native duration parsing and pause reconciliation |
 | `shared/protocol.js` | The device <-> phone Protocol v3 envelope |
 | `shared/liftohistory.js` | Parse and format Liftohistory text (legacy & diagnostics) |
 | `shared/liftoscript-outline.js` | Read `#` week and `##` day headers (catalog fallback) |

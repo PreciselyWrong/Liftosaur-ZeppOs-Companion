@@ -38,9 +38,10 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   // 5. No HeartRate sensor (native workout owns HR)
   assert.doesNotMatch(source, /HeartRate/, 'Must not import or instantiate HeartRate sensor');
 
-  // 6. Sport data (duration and calories)
+  // Native duration drives pause reconciliation; the native HR widget owns BPM.
   assert.match(source, /getSportData\(\s*\{\s*type:\s*['"]duration['"]\s*\}/, 'Must query sport duration');
-  assert.match(source, /getSportData\(\s*\{\s*type:\s*['"]calories['"]\s*\}/, 'Must query sport calories');
+  assert.doesNotMatch(source, /sportCalories|CALORIE_REFRESH_MS|formatSportBarText/, 'No timer/calorie ticker');
+  assert.match(source, /default_type: sport_data.HR/, 'Use native workout BPM');
 
   // 7. No native workout stop/finish manipulation
   assert.doesNotMatch(source, /stopWorkout|finishWorkoutNative|exitSport/, 'Must not finish or stop native workout');
@@ -110,7 +111,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   assert.match(onResume, /requestRefresh\(\)/, 'onResume must prioritize a current workout refresh');
 
   assert.match(source, /function loadDisplaySettings/, 'Restored sessions must reload display settings');
-  assert.match(source, /syncWarning\s*\?\s*truncate\(syncWarning/, 'Metric refresh must preserve sync warnings');
+  assert.match(source, /text: syncWarning \? 'Sync!' : 'Menu'/, 'Keep a visible sync warning outside BPM');
 
   // 15. Rest completion must use Zepp's dedicated strong reminder pattern.
   assert.match(
@@ -206,4 +207,34 @@ test('overview screen includes visible Sync action wired to requestRefresh and k
 
   const onResume = source.slice(source.indexOf('onResume()'), source.indexOf('onPause()'));
   assert.match(onResume, /requestRefresh\(\)/, 'onResume must maintain requestRefresh()');
+});
+
+function extractFunction(source, name) {
+  const start = source.indexOf(`function ${name}(`);
+  return source.slice(start, source.indexOf('\nfunction ', start + 1));
+}
+
+test('top bar renders native BPM without a live text ticker even during sync warnings', () => {
+  const source = readWidgetSource();
+  for (const syncWarning of [null, 'Sync pending']) {
+    const widgets = [];
+    const render = new Function('addWidget', 'addLiveLabel', 'widget', 'sport_data',
+      'edit_widget_group_type', 'EXTENSION_TOP_BAR_LAYOUT', 'px', 'font', 'THEME',
+      'align', 'text_style', 'formatSeconds', 'syncWarning',
+      `${extractFunction(source, 'renderTopBar')}; return renderTopBar;`)(
+      (type, props) => widgets.push({ type, ...props }),
+      (key, props) => widgets.push({ key, ...props }),
+      { BUTTON: 'button', SPORT_DATA: 'sport' }, { HR: 123 }, { SPORTS: 456 },
+      { y: 48, height: 40, menu: { x: 100, width: 82 }, elapsed: { x: 186, width: 96 }, metric: { x: 286, width: 96 } },
+      x => x, () => 20, {}, {}, {}, String, syncWarning);
+    render({ elapsedSeconds: 12 }, () => {});
+    const hr = widgets.find(w => w.type === 'sport');
+    assert.ok(hr, 'BPM must be a native sport widget');
+    assert.equal(hr.default_type, 123);
+    assert.equal(hr.category, 456);
+    assert.equal(hr.sub_text_visible, false);
+    assert.equal(hr.x, 286);
+    assert.equal(hr.w, 96);
+    assert.ok(!widgets.some(w => w.key === 'sport-metric'));
+  }
 });

@@ -68,7 +68,7 @@
 | Rest and overtime | available | preserve | UNIT_TESTED | session & rest alert tests | Native and manual pauses compose without losing time |
 | Offline recovery | available | preserve | UNIT_TESTED | storage & widget tests | Separate extension storage namespace |
 | Native Zepp activity | unavailable | add through extension context | blocked | real-device plan | Owned only by Zepp Workout |
-| Native data | unavailable | read duration and calories | UNIT_TESTED | adapter & spike tests | Live duration drives pause reconciliation |
+| Native data | unavailable | show native heart rate and read duration | UNIT_TESTED | adapter & spike tests | Live duration drives pause reconciliation |
 
 ## Phase 0 - Audit
 
@@ -194,6 +194,8 @@
 - 2026-09-03: Restored reliable background redraws and bounded synchronization during rest in both watch apps.
 
 ## Done
+
+- Replaced the top-right duration/calorie ticker with native workout BPM.
 
 - Fixed stale workout updates, lost set edits and pauses, phantom sets, truncated duration and uncertain legacy save retries.
 - Placed recent exercise comments before the exercise description.

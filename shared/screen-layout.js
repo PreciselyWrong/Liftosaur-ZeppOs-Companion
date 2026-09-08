@@ -43,7 +43,7 @@ const MARGIN_BOTTOM = 10;
 const TOP_INSET_RATIO = 0.14;
 
 /** Widget properties expressed in pixels, so scaled with the layout. */
-const SCALED_KEYS = ['w', 'h', 'radius', 'text_size', 'line_space', 'char_space'];
+const SCALED_KEYS = ['w', 'h', 'radius', 'text_size', 'text_w', 'text_h', 'line_space', 'char_space'];
 
 /**
  * `isRound` is resolved by the caller against `SCREEN_SHAPE_ROUND`, since
