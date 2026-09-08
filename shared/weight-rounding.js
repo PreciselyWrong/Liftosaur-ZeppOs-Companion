@@ -176,7 +176,7 @@ export function formatPlatesObject(plates, unit = 'kg') {
   const formattedPlates = parsed
     .map((p) => `${p.count}×${Number.isFinite(p.weight) ? formatNumber(p.weight) : String(p.weight)}`)
     .join(' + ');
-  return `PER SIDE · ${formattedPlates} ${suffix}`;
+  return `${formattedPlates} ${suffix}`;
 }
 
 /** A compact watch label, returned only when the requested weight is exact. */
@@ -198,8 +198,7 @@ export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null
           .sort(([a], [b]) => b - a)
           .map(([weight, count]) => `${count}×${formatNumber(weight)}`)
           .join(' + ');
-        const prefix = loadout.multiplier === 2 ? 'PER SIDE' : 'LOAD';
-        return `${prefix} · ${formattedPlates} ${suffix}`;
+        return `${formattedPlates} ${suffix}`;
       }
     }
   }

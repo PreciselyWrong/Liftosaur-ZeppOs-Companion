@@ -616,7 +616,7 @@ test('adopting a matching snapshot preserves local details and equipment for adj
       controller.view().currentSet.plates,
       controller.view().currentSet.targetWeight
     ),
-    'PER SIDE · 1×20 + 1×10 KG'
+    '1×20 + 1×10 KG'
   );
 
   controller.adjustWeight(1);
@@ -629,7 +629,7 @@ test('adopting a matching snapshot preserves local details and equipment for adj
       controller.view().currentSet.plates,
       controller.view().currentSet.targetWeight
     ),
-    'PER SIDE · 1×20 + 1×10 + 1×1.25 KG'
+    '1×20 + 1×10 + 1×1.25 KG'
   );
 });
 

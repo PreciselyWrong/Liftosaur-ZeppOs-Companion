@@ -119,15 +119,15 @@ test('finds a combination a greedy fill would miss', () => {
 });
 
 test('formats the exact plates to load on each side of a barbell', () => {
-  assert.equal(formatLoadoutLabel(60, BARBELL, 'kg'), 'PER SIDE · 1×20 KG');
+  assert.equal(formatLoadoutLabel(60, BARBELL, 'kg'), '1×20 KG');
   assert.equal(
     formatLoadoutLabel(72.5, BARBELL, 'kg'),
-    'PER SIDE · 1×20 + 1×5 + 1×1.25 KG'
+    '1×20 + 1×5 + 1×1.25 KG'
   );
 });
 
 test('formats a one-sided plate stack as one load', () => {
-  assert.equal(formatLoadoutLabel(22.5, ONE_SIDED_STACK, 'kg'), 'LOAD · 1×20 + 1×2.5 KG');
+  assert.equal(formatLoadoutLabel(22.5, ONE_SIDED_STACK, 'kg'), '1×20 + 1×2.5 KG');
 });
 
 test('does not suggest plates for an inexact or unresolved weight', () => {
@@ -141,8 +141,8 @@ test('formats the official Liftosaur per-side plates array', () => {
     { weight: '10kg', num: 1 },
   ];
 
-  assert.equal(formatPlatesObject(plates, 'kg'), 'PER SIDE · 2×20 + 1×10 KG');
-  assert.equal(formatLoadoutLabel(80, null, 'kg', plates, 80), 'PER SIDE · 2×20 + 1×10 KG');
+  assert.equal(formatPlatesObject(plates, 'kg'), '2×20 + 1×10 KG');
+  assert.equal(formatLoadoutLabel(80, null, 'kg', plates, 80), '2×20 + 1×10 KG');
   assert.equal(formatLoadoutLabel(82.5, null, 'kg', plates, 80), null);
 });
 
@@ -152,10 +152,10 @@ test('manual weight changes recalculate plates from equipment instead of retaini
     { weight: '10kg', num: 1 },
   ];
 
-  assert.equal(formatLoadoutLabel(80, BARBELL, 'kg', plates, 80), 'PER SIDE · 1×20 + 1×10 KG');
+  assert.equal(formatLoadoutLabel(80, BARBELL, 'kg', plates, 80), '1×20 + 1×10 KG');
   assert.equal(
     formatLoadoutLabel(82.5, BARBELL, 'kg', plates, 80),
-    'PER SIDE · 1×20 + 1×10 + 1×1.25 KG'
+    '1×20 + 1×10 + 1×1.25 KG'
   );
   assert.equal(formatLoadoutLabel(82.5, null, 'kg', plates, 80), null);
 });
