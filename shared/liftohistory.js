@@ -154,7 +154,7 @@ function parseExerciseLine(line) {
 }
 
 function parseHeader(headerLine) {
-  const parts = splitOnSlash(headerLine.replace(/exercises\s*:\s*\{\s*$/i, '').trim());
+  const parts = splitOnSlash(headerLine.replace(/(?:\s*\/\s*)?exercises\s*:\s*\{\s*$/i, '').trim());
   const header = {
     date: null,
     programName: null,

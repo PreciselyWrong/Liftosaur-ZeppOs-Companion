@@ -2,6 +2,10 @@
 
 ## [0.4.8] - 8 September 2026
 
+### Fixed
+- Prepared superset exercises no longer change when the rest timer ends.
+- Exercise Info stays visible and includes exercise notes and recent session comments.
+
 ### Changed
 - Workout now shows heart rate in the top-right corner instead of scrolling time and calories.
 

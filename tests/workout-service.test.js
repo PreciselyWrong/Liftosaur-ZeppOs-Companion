@@ -2,6 +2,9 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createWorkoutService } from '../app-side/workout-service.js';
+import { workoutToDayPlan } from '../shared/workout-api-plan.js';
+import { createWorkoutController } from '../shared/workout-controller.js';
+import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
 
 function createMockClient() {
   const calls = [];
@@ -192,4 +195,46 @@ describe('Workout Service', () => {
       }
     );
   });
+});
+
+test('direct workout reads deliver all note sources to the watch and retain them after sync and restore', async () => {
+  const workout = {
+    programId: 'p1', startTime: 1000, dayData: { week: 1, dayInWeek: 1 },
+    entries: [{
+      entryId: 'heavy_squat_barbell', exerciseId: 'squat_barbell', name: 'Squat', equipment: 'barbell',
+      description: 'Program: pause at the bottom', notes: 'Current session: belt notch 3',
+      sets: [{ setId: 's1', reps: 5, weight: '100kg', timer: 60 }], warmupSets: [],
+    }],
+  };
+  const client = {
+    ...createMockClient(),
+    getNextWorkout: async () => ({ workout }),
+    getCurrentWorkout: async () => ({ workout }),
+    listExerciseData: async () => [{ key: 'squat_barbell', notes: 'Exercise: knees out' }],
+    listHistory: async () => ({ records: [{ text:
+      '2026-09-07T10:00:00Z / exercises: {\n// Last session: keep heels down\nSquat, Barbell / 1x5 100kg\n}',
+    }] }),
+  };
+  const service = createWorkoutService({ client });
+  for (const result of [await service.getNextWorkout({}), await service.getCurrentWorkout()]) {
+    const store = createSessionStore(createMemoryStorageAdapter());
+    const controller = createWorkoutController({ store, now: () => 2000 });
+    controller.loadPlan(workoutToDayPlan(result.workout, { isCurrent: true }));
+    controller.applyAdoptedSnapshot(workout);
+    const restored = createWorkoutController({ store, now: () => 2000 });
+    assert.equal(restored.restore().success, true);
+    for (const view of [controller.view(), restored.view()]) {
+      for (const detail of ['knees out', 'pause at the bottom', 'belt notch 3', 'keep heels down']) {
+        assert.ok(view.exerciseDetails.includes(detail), `missing detail: ${detail}`);
+      }
+      assert.ok(view.exerciseDetails.indexOf('keep heels down') < view.exerciseDetails.indexOf('pause at the bottom'));
+    }
+    controller.applyAdoptedSnapshot({
+      ...workout,
+      entries: workout.entries.map(entry => ({ ...entry, exerciseNotes: '', historyNotes: '' })),
+    });
+    assert.ok(!controller.view().exerciseDetails.includes('knees out'));
+    assert.ok(!controller.view().exerciseDetails.includes('keep heels down'));
+    assert.ok(controller.view().exerciseDetails.includes('pause at the bottom'));
+  }
 });

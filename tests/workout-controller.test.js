@@ -1852,3 +1852,72 @@ test('adopting a different workout does not carry edits, pauses, or intervals', 
   assert.equal(controller.view().elapsedSeconds, 15);
   assert.deepEqual(controller.getIntervals(), [[5000, 20000]]);
 });
+
+test('ending prepared superset rest retains the displayed set across deferred sync and replay', async () => {
+  for (const synchronize of [false, true]) {
+    let now = 1000;
+    const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+    workout.entries.forEach(entry => { entry.superset = 'A'; });
+    workout.entries[0].warmupSets = [{
+      ...workout.entries[0].sets[0], setId: 'warmup-1', isWarmup: true, weight: '20kg', timer: 60,
+    }];
+    const acknowledged = structuredClone(workout);
+    acknowledged.entries[0].warmupSets[0].completed = { reps: 5, weight: '20kg' };
+    const transport = createFakeTransport();
+    transport.on(MESSAGE_TYPES.START_WORKOUT, () => Promise.resolve({ payload: { workout } }));
+    transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => Promise.resolve({ payload: { workout: acknowledged } }));
+    const store = createSessionStore(createMemoryStorageAdapter());
+    const controller = createWorkoutController({ store, request: transport.request, now: () => now });
+    controller.loadPlan(workoutToDayPlan(workout));
+    controller.startWorkout();
+    await controller.ensureStarted();
+    controller.completeSet();
+    const prepared = controller.view().pending;
+    assert.equal(prepared.exerciseName, workout.entries[0].name);
+    assert.equal(prepared.set.setId, workout.entries[0].sets[0].setId);
+    controller.adjustWeight(1);
+    controller.adjustReps(1);
+    const edited = controller.view().pending.set;
+    if (synchronize) {
+      await controller.syncSets();
+      assert.equal(controller.hasDeferredServerWorkout(), true);
+    }
+    now += 60_000;
+    assert.equal(controller.view().rest.remaining, 0);
+    controller.nextSet();
+    for (const view of [controller.view(), (() => {
+      const restored = createWorkoutController({ store, now: () => now });
+      assert.equal(restored.restore().success, true);
+      return restored.view();
+    })()]) {
+      assert.equal(view.state, SESSION_STATES.ACTIVE_SET);
+      assert.equal(view.currentSet.setId, prepared.set.setId, `prepared identity, sync=${synchronize}`);
+      assert.equal(view.exerciseName, prepared.exerciseName);
+      assert.equal(view.currentSet.weight, edited.weight);
+      assert.equal(view.currentSet.reps, edited.reps);
+    }
+  }
+});
+
+test('superset adoption retains manual selection but never revives an unavailable prepared set', () => {
+  for (const change of ['unchanged', 'completed', 'removed', 'replaced', 'navigation-reset']) {
+    const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+    workout.entries.forEach(entry => { entry.superset = 'A'; });
+    const controller = createWorkoutController({ now: () => 1000 });
+    controller.loadPlan(workoutToDayPlan(workout, { isCurrent: true }));
+    controller.selectExercise(1);
+    controller.adjustWeight(1);
+    const prepared = controller.view().currentSet;
+    const remote = structuredClone(workout);
+    if (change === 'completed') remote.entries[1].sets[0].completed = { reps: 5, weight: '80kg' };
+    if (change === 'removed') remote.entries.splice(1, 1);
+    if (change === 'replaced') remote.entries[1].sets[0].setId = 'replacement-set';
+    controller.applyAdoptedSnapshot(remote, { preserveNavigation: change !== 'navigation-reset' });
+    if (change === 'unchanged') {
+      assert.equal(controller.view().currentSet.setId, prepared.setId);
+      assert.equal(controller.view().currentSet.weight, prepared.weight);
+    } else {
+      assert.notEqual(controller.view().currentSet.setId, prepared.setId, change);
+    }
+  }
+});

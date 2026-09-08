@@ -215,3 +215,9 @@ test('keeps only the most recent notes and drops repeats', () => {
     ['same note', 'second', 'third']
   );
 });
+
+test('history without program metadata retains its date and exercise comments', () => {
+  const record = parseLiftohistoryRecord('2026-09-07T10:00:00Z / exercises: {\n// Keep heels down\nSquat, Barbell / 1x5 100kg\n}');
+  assert.equal(record.date, '2026-09-07T10:00:00Z');
+  assert.equal(record.exercises[0].note, 'Keep heels down');
+});

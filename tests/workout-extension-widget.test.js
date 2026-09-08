@@ -238,3 +238,26 @@ test('top bar renders native BPM without a live text ticker even during sync war
     assert.ok(!widgets.some(w => w.key === 'sport-metric'));
   }
 });
+
+test('exercise Info stays available with missing details and explains the empty state', () => {
+  const source = readWidgetSource();
+  assert.ok(source.includes('function renderExerciseInfo('), 'Exercise Info must have one renderer');
+  for (const details of [null, '', 'Keep shoulders pinned']) {
+    let button;
+    let opened;
+    const render = new Function('addWidget', 'widget', 'px', 'font', 'THEME', 'openNotes',
+      `${extractFunction(source, 'renderExerciseInfo')}; return renderExerciseInfo;`)(
+      (type, props) => { button = props; }, { BUTTON: 'button' }, x => x,
+      () => 20, {}, (title, content) => { opened = content; });
+    render('Bench Press', details, 88, 36);
+    assert.equal(button.text, 'Info');
+    button.click_func();
+    assert.match(opened, /Bench Press/);
+    assert.ok(opened.includes(details || 'No exercise notes or description available.'));
+  }
+  for (const name of ['renderActiveSetScreen', 'renderRestScreen']) {
+    const body = extractFunction(source, name);
+    assert.match(body, /renderExerciseInfo\(/);
+    assert.doesNotMatch(body, /if \(exerciseDetails\)|if \(rest.nextExerciseDetails\)/);
+  }
+});
