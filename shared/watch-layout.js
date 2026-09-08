@@ -50,6 +50,20 @@ export const ACTIVE_SET_LAYOUT = Object.freeze({
   }),
 });
 
+export function extensionRestActionsLayout(remaining) {
+  const x = 64;
+  const width = 352;
+  const prepareWidth = 150;
+  const gap = 12;
+  const offset = remaining > 0 ? prepareWidth + gap : 0;
+  return {
+    y: 370,
+    height: 58,
+    prepare: remaining > 0 ? { x, width: prepareWidth } : null,
+    start: { x: x + offset, width: width - offset },
+  };
+}
+
 export const EXTENSION_CLOCK_LAYOUT = Object.freeze({
   x: 160,
   y: 442,

@@ -7,6 +7,7 @@
 - Exercise Info stays visible and includes exercise notes and recent session comments.
 
 ### Changed
+- Start set fills the bottom action row when rest ends.
 - Plate labels now show only the plates and unit.
 - Workout now shows heart rate in the top-right corner instead of scrolling time and calories.
 

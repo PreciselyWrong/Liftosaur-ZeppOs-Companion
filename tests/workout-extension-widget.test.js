@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
+import * as watchLayout from '../shared/watch-layout.js';
 
 function readWidgetSource() {
   return fs.readFileSync(
@@ -260,4 +261,60 @@ test('exercise Info stays available with missing details and explains the empty 
     assert.match(body, /renderExerciseInfo\(/);
     assert.doesNotMatch(body, /if \(exerciseDetails\)|if \(rest.nextExerciseDetails\)/);
   }
+});
+
+test('expired rest replaces Prepare and Start set with one full-width Start set action', () => {
+  const source = readWidgetSource();
+  for (const remaining of [1, 0, -10]) {
+    const buttons = [];
+    let started = 0;
+    const env = {
+      ...watchLayout, renderTopBar() {}, addLiveLabel() {},
+      addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
+      px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
+      restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
+      workoutController: { nextSet: () => { started++; } }, renderUI() {},
+    };
+    const render = new Function('env', `with (env) { ${extractFunction(source, 'renderRestScreen')}; return renderRestScreen; }`)(env);
+    render({ rest: { remaining, isPaused: false } });
+    const prepare = buttons.find(button => button.text === 'Prepare');
+    const start = buttons.find(button => button.text === 'Start set');
+    if (remaining > 0) {
+      assert.ok(prepare);
+      assert.equal(start.x, 226);
+      assert.equal(start.w, 190);
+    } else {
+      assert.equal(prepare, undefined);
+      assert.equal(start.x, 64);
+      assert.equal(start.w, 352);
+    }
+    assert.equal(start.y, 370);
+    assert.equal(start.h, 58);
+    start.click_func();
+    assert.equal(started, 1);
+  }
+});
+
+test('timer expiry redraws the rest actions once without starting an unprepared set', () => {
+  let renders = 0;
+  let starts = 0;
+  const view = { state: 'REST', rest: { remaining: 0, isPaused: false }, elapsedSeconds: 60 };
+  const env = {
+    updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
+    SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
+    refreshSportMetrics() {}, retryPendingWrites() {},
+    workoutController: { view: () => view, pollCurrent: async () => false, nextSet: () => { starts++; } },
+    syncWarning: null, updateSyncWarning() {}, handlePollFailure() {},
+    lastRenderedState: 'REST', lastRenderedSecond: 1, isRestMinimized: false, liveWidgets: { restValue: {} },
+    restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },
+    shouldAutoStartPreparedSet: () => false, THEME: {}, formatSeconds: String, updateLiveWidget() {},
+    renderUI: () => { renders++; env.lastRenderedSecond = view.rest.remaining; },
+  };
+  const tick = new Function('env', `with (env) { ${extractFunction(readWidgetSource(), 'tick')}; return tick; }`)(env);
+  tick();
+  assert.equal(renders, 1);
+  view.rest.remaining = -1;
+  tick();
+  assert.equal(renders, 1);
+  assert.equal(starts, 0);
 });
