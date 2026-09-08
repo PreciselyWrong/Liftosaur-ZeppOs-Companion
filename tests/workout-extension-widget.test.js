@@ -320,3 +320,36 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
   assert.equal(renders, 1);
   assert.equal(starts, 0);
 });
+
+test('saved extension finish shows a rightward hint instead of a misleading Done action', () => {
+  const source = readWidgetSource();
+  const body = extractFunction(source, 'renderFinishedScreen');
+  assert.match(body, /Swipe right/);
+  assert.match(body, /renderFinishSwipeHint\(\)/);
+  assert.doesNotMatch(body, /text: 'Done'/);
+  const nativeUpdates = [];
+  const nativeEnv = {
+    liveWidgets: {}, LAYOUT: { fit: props => props }, px: x => x,
+    widget: { TEXT: 'TEXT' }, THEME: {}, font: () => 40, align: {}, text_style: {},
+    prop: { MORE: 'MORE' }, LIVE_WIDGET_MUTABLE_KEYS: ['x', 'y', 'w', 'h', 'text'],
+    addRawWidget: () => ({ setProperty: (_, props) => nativeUpdates.push(props) }),
+  };
+  const renderHint = new Function('env', `with (env) {
+    ${extractFunction(source, 'updateLiveWidget')}
+    ${extractFunction(source, 'updateFinishSwipeHint')}
+    ${extractFunction(source, 'renderFinishSwipeHint')}
+    return renderFinishSwipeHint;
+  }`)(nativeEnv);
+  renderHint();
+  assert.equal(nativeUpdates.length, 1);
+  assert.equal(nativeUpdates[0].text, '>>');
+  const positions = [];
+  const env = { liveWidgets: { finishSwipe: {} }, px: x => x,
+    updateLiveWidget: (_, props) => positions.push(props.x) };
+  const update = new Function('env', `with (env) { ${extractFunction(source, 'updateFinishSwipeHint')}; return updateFinishSwipeHint; }`)(env);
+  for (const now of [0, 1000, 2000, 3000]) update(now);
+  assert.deepEqual(positions, [130, 210, 290, 130]);
+  env.liveWidgets = {};
+  update(4000);
+  assert.equal(positions.length, 4);
+});
