@@ -52,6 +52,8 @@
 
 ## Forbidden
 
+- ⛔ Prefix plate labels with "PER SIDE" or "LOAD" - show only the plate breakdown and unit to keep it readable.
+
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
 - ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
 - ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.

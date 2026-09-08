@@ -195,6 +195,8 @@
 
 ## Done
 
+- Simplified plate labels to the plate breakdown and unit.
+
 - Kept prepared superset sets through synchronization and restored exercise notes and recent comments in Info.
 
 - Replaced the top-right duration/calorie ticker with native workout BPM.
