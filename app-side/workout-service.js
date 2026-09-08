@@ -3,12 +3,16 @@
  *
  * Side Service may be destroyed between operations. This service delegates
  * catalog operations to the catalog service and workout runtime operations
- * directly to the Liftosaur API client.
- * It performs no guessing, retry, caching, or conflict resolution. The settings
+ * directly to the Liftosaur API client. Read responses also carry exercise
+ * customizations and recent session comments for the watch details screen.
+ * It performs no workout guessing, write retry, or conflict resolution. The settings
  * response also carries the phone-owned display preference used by the watch.
  */
 
+import { createWorkoutDetailsLoader } from './workout-details.js';
+
 export function createWorkoutService({ client, catalogService, getLocalSettings = null } = {}) {
+  const enrichDetails = createWorkoutDetailsLoader({ client });
   return {
     get mode() {
       return catalogService?.mode || 'CLOUD';
@@ -23,11 +27,11 @@ export function createWorkoutService({ client, catalogService, getLocalSettings 
     },
 
     async getNextWorkout(selection) {
-      return client.getNextWorkout(selection);
+      return enrichDetails(await client.getNextWorkout(selection));
     },
 
     async getCurrentWorkout() {
-      return client.getCurrentWorkout();
+      return enrichDetails(await client.getCurrentWorkout());
     },
 
     async startWorkout(payload) {

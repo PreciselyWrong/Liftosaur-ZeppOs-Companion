@@ -197,6 +197,8 @@ export function createWorkoutController({
           ...exercise,
           description: exercise.description ?? local.description ?? null,
           notes: exercise.notes ?? local.notes ?? null,
+          exerciseNotes: exercise.exerciseNotes ?? local.exerciseNotes ?? null,
+          historyNotes: exercise.historyNotes ?? local.historyNotes ?? null,
           loadingEquipment: exercise.loadingEquipment ?? local.loadingEquipment ?? null,
         };
       }),
@@ -229,7 +231,7 @@ export function createWorkoutController({
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
-    restoreAdoptionState(localState);
+    restoreAdoptionState(localState, { preserveNavigation });
     directSync = normalizeDirectSync({
       ...directSync,
       acknowledgedSetCount: session.getWorkoutSetWrites().length,
@@ -298,7 +300,7 @@ export function createWorkoutController({
     return events;
   }
 
-  function restoreAdoptionState(localState) {
+  function restoreAdoptionState(localState, { preserveNavigation = true } = {}) {
     if (!localState) return;
     for (const event of localState.timingEvents) {
       if (event.type === EVENT_TYPES.PAUSE_WORKOUT) {
@@ -309,6 +311,19 @@ export function createWorkoutController({
     }
 
     const overrides = localState.pendingSet;
+    if (preserveNavigation && overrides) {
+      // Resume heuristics cannot replace a set the lifter already prepared.
+      // Match the first unfinished server set so completed or removed sets stay closed.
+      const candidates = dayPlan.exercises.map((exercise, index) => {
+        const next = [...(exercise.warmupSets || []), ...(exercise.sets || [])]
+          .find((set) => !set.completed);
+        return exercise.entryId === overrides.entryId && next?.setId === overrides.setId
+          ? index : -1;
+      }).filter((index) => index !== -1);
+      if (candidates.length === 1 && session.view(now()).currentExerciseIndex !== candidates[0]) {
+        session.selectExercise(candidates[0], { timestamp: now() });
+      }
+    }
     const current = session.view(now()).pending?.set;
     if (!overrides || !current) return;
     if (overrides.entryId !== current.entryId || overrides.setId !== current.setId) return;

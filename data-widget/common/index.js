@@ -534,6 +534,23 @@ function openNotes(title, content) {
   renderUI();
 }
 
+function renderExerciseInfo(exerciseName, details, y, height) {
+  addWidget(widget.BUTTON, {
+    x: px(356),
+    y: px(y),
+    w: px(62),
+    h: px(height),
+    radius: px(height / 2),
+    normal_color: THEME.cardActive,
+    press_color: THEME.card,
+    color: THEME.primaryLight,
+    text: 'Info',
+    text_size: font('micro'),
+    click_func: () => openNotes('Exercise details',
+      `${exerciseName}\n\n${details || 'No exercise notes or description available.'}`),
+  });
+}
+
 function closeNotes() {
   isNotesModalOpen = false;
   activeNotesTitle = '';
@@ -1387,7 +1404,7 @@ function renderActiveSetScreen(view) {
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(92),
-    w: exerciseDetails ? px(290) : px(356),
+    w: px(290),
     h: px(30),
     color: THEME.textPrimary,
     text_size: font('title'),
@@ -1397,21 +1414,7 @@ function renderActiveSetScreen(view) {
     text: truncate(exerciseName, 20),
   });
 
-  if (exerciseDetails) {
-    addWidget(widget.BUTTON, {
-      x: px(356),
-      y: px(88),
-      w: px(62),
-      h: px(36),
-      radius: px(18),
-      normal_color: THEME.cardActive,
-      press_color: THEME.card,
-      color: THEME.primaryLight,
-      text: 'Info',
-      text_size: font('micro'),
-      click_func: () => openNotes('Exercise details', `${exerciseName}\n\n${exerciseDetails}`),
-    });
-  }
+  renderExerciseInfo(exerciseName, exerciseDetails, 88, 36);
 
   const ssColor = supersetColor(supersetGroup);
   const ssBadge = supersetGroup ? ` (SS ${supersetGroup})` : '';
@@ -1682,7 +1685,7 @@ function renderRestScreen(view) {
     addWidget(widget.TEXT, {
       x: px(60),
       y: px(250),
-      w: rest.nextExerciseDetails ? px(300) : px(360),
+      w: px(300),
       h: px(26),
       color: THEME.textPrimary,
       text_size: font('body'),
@@ -1692,21 +1695,7 @@ function renderRestScreen(view) {
       text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
 
-    if (rest.nextExerciseDetails) {
-      addWidget(widget.BUTTON, {
-        x: px(356),
-        y: px(246),
-        w: px(62),
-        h: px(32),
-        radius: px(16),
-        normal_color: THEME.cardActive,
-        press_color: THEME.card,
-        color: THEME.primaryLight,
-        text: 'Info',
-        text_size: font('micro'),
-        click_func: () => openNotes('Exercise details', `${rest.nextExerciseName}\n\n${rest.nextExerciseDetails}`),
-      });
-    }
+    renderExerciseInfo(rest.nextExerciseName, rest.nextExerciseDetails, 246, 32);
 
     addWidget(widget.TEXT, {
       x: px(60),

@@ -39,15 +39,13 @@ export function weightStepFor(unit) {
   return unit === 'lb' ? 5 : 2.5;
 }
 
-function combineExerciseDetails(description, notes) {
-  const descriptionText = typeof description === 'string' ? description.trim() : '';
-  const notesText = typeof notes === 'string' ? notes.trim() : '';
-
-  if (!descriptionText) return notesText || null;
-  if (!notesText) return descriptionText;
-  if (descriptionText === notesText || notesText.includes(descriptionText)) return notesText;
-  if (descriptionText.includes(notesText)) return descriptionText;
-  return `${notesText}\n\n${descriptionText}`;
+function combineExerciseDetails(exercise) {
+  const texts = [exercise.historyNotes, exercise.notes, exercise.exerciseNotes, exercise.description]
+    .filter((text) => typeof text === 'string' && text.trim())
+    .map((text) => text.trim());
+  const distinct = [...new Set(texts)];
+  return distinct.filter((text) => !distinct.some((other) => other !== text && other.includes(text)))
+    .join('\n\n') || null;
 }
 
 export function createWorkoutSession({
@@ -131,6 +129,8 @@ export function createWorkoutSession({
       loadingEquipment: exercise.loadingEquipment || null,
       supersetGroup: exercise.supersetGroup || exercise.supersetTag || null,
       notes: exercise.notes || null,
+      exerciseNotes: exercise.exerciseNotes || null,
+      historyNotes: exercise.historyNotes || null,
       description: exercise.description || null,
       hasUpdateScript: Boolean(exercise.hasUpdateScript),
       promptedVars: exercise.promptedVars ?? null,
@@ -672,7 +672,7 @@ export function createWorkoutSession({
     return {
       exerciseIndex: idx,
       exerciseName: exercise.name,
-      exerciseDetails: combineExerciseDetails(exercise.description, exercise.notes),
+      exerciseDetails: combineExerciseDetails(exercise),
       equipment: exercise.equipment ?? null,
       loadingEquipment: exercise.loadingEquipment ?? null,
       supersetGroup: exercise.supersetGroup ?? null,
@@ -866,7 +866,7 @@ export function createWorkoutSession({
         exerciseId: exercise.exerciseId || exercise.id,
         entryId: exercise.entryId ?? exercise.id,
         exerciseName: exercise.name,
-        exerciseDetails: combineExerciseDetails(exercise.description, exercise.notes),
+        exerciseDetails: combineExerciseDetails(exercise),
         loadingEquipment: exercise.loadingEquipment ?? null,
         supersetGroup: exercise.supersetGroup,
         totalSets: exercise.sets.length,

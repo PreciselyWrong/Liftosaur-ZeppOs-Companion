@@ -195,6 +195,8 @@
 
 ## Done
 
+- Kept prepared superset sets through synchronization and restored exercise notes and recent comments in Info.
+
 - Replaced the top-right duration/calorie ticker with native workout BPM.
 
 - Fixed stale workout updates, lost set edits and pauses, phantom sets, truncated duration and uncertain legacy save retries.

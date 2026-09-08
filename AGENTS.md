@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 8 September 2026 with 517 passing tests.
+- Test: `npm test` - verified on 8 September 2026 with 530 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1`, which checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -30,6 +30,7 @@
 - `shared/rest-alert.js` - rest alert state tracking, foreground zero-crossing, and resume expiry.
 - `shared/workout-extension-nav.js`, `shared/workout-extension-metrics.js` - extension screen formatting and defensive native metric parsing.
 - `shared/workout-extension-manifest.js` - separate extension manifest contract.
+- `app-side/workout-details.js` - bounded exercise-note and recent-history enrichment for running-workout reads.
 - `app-side/` - protocol routing, the only HTTP client, Cloud services and stable client identity.
 - `setting/` - phone-side API key settings. Secrets never belong on the watch.
 - `tests/` - Node contract, state, security, renderer and build tests.
@@ -50,6 +51,10 @@
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
+
+- ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
+- ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
+- ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.
 
 - ⛔ Show a duration/calorie ticker in the extension top-right metric - display native workout BPM there to avoid restarting horizontal text every second.
 
@@ -96,7 +101,7 @@
 
 ## State
 
-- Version 0.4.7 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 517 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
+- Version 0.4.8 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 530 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
 - Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Await feedback from normal use of 0.4.6.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

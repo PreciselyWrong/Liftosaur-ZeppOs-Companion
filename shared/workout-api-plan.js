@@ -136,6 +136,8 @@ export function workoutToDayPlan(workout, { units = null, isCurrent = false } = 
       supersetGroup: entry.superset ?? null,
       supersetTag: entry.superset ?? null,
       notes: entry.notes ?? null,
+      exerciseNotes: entry.exerciseNotes ?? null,
+      historyNotes: entry.historyNotes ?? null,
       description: entry.description ?? null,
       hasUpdateScript: Boolean(entry.hasUpdateScript),
       promptedVars: entry.promptedVars ?? null,
