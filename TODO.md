@@ -195,6 +195,8 @@
 
 ## Done
 
+- Replaced the expired rest action row with one full-width Start set button.
+
 - Simplified plate labels to the plate breakdown and unit.
 
 - Kept prepared superset sets through synchronization and restored exercise notes and recent comments in Info.

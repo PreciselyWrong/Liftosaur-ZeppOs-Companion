@@ -34,6 +34,7 @@ import {
   OVERVIEW_PAGE_SIZE,
   EXTENSION_CLOCK_LAYOUT,
   extensionActiveSetLayout,
+  extensionRestActionsLayout,
   readyExercisePage,
   formatWorkoutPosition,
   formatMarqueeText,
@@ -1739,29 +1740,31 @@ function renderRestScreen(view) {
     }
   }
 
-  // Action buttons
-  addWidget(widget.BUTTON, {
-    x: px(64),
-    y: px(370),
-    w: px(150),
-    h: px(58),
-    radius: px(29),
-    normal_color: THEME.cardActive,
-    press_color: THEME.card,
-    text: 'Prepare',
-    text_size: font('button'),
-    click_func: () => {
-      isRestMinimized = true;
-      renderUI();
-    },
-  });
+  const actions = extensionRestActionsLayout(rest.remaining);
+  if (actions.prepare) {
+    addWidget(widget.BUTTON, {
+      x: px(actions.prepare.x),
+      y: px(actions.y),
+      w: px(actions.prepare.width),
+      h: px(actions.height),
+      radius: px(actions.height / 2),
+      normal_color: THEME.cardActive,
+      press_color: THEME.card,
+      text: 'Prepare',
+      text_size: font('button'),
+      click_func: () => {
+        isRestMinimized = true;
+        renderUI();
+      },
+    });
+  }
 
   addWidget(widget.BUTTON, {
-    x: px(226),
-    y: px(370),
-    w: px(190),
-    h: px(58),
-    radius: px(29),
+    x: px(actions.start.x),
+    y: px(actions.y),
+    w: px(actions.start.width),
+    h: px(actions.height),
+    radius: px(actions.height / 2),
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
     text: 'Start set',
@@ -2595,6 +2598,11 @@ function tick() {
       renderUI();
       return;
     }
+  }
+
+  if (liveWidgets.restValue && lastRenderedSecond > 0 && view.rest?.remaining <= 0) {
+    renderUI();
+    return;
   }
 
   const currentSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
