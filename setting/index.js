@@ -1,4 +1,5 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+import { normalizeExerciseImages } from '../shared/exercise-images.js';
 
 function isDemoApiKey(value) {
   const key = String(value || '').trim().toLowerCase();
@@ -27,6 +28,7 @@ AppSettingsPage({
     apiKey: '',
     screenOnDuration: 120,
     getReadySeconds: 5,
+    exerciseImages: false,
   },
 
   build(props) {
@@ -359,6 +361,15 @@ AppSettingsPage({
               },
             }),
             Select({
+              label: 'Exercise images (Info)',
+              value: String(this.state.exerciseImages),
+              options: [{ name: 'Off', value: 'false' }, { name: 'On', value: 'true' }],
+              onChange: (value) => {
+                this.state.exerciseImages = normalizeExerciseImages(value);
+                props.settingsStorage.setItem('exerciseImages', this.state.exerciseImages);
+              },
+            }),
+            Select({
               label: 'Screen stays on',
               value: String(this.state.screenOnDuration),
               options: [
@@ -429,6 +440,7 @@ AppSettingsPage({
   },
 
   getStorage(props) {
+    this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
     const raw = props.settingsStorage.getItem('apiKey');
     if (typeof raw === 'string') {
       try {

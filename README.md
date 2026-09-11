@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-596%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-619%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -114,6 +114,7 @@ continued on either device via `GET /workout/current`.
 - **Repeat-safe synchronization**: set writes and workout finish are safe to repeat; duplicate requests return confirmed server state.
 - **Live heart rate**: Companion uses its own sensor; Workout displays native activity BPM without a scrolling time/calorie ticker.
 - **Readable exercise Info**: separate pages for recent sessions, exercise notes and program instructions.
+- **Optional exercise images**: enable Exercise images in phone settings for a dedicated picture page in Info. Off by default; physical-watch validation is pending.
 - **Compact superset context**: current round and following exercise, with prepared sets retained when rest ends.
 - **Recording status**: the footer distinguishes sets recorded on the watch from sets acknowledged by Liftosaur.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.

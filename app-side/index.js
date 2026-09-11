@@ -8,6 +8,8 @@ import { createDummyWorkoutService } from './dummy-workout-service.js';
 import { getOrCreateClientIdentity } from './client-identity.js';
 import { createWorkoutService } from './workout-service.js';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+import { normalizeExerciseImages } from '../shared/exercise-images.js';
+import { createExerciseImageService } from './exercise-image-service.js';
 
 let sideServiceInstance = null;
 
@@ -61,6 +63,7 @@ function getEffectiveSettings() {
   const apiKey = getEffectiveApiKey();
   let screenOnDuration = 120;
   let getReadySeconds = 5;
+  let exerciseImages = false;
 
   try {
     const storage = getEffectiveStorage();
@@ -70,6 +73,7 @@ function getEffectiveSettings() {
 
     if (storage) {
       getReadySeconds = normalizeGetReadySeconds(storage.getItem('getReadySeconds'));
+      exerciseImages = normalizeExerciseImages(storage.getItem('exerciseImages'));
       const rawScreenDuration = storage.getItem('screenOnDuration');
       let parsedScreenDuration = rawScreenDuration;
       if (typeof rawScreenDuration === 'string') {
@@ -97,6 +101,7 @@ function getEffectiveSettings() {
     apiKey,
     screenOnDuration,
     getReadySeconds,
+    exerciseImages,
   };
 }
 
@@ -104,6 +109,7 @@ let cachedKey = null;
 let cachedDeviceId = null;
 let cachedProgramService = null;
 let cachedWorkoutService = null;
+let exerciseImageService = null;
 
 function getServices() {
   const effective = getEffectiveSettings();
@@ -170,9 +176,17 @@ AppSideService(
     onInit() {
       console.log('[liftosaur-side] onInit');
       sideServiceInstance = this;
+      exerciseImageService = createExerciseImageService({
+        downloader: typeof network !== 'undefined' ? network.downloader : null,
+        image: typeof image !== 'undefined' ? image : null,
+        outbox: typeof transferFile !== 'undefined' ? transferFile.getOutbox() : null,
+        isEnabled: () => normalizeExerciseImages(getEffectiveStorage()?.getItem('exerciseImages')),
+        storage: getEffectiveStorage(),
+      });
     },
 
     onSettingsChange({ key } = {}) {
+      if (key === 'exerciseImages') exerciseImageService?.cancel();
       console.log('[liftosaur-side] settings changed:', key);
       sideServiceInstance = this;
       cachedKey = null;
@@ -187,6 +201,7 @@ AppSideService(
 
       const { programService, workoutService } = getServices();
       const router = createSideRouter({
+        exerciseImageService,
         programService,
         workoutService,
         workoutAbandoner: async () => {
@@ -212,6 +227,8 @@ AppSideService(
     },
 
     onDestroy() {
+      exerciseImageService?.cancel();
+      exerciseImageService = null;
       sideServiceInstance = null;
     },
   })

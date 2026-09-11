@@ -8,7 +8,7 @@
 
 import { MESSAGE_TYPES, ERROR_CODES, validateEnvelope, createPong, createError, createReply } from '../shared/protocol.js';
 
-export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null } = {}) {
+export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null, exerciseImageService = null } = {}) {
   function notConfigured(message) {
     return createError(message, ERROR_CODES.NOT_CONFIGURED, 'No Liftosaur API key configured on the phone');
   }
@@ -44,6 +44,13 @@ export function createSideRouter({ programService = null, workoutService = null,
       const catalogService = workoutService || programService;
 
       switch (rawMessage.type) {
+        case MESSAGE_TYPES.GET_EXERCISE_IMAGE:
+          try {
+            const result = exerciseImageService ? await exerciseImageService.load(rawMessage.payload || {}) : { status: 'unavailable' };
+            return createReply(rawMessage, MESSAGE_TYPES.EXERCISE_IMAGE_DATA, result);
+          } catch {
+            return createReply(rawMessage, MESSAGE_TYPES.EXERCISE_IMAGE_DATA, { status: 'unavailable' });
+          }
         case MESSAGE_TYPES.LIST_PROGRAMS:
           if (!catalogService) return notConfigured(rawMessage);
           try {

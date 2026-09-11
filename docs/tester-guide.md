@@ -65,6 +65,10 @@ To sync with your own Liftosaur account, you need a Liftosaur Premium subscripti
 4. Paste your key into the API Key box.
 The settings save automatically on your phone.
 
+Under Workout Display, enable **Exercise images** to show the picture supplied by Liftosaur on a separate page in **Info**. This option is off by default and is configured separately for each app. Images need the phone connection to load; exercise notes remain available if a picture cannot load. Image transfer and display still need physical-watch validation.
+
+This experimental 0.4.9 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
+
 ### How Direct Sync works
 
 Once configured, the watch connects directly to Liftosaur Cloud:

@@ -3,13 +3,14 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+import { normalizeExerciseImages } from '../shared/exercise-images.js';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
 const appSideSource = fs.readFileSync(path.join(process.cwd(), 'app-side', 'index.js'), 'utf8');
 let settingsPage;
-new Function('AppSettingsPage', 'normalizeGetReadySeconds', source.replace(/^import .*;\r?\n/gm, ''))((definition) => {
+new Function('AppSettingsPage', 'normalizeGetReadySeconds', 'normalizeExerciseImages', source.replace(/^import .*;\r?\n/gm, ''))((definition) => {
   settingsPage = definition;
-}, normalizeGetReadySeconds);
+}, normalizeGetReadySeconds, normalizeExerciseImages);
 
 function loadSettings(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -32,8 +33,13 @@ function loadSettings(initial = {}) {
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
-  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5 });
+  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false });
   assert.deepEqual(writes, []);
+});
+
+test('exercise images are opt-in and preserve the saved preference', () => {
+  assert.equal(loadSettings({ exerciseImages: 'true' }).state.exerciseImages, true);
+  assert.equal(loadSettings({ exerciseImages: 'false' }).state.exerciseImages, false);
 });
 
 test('the settings page explains that Liftosaur owns rest defaults', () => {

@@ -2,7 +2,7 @@
 
 ## Now
 
-- Validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
+- Validate timed sets, optional exercise images and Workout integration in Lifto 0.4.9 on Active 2 firmware 7.23.0.1 at API level 400.
 
 ## Next
 
@@ -10,6 +10,7 @@
 
 ## Done
 
+- Added optional API exercise images in Info for both 0.4.9 apps.
 - Added durable timed sets, left/right holds and local Get Ready in both apps.
 
 ## Metadata

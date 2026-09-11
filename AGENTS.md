@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 11 September 2026 with 596 passing tests.
+- Test: `npm test` - verified on 11 September 2026 with 621 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -47,12 +47,16 @@
 - Rest state uses absolute `restStartedAt`, `restDuration` and `restEndsAt`; display intervals only repaint.
 - Timed sets journal preparation, effort, pauses and partial left-side results. Both unilateral durations are sent together; target expiry alerts but never completes a set automatically.
 - Get Ready is a local Off/3/5/10-second preference. Explicit arming preserves existing rest and uses its final seconds; undocumented Liftoscript auto and timer modifiers are not inferred.
+- Exercise images use API imageUrl only and appear in Info when opted in through phone settings. ZML onReceivedFile owns reception. Phone storage has 32 immutable image slots; hardware display validation remains pending.
 - Current-workout reads use a 10-second action floor, two-minute passive checks and 60/120/300-second failure backoff.
 - Standalone and Workout Extension are separate packages and App IDs sharing domain modules, not renderers or credentials.
 - The public Zepp App IDs are `1123411` for Lifto Companion and `1125789` for Lifto Workout Extension.
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
+
+- Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
+- Do not bump the app version for optional exercise images - include them in 0.4.9.
 
 - Do not split the timed-set changes into a separate 0.4.10 release - they belong to the combined 0.4.9 release requested by the user.
 
@@ -113,7 +117,7 @@
 
 ## State
 
-- Version 0.4.9 beta: both apps run timed and unilateral sets with durable preparation, pause and duration recording; 596 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle and alerts require physical validation.
+- Version 0.4.9 beta: both apps run timed and unilateral sets and optional exercise images in Info; 621 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
 - Now: validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

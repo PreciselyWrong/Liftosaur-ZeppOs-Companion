@@ -3,6 +3,7 @@
 ## [0.4.9] - 11 September 2026
 
 ### Added
+- Optional exercise pictures appear on their own page in Info.
 - Lifto Workout is now available in Free Training as well as Strength Training.
 - Timed exercises now run on the watch, including separate left and right holds.
 - A yellow Get Ready countdown helps you get into position.

@@ -11,6 +11,7 @@
 
 import { createWorkoutDetailsLoader } from './workout-details.js';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+import { normalizeExerciseImages } from '../shared/exercise-images.js';
 
 export function createWorkoutService({ client, catalogService, getLocalSettings = null } = {}) {
   const enrichDetails = createWorkoutDetailsLoader({ client });
@@ -58,6 +59,7 @@ export function createWorkoutService({ client, catalogService, getLocalSettings 
         ...remote,
         screenOnDuration: local?.screenOnDuration ?? 120,
         getReadySeconds: normalizeGetReadySeconds(local?.getReadySeconds),
+        exerciseImages: normalizeExerciseImages(local?.exerciseImages),
       };
     },
   };
