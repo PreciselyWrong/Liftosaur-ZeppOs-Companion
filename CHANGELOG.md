@@ -9,6 +9,8 @@
 - Sets without a planned weight now start at zero and sync normally.
 - Late sync replies can no longer alter a newer workout.
 - Rapid exercise changes keep every completed set in order.
+- Starting the next set no longer restores an older workout over pending sets.
+- Late save and discard replies leave a replacement workout untouched.
 
 ### Changed
 - Both watch apps now share the same menu symbol and set progress circles.
