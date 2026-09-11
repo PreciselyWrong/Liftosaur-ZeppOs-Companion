@@ -85,6 +85,7 @@ export function formatEditableSetValue(value, requiresEntry = false) {
 
 export function formatTargetRepsSummary(set) {
   if (!set) return '-';
+  if (set.setTimer > 0) return `${formatSeconds(set.setTimer)} hold`;
   const suffix = set.isAmrap ? '+' : '';
   if (set.targetRepsMax !== null && set.targetRepsMax !== undefined && set.targetReps !== null) {
     return `${set.targetReps}-${set.targetRepsMax}${suffix}`;
@@ -131,8 +132,8 @@ export function checkRequiredPhoneInput(set) {
   if (Array.isArray(set.promptedVars) && set.promptedVars.length > 0) {
     return 'Program variables must be entered on phone.';
   }
-  if (set.setTimer !== null && set.setTimer !== undefined) {
-    return 'Timed sets must be recorded on phone.';
+  if (set.setTimer > 0 && set.isUnilateral && set.isAmrap) {
+    return 'Separate AMRAP reps for each side must be entered on phone.';
   }
   if (set.isAmrap && !Number.isFinite(set.reps) && !Number.isFinite(set.targetReps)) {
     return 'AMRAP reps must be entered on phone.';

@@ -1,4 +1,7 @@
 import { recordingLabel } from '../../shared/recording-status.js';
+import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
+import { TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
+import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
@@ -262,6 +265,7 @@ function resetDisplayHold() {
 
 function adoptAccountSettings(payload) {
   accountSettings = payload || {};
+  workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
   applyDisplayHold();
 }
 
@@ -828,7 +832,11 @@ async function adoptCurrentWorkout() {
 }
 
 function handleNextSet() {
-  session.nextSet();
+  const view = session.view();
+  const reason = view.timedSet && checkRequiredPhoneInput(view.pending?.set || view.currentSet);
+  if (reason) { openTextModal('Phone required', reason); return; }
+  if (session.view().timedSet) session.startTimedSet();
+  else session.nextSet();
   dayPlan = workoutController.plan();
   updateControllerStatus();
 }
@@ -1013,6 +1021,7 @@ function formatWeight(weight, unit) {
 }
 
 function formatTargetReps(set) {
+  if (set?.setTimer > 0) return `${formatSeconds(set.setTimer)} hold`;
   if (!set || set.targetReps === null) return '-';
   const range = set.targetRepsMax ? `${set.targetReps}-${set.targetRepsMax}` : `${set.targetReps}`;
   return set.isAmrap ? `${range}+` : range;
@@ -2307,6 +2316,96 @@ function renderOverviewScreen(view) {
   }
 }
 
+let renderedTimedPhase = null;
+let timedTargetAlerted = false;
+let timedAlertIdentity = null;
+
+function addLiveShape(key, props) {
+  const fitted = LAYOUT.fit(props);
+  const nativeWidget = addRawWidget(widget.FILL_RECT, fitted);
+  liveWidgets[key] = { widget: nativeWidget, props: { ...fitted } };
+}
+
+function renderTimedSetScreen(view) {
+  const timer = view.timedSet;
+  const identity = timedSetIdentity(view);
+  const ui = timedSetPresentation(timer);
+  const layout = TIMED_SET_LAYOUT;
+  renderedTimedPhase = timer.phase;
+  renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
+  addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.') });
+  const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
+    x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
+    color, normal_color: THEME.bg, press_color: THEME.bg, radius: 0,
+  });
+  addWidget(widget.TEXT, { x: px(62), y: px(92), w: px(280), h: px(30),
+    color: THEME.textPrimary, text_size: font('title'), align_h: align.CENTER_H,
+    text: truncate(view.exerciseName, 20) });
+  label('timedSide', 126, 28, `SET ${view.currentSetIndex + 1}/${view.totalSets}${timer.side ? ' - ' + timer.side : ''}`, 'caption');
+  for (let i = 0; i < layout.segments; i += 1) {
+    const angle = i * Math.PI * 2 / layout.segments - Math.PI / 2;
+    addLiveShape(`timedSegment${i}`, {
+      x: px(layout.centerX + Math.cos(angle) * layout.horizontalRadius - layout.dotSize / 2),
+      y: px(layout.centerY + Math.sin(angle) * layout.radius - layout.dotSize / 2),
+      w: px(layout.dotSize), h: px(layout.dotSize), radius: px(layout.dotSize / 2),
+      color: i / layout.segments < ui.progress ? ui.color : THEME.card,
+    });
+  }
+  addLiveLabel('timedValue', { x: px(layout.valueX), y: px(layout.valueY), w: px(layout.valueWidth), h: px(layout.valueHeight),
+    text: ui.value, text_size: font(ui.valueFont), color: ui.color, normal_color: THEME.bg, press_color: THEME.bg });
+  label('timedLabel', layout.labelY, 30, ui.label, 'title', ui.color);
+  label('timedDetail', layout.detailY, 28, ui.detail, 'caption', THEME.textSecondary);
+  const action = (index, text, callback) => addWidget(widget.BUTTON, {
+    x: px(layout.actionX + index * (layout.actionWidth + layout.actionGap)), y: px(layout.actionY),
+    w: px(layout.actionWidth), h: px(layout.actionHeight), radius: px(layout.actionHeight / 2),
+    normal_color: THEME.card, press_color: THEME.cardActive, text, text_size: font('button'),
+    click_func: () => {
+      const currentView = workoutController.view();
+      if (timedSetIdentity(currentView) !== identity) return;
+      callback(currentView.timedSet);
+      controllerUiDirty = true;
+    },
+  });
+  action(0, ui.pauseAction, (current) => {
+    if (current.isWorkoutPaused) return;
+    if (current.isPaused) workoutController.resumeTimedSet();
+    else workoutController.pauseTimedSet();
+  });
+  action(1, ui.action, (current) => {
+    if (current.isWorkoutPaused || current.isPaused) return;
+    if (current.phase === 'GET_READY') workoutController.startTimedSet();
+    else {
+      workoutController.stopTimedSide();
+      workoutController.syncSets().catch(() => { controllerUiDirty = true; });
+      if (workoutController.view().state === SESSION_STATES.FINISHED) submitWorkout();
+    }
+  });
+}
+
+function updateTimedSetScreen(view) {
+  const timer = view.timedSet;
+  if (!timer || timer.phase === 'READY' || timer.phase === 'REST') {
+    if (renderedTimedPhase) { renderedTimedPhase = null; renderUI(); }
+    return false;
+  }
+  const ui = timedSetPresentation(timer);
+  const identity = timedSetIdentity(view);
+  if (identity !== timedAlertIdentity) { timedTargetAlerted = false; timedAlertIdentity = identity; }
+  if (timer.phase !== renderedTimedPhase && !isOverviewOpen) { renderUI(); return true; }
+  if (timer.phase !== 'WORK' || timer.remaining > 0) timedTargetAlerted = false;
+  if (timer.phase === 'WORK' && timer.remaining <= 0 && !timer.isPaused && !timer.isWorkoutPaused && !timedTargetAlerted) {
+    timedTargetAlerted = true;
+    triggerVibration(0);
+  }
+  updateLiveWidget('timedValue', { text: ui.value, color: ui.color, text_size: font(ui.valueFont) });
+  updateLiveWidget('timedLabel', { text: ui.label, color: ui.color });
+  updateLiveWidget('timedDetail', { text: ui.detail });
+  for (let i = 0; i < TIMED_SET_LAYOUT.segments; i += 1) {
+    updateLiveWidget(`timedSegment${i}`, { color: i / TIMED_SET_LAYOUT.segments < ui.progress ? ui.color : THEME.card });
+  }
+  return true;
+}
+
 function renderActiveSetScreen(view) {
   const isResting = view.state === SESSION_STATES.REST && view.rest;
 
@@ -2489,9 +2588,18 @@ function renderActiveSetScreen(view) {
     normal_color: THEME.success,
     press_color: 0x1c9c6d,
     color: 0x00281c,
-    text: isResting ? 'Start set' : 'Done',
+    text: view.timedSet?.phase === 'REST' ? 'Armed'
+      : isResting ? 'Start set' : view.timedSet ? (set.isUnilateral ? 'Start left' : 'Start set') : 'Done',
     text_size: font('title'),
     click_func: () => {
+      if (!isResting && view.timedSet) {
+        const reason = checkRequiredPhoneInput(set);
+        if (reason) { openTextModal('Phone required', reason); return; }
+        timedTargetAlerted = false;
+        workoutController.startTimedSet();
+        controllerUiDirty = true;
+        return;
+      }
       lastVibratedOvertimeStep = -1;
       if (isResting) {
         isRestMinimized = false;
@@ -2772,7 +2880,7 @@ function renderRestScreen(view) {
     radius: px(29),
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
-    text: 'Start set',
+    text: view.timedSet?.phase === 'REST' ? 'Armed' : 'Start set',
     text_size: font('button'),
     click_func: () => {
       lastVibratedOvertimeStep = -1;
@@ -2954,6 +3062,7 @@ function renderScreen() {
   }
   if (view.state === SESSION_STATES.READY) return renderReadyScreen(view);
   if (isOverviewOpen && view.state !== SESSION_STATES.FINISHED) return renderOverviewScreen(view);
+  if (view.timedSet && view.timedSet.phase !== 'READY' && view.timedSet.phase !== 'REST') return renderTimedSetScreen(view);
   if (view.state === SESSION_STATES.ACTIVE_SET) return renderActiveSetScreen(view);
   if (view.state === SESSION_STATES.REST) {
     if (isRestMinimized) return renderActiveSetScreen(view);
@@ -2990,7 +3099,9 @@ function tick() {
   }
   pollCurrentWorkout();
 
+  workoutController.advanceTimedSet();
   const view = session.view();
+  updateTimedSetScreen(view);
 
   if (view.state !== lastRenderedState) {
     renderUI();

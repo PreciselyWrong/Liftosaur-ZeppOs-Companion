@@ -79,6 +79,7 @@ function mapWorkoutSet(set, setIndex, isWarmupDefault, planUnit) {
         ...(completedWeight ? { weight: completedWeight.value, unit: completedWeight.unit } : {}),
         ...(set.completed.rpe !== undefined ? { rpe: set.completed.rpe } : {}),
         ...(set.completed.setTimer !== undefined ? { setTimer: set.completed.setTimer } : {}),
+        ...(set.completed.setTimerLeft !== undefined ? { setTimerLeft: set.completed.setTimerLeft } : {}),
         ...(set.completed.userVars !== undefined ? { userVars: set.completed.userVars } : {}),
       };
 

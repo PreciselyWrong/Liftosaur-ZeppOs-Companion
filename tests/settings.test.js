@@ -2,13 +2,14 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
 const appSideSource = fs.readFileSync(path.join(process.cwd(), 'app-side', 'index.js'), 'utf8');
 let settingsPage;
-new Function('AppSettingsPage', source)((definition) => {
+new Function('AppSettingsPage', 'normalizeGetReadySeconds', source.replace(/^import .*;\r?\n/gm, ''))((definition) => {
   settingsPage = definition;
-});
+}, normalizeGetReadySeconds);
 
 function loadSettings(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -31,7 +32,7 @@ function loadSettings(initial = {}) {
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
-  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120 });
+  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5 });
   assert.deepEqual(writes, []);
 });
 

@@ -1,3 +1,5 @@
+import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+
 function clone(value) {
   return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value));
 }
@@ -22,6 +24,8 @@ function mapSet(set, entryId, kind, index, planUnit) {
     logRpe: set.targetRpe !== null && set.targetRpe !== undefined,
     askWeight: Boolean(set.askWeight),
     isAmrap: Boolean(set.isAmrap),
+    isUnilateral: Boolean(set.isUnilateral),
+    setTimer: set.setTimer ?? null,
     timer: set.restSeconds ?? null,
     plates: set.plates ?? null,
     completed: null,
@@ -153,6 +157,7 @@ export function createDummyWorkoutService({ catalogService, now = Date.now, getL
         units: 'kg',
         timers: { warmup: 60, workout: 120, superset: 90 },
         screenOnDuration: local?.screenOnDuration ?? 120,
+        getReadySeconds: normalizeGetReadySeconds(local?.getReadySeconds),
       };
     },
   };

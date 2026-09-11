@@ -1,3 +1,5 @@
+import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
+
 function isDemoApiKey(value) {
   const key = String(value || '').trim().toLowerCase();
   return !key || key === 'demo' || key === 'dummy';
@@ -24,6 +26,7 @@ AppSettingsPage({
   state: {
     apiKey: '',
     screenOnDuration: 120,
+    getReadySeconds: 5,
   },
 
   build(props) {
@@ -341,6 +344,21 @@ AppSettingsPage({
               'Keep Lifto visible while you train.'
             ),
             Select({
+              label: 'Get ready countdown (Lifto only)',
+              value: String(this.state.getReadySeconds),
+              options: [
+                { name: 'Off', value: '0' },
+                { name: '3 seconds', value: '3' },
+                { name: '5 seconds', value: '5' },
+                { name: '10 seconds', value: '10' },
+              ],
+              onChange: (value) => {
+                const seconds = normalizeGetReadySeconds(value);
+                this.state.getReadySeconds = seconds;
+                props.settingsStorage.setItem('getReadySeconds', seconds);
+              },
+            }),
+            Select({
               label: 'Screen stays on',
               value: String(this.state.screenOnDuration),
               options: [
@@ -426,6 +444,9 @@ AppSettingsPage({
     }
     this.state.screenOnDuration = normalizeScreenOnDuration(
       props.settingsStorage.getItem('screenOnDuration')
+    );
+    this.state.getReadySeconds = normalizeGetReadySeconds(
+      props.settingsStorage.getItem('getReadySeconds')
     );
   },
 });

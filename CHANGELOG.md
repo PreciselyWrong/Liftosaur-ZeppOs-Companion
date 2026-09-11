@@ -1,5 +1,17 @@
 # Changelog
 
+## [0.4.10] - 11 September 2026
+
+### Added
+- Timed exercises now run on the watch, including separate left and right holds.
+- A yellow Get Ready countdown helps you get into position.
+- Choose a 3, 5 or 10 second countdown, or turn it off.
+- Pause a hold and resume it without losing your time.
+
+### Changed
+- Hold timers alert at the target and keep counting until you tap Stop.
+- An interrupted hold keeps its timing and completed left side.
+
 ## [0.4.9] - 11 September 2026
 
 ### Added

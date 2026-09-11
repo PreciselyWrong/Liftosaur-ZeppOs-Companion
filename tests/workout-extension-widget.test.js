@@ -294,6 +294,9 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
     assert.equal(start.h, 58);
     start.click_func();
     assert.equal(started, 1);
+    buttons.length = 0;
+    render({ rest: { remaining, isPaused: false }, timedSet: { phase: 'REST' } });
+    assert.ok(buttons.some(button => button.text === 'Armed'));
   }
 });
 
@@ -305,7 +308,8 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
     updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
     SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
     refreshSportMetrics() {}, retryPendingWrites() {},
-    workoutController: { view: () => view, pollCurrent: async () => false, nextSet: () => { starts++; } },
+    workoutController: { view: () => view, advanceTimedSet() {}, pollCurrent: async () => false, nextSet: () => { starts++; } },
+    updateTimedSetScreen() {},
     syncWarning: null, updateSyncWarning() {}, handlePollFailure() {},
     lastRenderedState: 'REST', lastRenderedSecond: 1, isRestMinimized: false, liveWidgets: { restValue: {} },
     restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },

@@ -53,7 +53,7 @@ test('EXTENSION_SCREENS defines all required top-level screens', () => {
   assert.equal(EXTENSION_SCREENS.SESSION, 'SESSION');
 });
 
-test('checkRequiredPhoneInput detects prompted variables, timed sets, and incomplete AMRAP', () => {
+test('checkRequiredPhoneInput allows timed sets but detects required phone inputs', () => {
   assert.equal(checkRequiredPhoneInput(null), null);
   assert.equal(checkRequiredPhoneInput({ reps: 8, weight: 60 }), null);
 
@@ -63,11 +63,7 @@ test('checkRequiredPhoneInput detects prompted variables, timed sets, and incomp
     /phone/i
   );
 
-  // Timed set requires phone
-  assert.match(
-    checkRequiredPhoneInput({ setTimer: 60, reps: 8, weight: 60 }),
-    /phone|timed/i
-  );
+  assert.equal(checkRequiredPhoneInput({ setTimer: 60, reps: 8, weight: 60 }), null);
 
   // AMRAP with missing reps
   assert.match(

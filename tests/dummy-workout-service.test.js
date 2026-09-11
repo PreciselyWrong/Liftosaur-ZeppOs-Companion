@@ -19,6 +19,7 @@ test('dummy workout service exposes the direct Workout contract from shared demo
     units: 'kg',
     timers: { warmup: 60, workout: 120, superset: 90 },
     screenOnDuration: 120,
+    getReadySeconds: 5,
   });
   assert.deepEqual(await service.getCurrentWorkout(), { workout: null });
 
@@ -43,6 +44,7 @@ test('dummy workout settings include the local display preference', async () => 
     units: 'kg',
     timers: { warmup: 60, workout: 120, superset: 90 },
     screenOnDuration: 240,
+    getReadySeconds: 5,
   });
 });
 
