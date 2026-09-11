@@ -112,7 +112,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   assert.match(onResume, /requestRefresh\(\)/, 'onResume must prioritize a current workout refresh');
 
   assert.match(source, /function loadDisplaySettings/, 'Restored sessions must reload display settings');
-  assert.match(source, /text: syncWarning \? 'Sync!' : 'Menu'/, 'Keep a visible sync warning outside BPM');
+  assert.match(source, /text: syncWarning \? 'Sync!' : MENU_LABEL/, 'Share the Companion menu glyph');
 
   // 15. Rest completion must use Zepp's dedicated strong reminder pattern.
   assert.match(
@@ -221,13 +221,13 @@ test('top bar renders native BPM without a live text ticker even during sync war
     const widgets = [];
     const render = new Function('addWidget', 'addLiveLabel', 'widget', 'sport_data',
       'edit_widget_group_type', 'EXTENSION_TOP_BAR_LAYOUT', 'px', 'font', 'THEME',
-      'align', 'text_style', 'formatSeconds', 'syncWarning',
+      'align', 'text_style', 'formatSeconds', 'MENU_LABEL', 'syncWarning',
       `${extractFunction(source, 'renderTopBar')}; return renderTopBar;`)(
       (type, props) => widgets.push({ type, ...props }),
       (key, props) => widgets.push({ key, ...props }),
       { BUTTON: 'button', SPORT_DATA: 'sport' }, { HR: 123 }, { SPORTS: 456 },
       { y: 48, height: 40, menu: { x: 100, width: 82 }, elapsed: { x: 186, width: 96 }, metric: { x: 286, width: 96 } },
-      x => x, () => 20, {}, {}, {}, String, syncWarning);
+      x => x, () => 20, {}, {}, {}, String, '\u2261', syncWarning);
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
     assert.ok(hr, 'BPM must be a native sport widget');

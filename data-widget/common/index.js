@@ -50,6 +50,7 @@ import { createRestAlertTracker } from '../../shared/rest-alert.js';
 import {
   EXTENSION_SCREENS,
   EXTENSION_TOP_BAR_LAYOUT,
+  MENU_LABEL,
   checkRequiredPhoneInput,
   formatSeconds,
   formatEditableSetValue,
@@ -570,7 +571,7 @@ function renderTopBar(view, onBack) {
     radius: px(topBar.height / 2),
     normal_color: THEME.card,
     press_color: THEME.cardActive,
-    text: syncWarning ? 'Sync!' : 'Menu',
+    text: syncWarning ? 'Sync!' : MENU_LABEL,
     color: syncWarning ? THEME.orange : THEME.textPrimary,
     text_size: font('button'),
     click_func: onBack,
@@ -1341,7 +1342,7 @@ function renderActiveSetScreen(view) {
       radius: px(topBar.height / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
-      text: syncWarning ? 'Sync!' : 'Menu',
+      text: syncWarning ? 'Sync!' : MENU_LABEL,
       color: syncWarning ? THEME.orange : THEME.textPrimary,
       text_size: font('button'),
       click_func: () => {

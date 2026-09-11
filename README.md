@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-546%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-550%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -27,11 +27,11 @@ The standalone app provides the least constrained watch experience: program brow
 
 ## Lifto Workout
 
-The separate Workout Extension runs inside Zepp Strength Training. It keeps the native Zepp activity and metrics visible while the shared Lifto controller handles prescriptions, set logging, rest, recovery, and Liftosaur finalization through click-only screens.
+The separate Workout Extension runs inside Zepp Strength Training and Free Training. It keeps the native Zepp activity and metrics visible while the shared Lifto controller handles prescriptions, set logging, rest, recovery, and Liftosaur finalization through click-only screens.
 
 The two apps are complementary and can be installed together. Liftosaur Cloud is their shared workout handoff; credentials remain inside each app's phone Side Service.
 
-### Add Lifto to Strength Training
+### Add Lifto to a native workout
 
 Installing Lifto Workout does not automatically add its data page to a workout. Device paths differ:
 
@@ -40,7 +40,7 @@ Installing Lifto Workout does not automatically add its data page to a workout. 
 - **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5):
   **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
-Lifto then appears as one of the pages inside the native Strength Training workout. Installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
+The 0.4.9 extension also targets Free Training. Its Active 2 menu path and runtime behaviour remain UNKNOWN until the physical validation described in the hardware test plan. Strength Training installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
 
 After Liftosaur confirms the save, swipe from left to right to open the native Workout controls and finish the Zepp activity. The animated chevrons on the finish screen remind you of this final step.
 
@@ -79,9 +79,9 @@ is TESTED (tester report), not a full compatibility certification. The remaining
 require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.4.8 beta.
+**Version:** Lifto Companion 0.4.9 beta.
 
-**Workout version:** Lifto Workout 0.4.8 beta.
+**Workout version:** Lifto Workout 0.4.9 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
@@ -197,7 +197,7 @@ npm test
 # Build standalone Companion package
 npm run build:companion
 
-# Build Strength Training Workout Extension package (requires numeric App ID)
+# Build Workout Extension package (requires numeric App ID)
 ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout
 
 # Build both targets

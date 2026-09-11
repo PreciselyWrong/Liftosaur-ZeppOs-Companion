@@ -36,7 +36,13 @@ import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
-import { formatEditableSetValue, formatSupersetProgress } from '../../shared/workout-extension-nav.js';
+import {
+  MENU_LABEL,
+  checkRequiredPhoneInput,
+  formatDots,
+  formatEditableSetValue,
+  formatSupersetProgress,
+} from '../../shared/workout-extension-nav.js';
 import { isTemporaryPhoneError } from '../../shared/connection-state.js';
 import {
   TYPOGRAPHY,
@@ -775,23 +781,9 @@ function handleStartWorkout() {
   }
 }
 
-function requiredPhoneInput(set) {
-  if (!set) return null;
-  if (Array.isArray(set.promptedVars) && set.promptedVars.length > 0) {
-    return 'Enter program values on phone';
-  }
-  if (set.setTimer !== null && set.setTimer !== undefined) {
-    return 'Run timed set on phone';
-  }
-  if (set.isAmrap && !Number.isFinite(set.reps)) return 'Enter AMRAP reps';
-  if (set.askWeight && !Number.isFinite(set.weight)) return 'Enter weight';
-  if (set.logRpe && !Number.isFinite(set.rpe)) return 'Enter RPE';
-  return null;
-}
-
 function completeCurrentSet() {
   const set = session.view().currentSet;
-  const missing = requiredPhoneInput(set);
+  const missing = checkRequiredPhoneInput(set);
   if (missing) {
     syncWarning = missing;
     renderUI();
@@ -1006,10 +998,6 @@ function formatSeconds(sec) {
 
 function elapsedLabel(view) {
   return formatSeconds(view.elapsedSeconds);
-}
-
-function formatDots(dots) {
-  return dots.map((d) => (d === 'pending' ? '○' : '●')).join(' ');
 }
 
 function truncate(str, max) {
@@ -2161,7 +2149,7 @@ function renderTopBar(view, onBack) {
     radius: px(24),
     normal_color: THEME.card,
     press_color: THEME.cardActive,
-    text: '≡',
+    text: MENU_LABEL,
     text_size: font('button'),
     click_func: onBack,
   });

@@ -25,6 +25,8 @@ export const EXTENSION_TOP_BAR_LAYOUT = Object.freeze({
   restBanner: Object.freeze({ x: 186, width: 196 }),
 });
 
+export const MENU_LABEL = '\u2261';
+
 const SUPERSET_COLORS = [
   0xff8066, // Coral / Orange
   0x2bdc9b, // Mint / Green
@@ -120,7 +122,7 @@ export function shouldAutoStartPreparedSet(isPrepared, rest) {
 export function formatDots(dots = []) {
   if (!Array.isArray(dots) || dots.length === 0) return '';
   return dots
-    .map((dot) => (dot === 'completed' ? 'x' : dot === 'active' ? '>' : '-'))
+    .map((dot) => (dot === 'pending' ? '\u25cb' : '\u25cf'))
     .join(' ');
 }
 
@@ -137,6 +139,9 @@ export function checkRequiredPhoneInput(set) {
   }
   if (set.askWeight && !Number.isFinite(set.weight) && !Number.isFinite(set.targetWeight)) {
     return 'Weight input required on phone.';
+  }
+  if (set.logRpe && !Number.isFinite(set.rpe) && !Number.isFinite(set.targetRpe)) {
+    return 'RPE input required on phone.';
   }
   return null;
 }

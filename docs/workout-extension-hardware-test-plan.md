@@ -1,9 +1,9 @@
 # Workout Extension Hardware Test Plan
 
-Physical-watch test matrix for Lifto Workout (Strength Training Workout Extension).
+Physical-watch test matrix for Lifto Workout in Strength Training and Free Training.
 Target devices must be on Zepp's documented Workout Extension support list (e.g. Amazfit T-Rex 3, Cheetah Pro, Cheetah Round, Cheetah Square, T-Rex Ultra, Falcon) running Zepp OS 3.6+.
 
-An Amazfit Active 2 running firmware 7.23.0.1 and API level 400 has now loaded the extension in Strength Training. Integration retesting for that exact combination follows [the Active 2 checklist](active-2-workout-integration-test.md); this observation does not claim compatibility for other firmware builds.
+An Amazfit Active 2 running firmware 7.23.0.1 and API level 400 has loaded the extension in Strength Training. Free Training support and the 0.4.9 integration changes still require physical validation through [the Active 2 checklist](active-2-workout-integration-test.md); this observation does not claim compatibility for other firmware builds.
 
 Every test row records:
 - `Model`: specific watch model name
@@ -22,10 +22,10 @@ Every test row records:
 
 | Test | Model | Firmware | OS | App version | Commit | Date | Result | Evidence | Notes |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Install and add extension | - | - | - | - | - | - | BLOCKED | - | Install preview package in Developer Mode; enable Lifto under Strength Training > Motion Extensions |
-| Native workout start | - | - | - | - | - | - | BLOCKED | - | Start Zepp Strength Training; verify DataWidget initializes and renders initial screen |
+| Install and add extension | - | - | - | - | - | - | BLOCKED | - | Install the preview; add Lifto from each workout's Data Page settings in Strength Training and Free Training |
+| Native workout start | - | - | - | - | - | - | BLOCKED | - | Start each supported workout type; verify DataWidget initializes and renders its first screen |
 | Current / selected workout | - | - | - | - | - | - | BLOCKED | - | Test scheduled next-day preview, explicit program/week/day picker, and active Cloud workout resumption |
-| Weight, reps, and RPE | - | - | - | - | - | - | BLOCKED | - | Adjust weight/reps/RPE via click-only stepper buttons; verify clamping and set completion |
+| Weight, reps, and RPE | - | - | - | - | - | - | BLOCKED | - | Verify an unweighted required set starts at zero and syncs; adjust other values with the click-only steppers |
 | Notes display | - | - | - | - | - | - | BLOCKED | - | Open exercise notes modal; verify markdown stripped formatting, pagination, and dismiss |
 | Warmups handling | - | - | - | - | - | - | BLOCKED | - | Verify warmup set badges, calculated plate loadouts, and progression to work sets |
 | AMRAP sets handling | - | - | - | - | - | - | BLOCKED | - | Log rep counts above/below target on AMRAP sets; verify correct server progression |
@@ -36,12 +36,12 @@ Every test row records:
 | Background rest alert delivery | - | - | - | - | - | - | BLOCKED | - | Test whether haptic vibration triggers while screen is asleep/unfocused, or fires upon resume |
 | Offline logging, reconnect, and queue drain | - | - | - | - | - | - | BLOCKED | - | Log sets in flight mode; reconnect phone; verify ordered queue drain via POST /workout/sets |
 | Crash recovery during active set, rest, finish | - | - | - | - | - | - | BLOCKED | - | Force kill / reboot watch during active set, rest, and finish; verify restore() from extension storage |
-| Conflict cases | - | - | - | - | - | - | BLOCKED | - | Modify workout in official phone app while active on watch; verify conflict modal without data loss |
+| Conflict cases | - | - | - | - | - | - | BLOCKED | - | Change exercises quickly while sets sync, then test a real phone-side divergence; only the divergence should show conflict |
 | Both finish orders | - | - | - | - | - | - | BLOCKED | - | Test Order A: Finish Lifto then finish Zepp; Test Order B: Finish Zepp then finish Lifto |
 | Both histories and progression | - | - | - | - | - | - | BLOCKED | - | Verify Liftosaur Cloud history, 1RM, progression, and nextDay advance; verify Zepp native workout record |
-| Native duration, calories, and HR | - | - | - | - | - | - | BLOCKED | - | Verify live duration and calorie metrics via getSportData in top bar; verify native HR recording |
+| Native duration and HR | - | - | - | - | - | - | BLOCKED | - | Verify native duration drives pause detection and the top-right widget displays native BPM |
 | Round and square geometry | - | - | - | - | - | - | BLOCKED | - | Verify layout, text truncation, and touch targets on round (e.g. T-Rex 3) and square (e.g. Cheetah Square) |
-| Battery consumption | - | - | - | - | - | - | BLOCKED | - | Measure battery percentage drop during a 45-60 minute active Strength Training workout |
+| Battery consumption | - | - | - | - | - | - | BLOCKED | - | Measure battery percentage drop during a 45-60 minute native workout |
 
 ---
 

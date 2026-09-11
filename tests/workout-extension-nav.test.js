@@ -3,7 +3,9 @@ import test from 'node:test';
 import {
   EXTENSION_SCREENS,
   EXTENSION_TOP_BAR_LAYOUT,
+  MENU_LABEL,
   checkRequiredPhoneInput,
+  formatDots,
   formatSeconds,
   formatSupersetProgress,
   formatEditableSetValue,
@@ -78,6 +80,18 @@ test('checkRequiredPhoneInput detects prompted variables, timed sets, and incomp
     checkRequiredPhoneInput({ askWeight: true, weight: null, targetWeight: null, reps: 8 }),
     /phone|weight/i
   );
+
+  assert.match(
+    checkRequiredPhoneInput({ logRpe: true, rpe: null, reps: 8, weight: 60 }),
+    /phone|rpe/i
+  );
+
+  assert.equal(checkRequiredPhoneInput({ askWeight: true, weight: 0, reps: 8 }), null);
+});
+
+test('shared workout navigation uses the Companion menu and progress markers', () => {
+  assert.equal(MENU_LABEL, '\u2261');
+  assert.equal(formatDots(['completed', 'active', 'pending']), '\u25cf \u25cf \u25cb');
 });
 
 test('formatting helpers format seconds and weight cleanly', () => {

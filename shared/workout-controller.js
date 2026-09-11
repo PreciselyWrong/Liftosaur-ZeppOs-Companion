@@ -100,6 +100,7 @@ export function createWorkoutController({
   let isPollingCurrent = false;
   let deferredServerWorkout = null;
   let lastServerWorkoutSignature = null;
+  let sessionGeneration = 0;
 
   function log(message, data = {}) {
     if (!logger) return;
@@ -231,6 +232,7 @@ export function createWorkoutController({
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
+    sessionGeneration += 1;
     restoreAdoptionState(localState, { preserveNavigation });
     directSync = normalizeDirectSync({
       ...directSync,
@@ -353,6 +355,7 @@ export function createWorkoutController({
   ) {
     dayPlan = plan;
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
+    sessionGeneration += 1;
     const defaultMode = plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY';
     directSync = normalizeDirectSync(sync, defaultMode);
     deferredServerWorkout = null;
@@ -395,6 +398,7 @@ export function createWorkoutController({
 
     dayPlan = snapshot.plan;
     session = restoredSession;
+    sessionGeneration += 1;
     const defaultMode = snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY';
     directSync = normalizeDirectSync(snapshot.sync, defaultMode);
     deferredServerWorkout = null;
@@ -446,6 +450,7 @@ export function createWorkoutController({
 
     dayPlan = newPlan;
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId: resolvedResume });
+    sessionGeneration += 1;
     directSync = normalizeDirectSync({
       ...directSync,
       acknowledgedSetCount:
@@ -464,6 +469,7 @@ export function createWorkoutController({
     }
     session.cancelWorkout({ timestamp: now() });
     session = createWorkoutSession({ plan: null });
+    sessionGeneration += 1;
     dayPlan = null;
     directSync = defaultDirectSync('LEGACY');
     deferredServerWorkout = null;
@@ -527,6 +533,7 @@ export function createWorkoutController({
     const reboundSession = createWorkoutSession({ plan, initialJournal: journal });
     dayPlan = plan;
     session = reboundSession;
+    sessionGeneration += 1;
   }
 
   function ensureDirectWorkoutStarted() {
@@ -615,14 +622,20 @@ export function createWorkoutController({
     }
 
     directSyncPromise = (async () => {
+      let syncSession = null;
+      let syncGeneration = null;
       try {
         await ensureDirectWorkoutStarted();
         if (directSync.conflict || !directSync.startConfirmed) return false;
+        syncSession = session;
+        syncGeneration = sessionGeneration;
 
         while (true) {
+          if (session !== syncSession || sessionGeneration !== syncGeneration) return false;
           if (directSync.conflict) break;
           const allWrites = session.getWorkoutSetWrites();
-          const pendingWrites = allWrites.slice(directSync.acknowledgedSetCount);
+          const batchStart = directSync.acknowledgedSetCount;
+          const pendingWrites = allWrites.slice(batchStart);
           if (pendingWrites.length === 0) {
             setStatus({ code: SYNC_STATUS_CODES.IDLE });
             break;
@@ -632,6 +645,12 @@ export function createWorkoutController({
           const batchLength = batch.length;
 
           const res = await request(MESSAGE_TYPES.SYNC_WORKOUT_SETS, { sets: batch });
+          if (session !== syncSession || sessionGeneration !== syncGeneration) return false;
+          const currentWrites = session.getWorkoutSetWrites();
+          const prefixMatches = directSync.acknowledgedSetCount === batchStart && batch.every(
+            (write, index) => JSON.stringify(currentWrites[batchStart + index]) === JSON.stringify(write)
+          );
+          if (!prefixMatches) return false;
           policy.markAuthoritativeResponse();
           const payloadObj = res ? res.payload : null;
           const returnedWorkout = payloadObj ? payloadObj.workout : null;
@@ -658,11 +677,15 @@ export function createWorkoutController({
               lastServerWorkoutSignature = JSON.stringify(returnedWorkout);
             } else if (currentState === SESSION_STATES.ACTIVE_SET) {
               applyAdoptedSnapshot(returnedWorkout);
+              break;
             }
           }
         }
         return true;
       } catch (err) {
+        if (syncSession && (session !== syncSession || sessionGeneration !== syncGeneration)) {
+          return false;
+        }
         logError('sync direct sets failed', err);
         const retryable = !err?.code || err.code === 'NETWORK' || err.code === 'API_FAILED';
         if (!retryable) {

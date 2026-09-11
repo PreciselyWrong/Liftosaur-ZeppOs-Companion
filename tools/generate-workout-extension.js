@@ -99,7 +99,7 @@ App(
     name: 'liftosaur-zepp-os-workout-extension',
     version,
     releaseStage: rootPkg.releaseStage || 'beta',
-    description: 'Liftosaur Strength Training Workout Extension for Zepp OS',
+    description: 'Liftosaur Workout Extension for Zepp OS',
     main: 'app.js',
     license: rootPkg.license || 'MIT',
     devDependencies: rootPkg.devDependencies || {

@@ -1,5 +1,18 @@
 # Changelog
 
+## [0.4.9] - 11 September 2026
+
+### Added
+- Lifto Workout is now available in Free Training as well as Strength Training.
+
+### Fixed
+- Sets without a planned weight now start at zero and sync normally.
+- Late sync replies can no longer alter a newer workout.
+- Rapid exercise changes keep every completed set in order.
+
+### Changed
+- Both watch apps now share the same menu symbol and set progress circles.
+
 ## [0.4.8] - 8 September 2026
 
 ### Fixed
