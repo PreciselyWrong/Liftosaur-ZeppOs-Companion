@@ -1,10 +1,19 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { normalizeExerciseImageUrl, normalizeExerciseImages } from '../shared/exercise-images.js';
 import { createExerciseImageService, EXERCISE_IMAGE_STORAGE_KEY } from '../app-side/exercise-image-service.js';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
 
 const imageUrl = '/externalimages/exercises/single/small/squat_barbell_single_small.png';
+test('exercise image runtime avoids optional calls unsupported by Zepp QuickJS', () => {
+  for (const file of [
+    'app-side/exercise-image-service.js',
+    'shared/exercise-image-client.js',
+    'shared/watch-exercise-images.js',
+  ]) assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /\?\.\(/, file);
+});
+
 test('image policy accepts only the public PNG exercise directory and explicit opt-in', () => {
   assert.equal(normalizeExerciseImageUrl(imageUrl), `https://www.liftosaur.com${imageUrl}`);
   for (const url of ['https://evil.test/a.png', '/externalimages/exercises/../secret.png', imageUrl + '?key=secret', imageUrl.replace('.png', '.gif')]) assert.equal(normalizeExerciseImageUrl(url), null);

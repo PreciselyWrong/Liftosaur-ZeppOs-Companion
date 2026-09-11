@@ -9,5 +9,5 @@ export function createWatchExerciseImages({ request, onChange }) {
   const client = createExerciseImageClient({ inbox, request, onChange, removeFile: (path) => {
     if (typeof path === 'string' && path.startsWith('data://')) rmSync({ path: path.slice(7) });
   } });
-  return { ...client, receive(file) { incoming = file; receiver?.(); incoming = null; } };
+  return { ...client, receive(file) { incoming = file; if (receiver) receiver(); incoming = null; } };
 }

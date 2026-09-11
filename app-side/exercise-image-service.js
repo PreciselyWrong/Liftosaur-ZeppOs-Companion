@@ -16,7 +16,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
     if (!operation) return;
     operation.canceled = true;
     try { operation.task?.cancel(); } catch {}
-    operation.reject?.(new Error('Image download stopped'));
+    if (operation.reject) operation.reject(new Error('Image download stopped'));
   }
   return {
     cancel,
@@ -68,7 +68,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
           try {
             converted = await Promise.race([conversion, new Promise((resolve, reject) => {
               timeout = setTimeout(() => { active.canceled = true; reject(new Error('Image conversion timeout')); }, 20000);
-              timeout?.unref?.();
+              if (timeout && typeof timeout.unref === 'function') timeout.unref();
             })]);
           } finally { clearTimeout(timeout); }
           if (!allowed()) return { status: 'disabled' };

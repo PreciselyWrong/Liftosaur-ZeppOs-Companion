@@ -69,7 +69,7 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
         onChange();
       };
       timer = setTimeout(fail, 45000);
-      timer?.unref?.();
+      if (timer && typeof timer.unref === 'function') timer.unref();
       Promise.resolve().then(() => {
         if (disposed || !enabled || current !== expected) return;
         return request(MESSAGE_TYPES.GET_EXERCISE_IMAGE, { imageUrl: url, requestId: expected.requestId });

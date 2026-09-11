@@ -11,6 +11,7 @@
 - Pause a hold and resume it without losing your time.
 
 ### Fixed
+- Exercise images no longer prevent either app from installing.
 - Sets without a planned weight now start at zero and sync normally.
 - Late sync replies can no longer alter a newer workout.
 - Rapid exercise changes keep every completed set in order.
