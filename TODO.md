@@ -165,7 +165,7 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 550 passing
+- `npm test` - 556 passing
 - `npm run build:companion`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
@@ -194,6 +194,8 @@
 - 2026-09-03: Restored reliable background redraws and bounded synchronization during rest in both watch apps.
 
 ## Done
+
+- Protected pending sets from older rest snapshots and replacement workouts from late save or discard replies.
 
 - Prepared 0.4.9 with zero-weight logging, stale-sync protection, shared workout markers and Free Training targeting.
 

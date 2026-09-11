@@ -2474,6 +2474,7 @@ function submitWorkout() {
   workoutController
     .finishWorkoutRemote()
     .then((result) => {
+      if (result.reason === 'SESSION_REPLACED') return;
       if (!result.success) throw new Error(result.reason || 'Save failed');
       finishState = {
         status: 'SAVED',
@@ -2496,6 +2497,7 @@ function handleDiscardWorkout() {
   workoutController
     .discardWorkoutRemote()
     .then((result) => {
+      if (result.reason === 'SESSION_REPLACED') return;
       if (!result.success) throw new Error(result.reason || 'Discard pending');
       returnAfterDiscard();
     })

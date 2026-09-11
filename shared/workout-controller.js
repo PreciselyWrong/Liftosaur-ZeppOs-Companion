@@ -101,6 +101,8 @@ export function createWorkoutController({
   let deferredServerWorkout = null;
   let lastServerWorkoutSignature = null;
   let sessionGeneration = 0;
+  // External replacement invalidates terminal writes; same-workout adoption does not.
+  let workoutGeneration = 0;
 
   function log(message, data = {}) {
     if (!logger) return;
@@ -146,7 +148,12 @@ export function createWorkoutController({
   }
 
   function mutateSession(action) {
+    const deferredWrites = deferredServerWorkout && JSON.stringify(session.getWorkoutSetWrites());
     action();
+    // A delayed snapshot cannot describe sets completed after it was received.
+    if (deferredServerWorkout && deferredWrites !== JSON.stringify(session.getWorkoutSetWrites())) {
+      deferredServerWorkout = null;
+    }
     persist();
     notifyChange();
   }
@@ -356,6 +363,7 @@ export function createWorkoutController({
     dayPlan = plan;
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
     sessionGeneration += 1;
+    workoutGeneration += 1;
     const defaultMode = plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY';
     directSync = normalizeDirectSync(sync, defaultMode);
     deferredServerWorkout = null;
@@ -399,6 +407,7 @@ export function createWorkoutController({
     dayPlan = snapshot.plan;
     session = restoredSession;
     sessionGeneration += 1;
+    workoutGeneration += 1;
     const defaultMode = snapshot.plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY';
     directSync = normalizeDirectSync(snapshot.sync, defaultMode);
     deferredServerWorkout = null;
@@ -449,8 +458,11 @@ export function createWorkoutController({
       : resumeFromEntryId;
 
     dayPlan = newPlan;
+    deferredServerWorkout = null;
+    lastServerWorkoutSignature = null;
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId: resolvedResume });
     sessionGeneration += 1;
+    workoutGeneration += 1;
     directSync = normalizeDirectSync({
       ...directSync,
       acknowledgedSetCount:
@@ -470,6 +482,7 @@ export function createWorkoutController({
     session.cancelWorkout({ timestamp: now() });
     session = createWorkoutSession({ plan: null });
     sessionGeneration += 1;
+    workoutGeneration += 1;
     dayPlan = null;
     directSync = defaultDirectSync('LEGACY');
     deferredServerWorkout = null;
@@ -827,6 +840,16 @@ export function createWorkoutController({
     }
   }
 
+  function captureTerminalWorkout() {
+    const generation = workoutGeneration;
+    const startTime = session.view(now()).startedAt;
+    const programId = dayPlan?.programId;
+    // Internal snapshot adoption may replace the session object for this workout.
+    return () => workoutGeneration === generation
+      && session.view(now()).startedAt === startTime
+      && dayPlan?.programId === programId;
+  }
+
   async function finishWorkoutRemote() {
     if (directSync.mode !== 'DIRECT' || !dayPlan) {
       return { success: false, reason: 'NOT_DIRECT' };
@@ -838,6 +861,7 @@ export function createWorkoutController({
       return { success: false, reason: 'NO_TRANSPORT' };
     }
 
+    const isCurrentWorkout = captureTerminalWorkout();
     isDirectWriteInFlight = true;
     if (!directSync.finishRequestedAt) {
       directSync.finishRequestedAt = now();
@@ -847,10 +871,14 @@ export function createWorkoutController({
 
     try {
       await ensureDirectWorkoutStarted();
+      if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       if (directSync.conflict) {
         throw new Error('Workout sync conflict');
       }
-      await synchronizeDirectSets();
+      const synchronized = await synchronizeDirectSets();
+      if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
+      if (directSync.conflict) throw new Error('Workout sync conflict');
+      if (!synchronized) throw new Error('Set sync is still pending');
       const pendingSetCount =
         session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
       if (pendingSetCount > 0) {
@@ -869,12 +897,14 @@ export function createWorkoutController({
       }
 
       const res = await request(MESSAGE_TYPES.FINISH_WORKOUT, payload);
+      if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       if (store) {
         store.clear();
       }
       setStatus({ code: SYNC_STATUS_CODES.SAVED, detail: 'FINISH_CONFIRMED' });
       return { success: true, response: res };
     } catch (err) {
+      if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       logError('finish workout remote failed', err);
       setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'FINISH_FAILED', error: err });
       throw err;
@@ -891,6 +921,7 @@ export function createWorkoutController({
     }
 
     const view = session.view(now());
+    const isCurrentWorkout = captureTerminalWorkout();
     if (!Number.isFinite(view.startedAt)) {
       clear();
       return { success: true };
@@ -910,10 +941,12 @@ export function createWorkoutController({
     directDiscardPromise = (async () => {
       try {
         await request(MESSAGE_TYPES.DISCARD_WORKOUT, { startTime: view.startedAt });
+        if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
         clear();
         setStatus({ code: SYNC_STATUS_CODES.IDLE });
         return { success: true };
       } catch (err) {
+        if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
         if (err?.code === 'no_active_workout') {
           clear();
           setStatus({ code: SYNC_STATUS_CODES.IDLE });

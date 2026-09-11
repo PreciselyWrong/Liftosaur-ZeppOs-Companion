@@ -856,6 +856,7 @@ function submitWorkout() {
     (async () => {
       try {
         const result = await workoutController.finishWorkoutRemote();
+        if (result.reason === 'SESSION_REPLACED') return;
         if (!result.success) throw new Error(result.reason || 'Save failed - retry');
         updateControllerStatus();
         finishState = {
@@ -921,6 +922,7 @@ function handleDiscardWorkout() {
 
   workoutController.discardWorkoutRemote()
     .then((result) => {
+      if (result.reason === 'SESSION_REPLACED') return;
       updateControllerStatus();
       if (!result.success) throw new Error(result.reason || 'Discard pending');
       returnAfterDiscard();
