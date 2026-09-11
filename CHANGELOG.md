@@ -20,6 +20,7 @@
 - Both watch apps now share the same menu symbol and set progress circles.
 - Hold timers alert at the target and keep counting until you tap Stop.
 - An interrupted hold keeps its timing and completed left side.
+- Fresh install QR codes for both apps are available until 18 September 2026.
 
 ## [0.4.8] - 8 September 2026
 
