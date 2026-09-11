@@ -21,7 +21,7 @@ You need:
   <img src="test-build-qr.png" width="220" alt="Test build QR code" />
 </p>
 
-This Companion code expires on **2026-09-18 at 08:55:16 UTC** (10:55:16 Central European Summer Time).
+This Companion code expires on **2026-09-18 at 10:09:28 UTC** (12:09:28 Central European Summer Time).
 
 ## Step 1: enable Developer Mode
 
@@ -90,7 +90,7 @@ Free Training support is included in 0.4.9 but remains UNKNOWN on physical hardw
 
 ## Things to know
 
-- **The QR code expires after 7 days** (on 2026-09-18 at 08:55:16 UTC, or 10:55:16 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
+- **The QR code expires after 7 days** (on 2026-09-18 at 10:09:28 UTC, or 12:09:28 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
 - **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
 - **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 
