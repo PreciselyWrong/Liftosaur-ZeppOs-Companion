@@ -79,9 +79,9 @@ is TESTED (tester report), not a full compatibility certification. The remaining
 require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.4.10 beta.
+**Version:** Lifto Companion 0.4.9 beta.
 
-**Workout version:** Lifto Workout 0.4.10 beta.
+**Workout version:** Lifto Workout 0.4.9 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
