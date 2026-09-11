@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 11 September 2026 with 556 passing tests.
+- Test: `npm test` - verified on 11 September 2026 with 596 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -45,6 +45,8 @@
 - Startup binds the live set IDs to the validated preview structure and local journal before draining queued sets.
 - Set and finish writes are repeat-safe. Pending sets block finish and preserve the local session.
 - Rest state uses absolute `restStartedAt`, `restDuration` and `restEndsAt`; display intervals only repaint.
+- Timed sets journal preparation, effort, pauses and partial left-side results. Both unilateral durations are sent together; target expiry alerts but never completes a set automatically.
+- Get Ready is a local Off/3/5/10-second preference. Explicit arming preserves existing rest and uses its final seconds; undocumented Liftoscript auto and timer modifiers are not inferred.
 - Current-workout reads use a 10-second action floor, two-minute passive checks and 60/120/300-second failure backoff.
 - Standalone and Workout Extension are separate packages and App IDs sharing domain modules, not renderers or credentials.
 - The public Zepp App IDs are `1123411` for Lifto Companion and `1125789` for Lifto Workout Extension.
@@ -109,7 +111,7 @@
 
 ## State
 
-- Version 0.4.9 beta: both apps record missing required weights as zero, preserve rapid set changes and ignore stale synchronization replies; 556 tests cover shared session and product contracts, including deferred snapshots and late terminal replies. Lifto Workout targets Strength Training and Free Training with App ID 1125789.
-- Now: validate Lifto Workout 0.4.9 in Strength Training and Free Training on Active 2 firmware 7.23.0.1 at API level 400.
+- Version 0.4.10 beta: both apps run timed and unilateral sets with durable preparation, pause and duration recording; 596 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle and alerts require physical validation.
+- Now: validate timed sets in Lifto 0.4.10 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

@@ -12,6 +12,7 @@ import { EVENT_TYPES, SESSION_STATES, createWorkoutSession, weightStepFor } from
 import { MESSAGE_TYPES } from './protocol.js';
 import { workoutToDayPlan } from './workout-api-plan.js';
 import { createWorkoutRefreshPolicy } from './workout-refresh-policy.js';
+import { normalizeGetReadySeconds } from './timed-settings.js';
 
 export const SYNC_STATUS_CODES = {
   IDLE: 'idle',
@@ -101,6 +102,12 @@ export function createWorkoutController({
   let deferredServerWorkout = null;
   let lastServerWorkoutSignature = null;
   let sessionGeneration = 0;
+  let getReadySeconds = 5;
+
+  function hasActiveTimer() {
+    const timer = session.view(now()).timedSet;
+    return Boolean(timer && timer.phase !== 'READY');
+  }
   // External replacement invalidates terminal writes; same-workout adoption does not.
   let workoutGeneration = 0;
 
@@ -214,6 +221,10 @@ export function createWorkoutController({
   }
 
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
+    if (hasActiveTimer()) {
+      deferredServerWorkout = serverWorkout;
+      return;
+    }
     const capturedAt = now();
     const localView = session.view(capturedAt);
     const mappedPlan = mapWorkout(serverWorkout, {
@@ -450,6 +461,7 @@ export function createWorkoutController({
       acknowledgedSetCount = null,
     } = {}
   ) {
+    if (hasActiveTimer()) return false;
     if (directSync.mode === 'DIRECT') {
       preserveIntervals(now());
     }
@@ -719,6 +731,7 @@ export function createWorkoutController({
   }
 
   async function pollCurrentWorkout() {
+    if (hasActiveTimer()) return false;
     if (directSync.mode !== 'DIRECT' || directSync.conflict) return false;
     if (!request) return false;
     const currentState = session.view(now()).state;
@@ -851,6 +864,7 @@ export function createWorkoutController({
   }
 
   async function finishWorkoutRemote() {
+    if (hasActiveTimer()) return { success: false, reason: 'TIMED_SET_ACTIVE' };
     if (directSync.mode !== 'DIRECT' || !dayPlan) {
       return { success: false, reason: 'NOT_DIRECT' };
     }
@@ -879,6 +893,7 @@ export function createWorkoutController({
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       if (directSync.conflict) throw new Error('Workout sync conflict');
       if (!synchronized) throw new Error('Set sync is still pending');
+      if (hasActiveTimer()) return { success: false, reason: 'TIMED_SET_ACTIVE' };
       const pendingSetCount =
         session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
       if (pendingSetCount > 0) {
@@ -964,6 +979,28 @@ export function createWorkoutController({
   }
 
   return {
+    configureTimedSets: (options = {}) => {
+      getReadySeconds = normalizeGetReadySeconds(options.getReadySeconds);
+    },
+    startTimedSet: (options = {}) => mutateSession(() =>
+      session.startTimedSet({ getReadySeconds, timestamp: now(), ...options })),
+    stopTimedSide: (options = {}) => {
+      const before = session.getWorkoutSetWrites().length;
+      mutateSession(() => session.stopTimedSide({ getReadySeconds, timestamp: now(), ...options }));
+      if (session.getWorkoutSetWrites().length > before && directSync.mode === 'DIRECT' && request) {
+        synchronizeDirectSets().catch((err) => logError('background set sync failed', err));
+      }
+    },
+    pauseTimedSet: (options = {}) => mutateSession(() =>
+      session.pauseTimedSet({ timestamp: now(), ...options })),
+    resumeTimedSet: (options = {}) => mutateSession(() =>
+      session.resumeTimedSet({ timestamp: now(), ...options })),
+    advanceTimedSet: (options = {}) => {
+      if (!session.advanceTimedSet({ timestamp: now(), ...options })) return false;
+      persist();
+      notifyChange();
+      return true;
+    },
     loadPlan,
     restore,
     view: (nowTimestamp = now()) => session.view(nowTimestamp),

@@ -307,6 +307,31 @@ export function createDummyProgramService() {
     },
   };
 
+  samplePlans['1-2'].exercises.push(...[
+    { id: 'timed-side-plank', name: 'Side Plank', isUnilateral: true },
+    { id: 'timed-plank', name: 'Plank', isUnilateral: false },
+  ].map((exercise, index) => ({
+    id: exercise.id,
+    name: exercise.name,
+    index: index + 4,
+    notes: 'Description\nKeep your hips level and breathe steadily throughout the hold.\n\nPast sessions\n\u2022 2026-09-10: Held both sets for 30 seconds.',
+    equipment: null,
+    supersetGroup: null,
+    supersetTag: null,
+    warmupSets: [],
+    sets: [1, 2].map((setIndex) => ({
+      index: setIndex,
+      targetReps: 1,
+      targetWeight: 0,
+      unit: 'kg',
+      setTimer: 30,
+      isUnilateral: exercise.isUnilateral,
+      restSeconds: 60,
+      isAmrap: false,
+      askWeight: false,
+    })),
+  })));
+
   return {
     mode: 'DEMO',
 

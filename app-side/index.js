@@ -7,6 +7,7 @@ import { createDummyProgramService } from './dummy-program-service.js';
 import { createDummyWorkoutService } from './dummy-workout-service.js';
 import { getOrCreateClientIdentity } from './client-identity.js';
 import { createWorkoutService } from './workout-service.js';
+import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 
 let sideServiceInstance = null;
 
@@ -59,6 +60,7 @@ function getEffectiveStorage() {
 function getEffectiveSettings() {
   const apiKey = getEffectiveApiKey();
   let screenOnDuration = 120;
+  let getReadySeconds = 5;
 
   try {
     const storage = getEffectiveStorage();
@@ -67,6 +69,7 @@ function getEffectiveSettings() {
     }
 
     if (storage) {
+      getReadySeconds = normalizeGetReadySeconds(storage.getItem('getReadySeconds'));
       const rawScreenDuration = storage.getItem('screenOnDuration');
       let parsedScreenDuration = rawScreenDuration;
       if (typeof rawScreenDuration === 'string') {
@@ -93,6 +96,7 @@ function getEffectiveSettings() {
   return {
     apiKey,
     screenOnDuration,
+    getReadySeconds,
   };
 }
 

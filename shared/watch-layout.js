@@ -7,9 +7,15 @@ export const TYPOGRAPHY = Object.freeze({
   title: 30,
   value: 38,
   timer: 66,
+  timedTimer: 54,
 });
 
 export const LIST_PAGE_SIZE = 3;
+export const TIMED_SET_LAYOUT = Object.freeze({
+  centerX: 240, centerY: 232, radius: 76, horizontalRadius: 84, dotSize: 12, segments: 12,
+  valueX: 176, valueWidth: 128, valueY: 195, valueHeight: 74, labelY: 316, detailY: 346,
+  actionY: 382, actionHeight: 40, actionX: 82, actionWidth: 152, actionGap: 12,
+});
 export const OVERVIEW_PAGE_SIZE = 3;
 export const READY_PREVIEW_SIZE = 3;
 

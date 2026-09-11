@@ -4,7 +4,7 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 
 ![License](https://img.shields.io/badge/license-MIT-blue.svg)
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
-![Tests](https://img.shields.io/badge/tests-556%20passing-brightgreen.svg)
+![Tests](https://img.shields.io/badge/tests-596%20passing-brightgreen.svg)
 
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
@@ -79,9 +79,9 @@ is TESTED (tester report), not a full compatibility certification. The remaining
 require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.4.9 beta.
+**Version:** Lifto Companion 0.4.10 beta.
 
-**Workout version:** Lifto Workout 0.4.9 beta.
+**Workout version:** Lifto Workout 0.4.10 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
@@ -117,6 +117,7 @@ continued on either device via `GET /workout/current`.
 - **Compact superset context**: current round and following exercise, with prepared sets retained when rest ends.
 - **Recording status**: the footer distinguishes sets recorded on the watch from sets acknowledged by Liftosaur.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.
+- **Timed exercises**: Get Ready, left/right holds, pause, overtime and durable duration recording in both apps. [Controls and API limits](docs/timed-sets.md).
 - **Display wake lock** during active workouts (`@zos/display`).
 - **Crash-proof sessions**: the plan, journal, write queue, pause intervals, and finish intent are persisted locally. An interrupted app resumes on the exact active set.
 - **Mobile settings & privacy**: your Liftosaur API key (`lftsk_...`) stays on the phone. Writes identify the client using a stable installation ID in phone settings storage and `X-Liftosaur-Client`.

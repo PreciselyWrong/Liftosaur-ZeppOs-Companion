@@ -2,11 +2,15 @@
 
 ## Now
 
-- Validate Lifto Workout 0.4.9 in Strength Training and Free Training on Active 2 firmware 7.23.0.1 at API level 400.
+- Validate timed sets in Lifto 0.4.10 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 
 ## Next
 
 - Collect normal-use feedback from additional physical watches.
+
+## Done
+
+- Added durable timed sets, left/right holds and local Get Ready in both apps.
 
 ## Metadata
 
@@ -16,7 +20,7 @@
 - Started: 1 September 2026
 - Last updated: 11 September 2026
 - Current phase: 15 - Active 2 integration refinement
-- Overall status: Version 0.4.9 is automated-test and build validated; both workout modes await physical testing
+- Overall status: Version 0.4.10 adds timed sets; timed alerts and both workout modes await physical testing
 
 ## Status legend
 

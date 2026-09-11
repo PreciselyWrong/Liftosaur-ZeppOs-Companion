@@ -35,6 +35,7 @@ export const EVENT_TYPES = {
   SELECT_EXERCISE: 'SELECT_EXERCISE',
   FINISH_WORKOUT: 'FINISH_WORKOUT',
   CANCEL_WORKOUT: 'CANCEL_WORKOUT',
+  TIMED_SET: 'TIMED_SET',
 };
 
 export function weightStepFor(unit) {
@@ -149,6 +150,7 @@ export function createWorkoutSession({
   let pauseStartedAt = null;
   const activePauseReasons = new Set();
   let restInfo = null;
+  let activeTimer = null;
   let journal = [];
   const intervals = [];
   let intervalStart = null;
@@ -186,6 +188,7 @@ export function createWorkoutSession({
           rpe: completed.rpe ?? null,
           repsLeft: completed.repsLeft ?? null,
           setTimer: completed.setTimer ?? null,
+          setTimerLeft: completed.setTimerLeft ?? null,
           userVars: completed.userVars ?? null,
           unit: completed.unit || target.unit || unit,
           completedAt: completionOrder++,
@@ -371,6 +374,7 @@ export function createWorkoutSession({
   }
 
   function canSelectExercise(index) {
+    if (activeTimer) return false;
     if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN || !Number.isInteger(index)) return false;
     const exercise = exercises[index];
     return Boolean(exercise && progress[index].completedSets.length < exercise.sets.length);
@@ -380,6 +384,10 @@ export function createWorkoutSession({
     journal.push(event);
 
     switch (event.type) {
+      case EVENT_TYPES.TIMED_SET: {
+        activeTimer = event.payload ? { ...event.payload } : null;
+        break;
+      }
       case EVENT_TYPES.START_WORKOUT: {
         state = SESSION_STATES.ACTIVE_SET;
         workoutStartTime = event.timestamp;
@@ -448,6 +456,7 @@ export function createWorkoutSession({
         const setId = payload?.setId !== undefined ? payload.setId : (target?.setId ?? null);
         const repsLeft = payload?.repsLeft !== undefined ? payload.repsLeft : null;
         const setTimer = payload?.setTimer !== undefined ? payload.setTimer : null;
+        const setTimerLeft = payload?.setTimerLeft ?? null;
         const userVars = payload?.userVars !== undefined ? payload.userVars : null;
         const setUnit = payload?.unit || target?.unit || unit;
 
@@ -467,10 +476,12 @@ export function createWorkoutSession({
           rpe: completedRpe,
           repsLeft,
           setTimer,
+          setTimerLeft,
           userVars,
           unit: setUnit,
           completedAt: event.timestamp,
         });
+        activeTimer = null;
 
         if (allSetsDone()) {
           clearPauses(event.timestamp);
@@ -603,6 +614,7 @@ export function createWorkoutSession({
         activePauseReasons.clear();
         restInfo = null;
         intervals.length = 0;
+        activeTimer = null;
         intervalStart = null;
         currentExerciseIndex = 0;
         progress.forEach((prog, i) => {
@@ -621,6 +633,7 @@ export function createWorkoutSession({
   function beginPause(reason, timestamp) {
     if (activePauseReasons.has(reason)) return;
     if (activePauseReasons.size === 0) {
+      if (activeTimer && activeTimer.pausedAt === null) activeTimer.pausedAt = timestamp;
       pauseStartedAt = timestamp;
       if (intervalStart !== null) {
         intervals.push([intervalStart, timestamp]);
@@ -633,6 +646,7 @@ export function createWorkoutSession({
   function endPause(reason, timestamp) {
     if (!activePauseReasons.delete(reason)) return;
     if (activePauseReasons.size === 0) {
+      resumeTimerClock(timestamp);
       if (pauseStartedAt !== null) {
         totalPausedWorkoutDurationMs += Math.max(0, timestamp - pauseStartedAt);
         pauseStartedAt = null;
@@ -649,6 +663,53 @@ export function createWorkoutSession({
     }
     pauseStartedAt = null;
     activePauseReasons.clear();
+  }
+
+  function resumeTimerClock(timestamp) {
+    if (!activeTimer || activeTimer.manualPaused || activeTimer.pausedAt === null) return;
+    activeTimer.startedAt += Math.max(0, timestamp - activeTimer.pausedAt);
+    activeTimer.pausedAt = null;
+  }
+
+  function timedView(timestamp) {
+    if (state !== SESSION_STATES.ACTIVE_SET && state !== SESSION_STATES.REST) return null;
+    const target = describePendingSet()?.set;
+    if (!Number.isFinite(target?.setTimer) || target.setTimer <= 0) return null;
+    const timer = activeTimer;
+    const elapsed = timer ? Math.max(0, Math.floor(((timer.pausedAt ?? timestamp) - timer.startedAt) / 1000)) : 0;
+    return {
+      phase: timer?.phase || 'READY', side: timer?.side ?? (target.isUnilateral ? 'LEFT' : null),
+      remaining: timer?.phase === 'REST' ? restRemaining(timestamp)
+        : timer ? (timer.phase === 'GET_READY' ? timer.readySeconds : timer.targetSeconds) - elapsed : target.setTimer,
+      elapsedSeconds: timer?.phase === 'WORK' ? elapsed : 0,
+      targetSeconds: timer?.targetSeconds ?? target.setTimer,
+      preparationSeconds: timer?.readySeconds ?? 0,
+      isPaused: Boolean(timer?.manualPaused || activePauseReasons.size),
+      isWorkoutPaused: activePauseReasons.has('workout'),
+      completedLeftSeconds: timer?.completedLeftSeconds ?? null,
+    };
+  }
+
+  function restRemaining(timestamp) {
+    if (!restInfo) return 0;
+    if (restInfo.isPaused) return restInfo.pausedRemaining ?? 0;
+    if (activePauseReasons.has('workout') && Number.isFinite(restInfo.nativePausedRemainingMs)) {
+      return Math.ceil(restInfo.nativePausedRemainingMs / 1000);
+    }
+    return Math.ceil((restInfo.endsAt - timestamp) / 1000);
+  }
+
+  function writeTimer(timer, timestamp) {
+    applyEvent({ type: EVENT_TYPES.TIMED_SET, payload: timer, timestamp });
+  }
+
+  function startTimerSide(side, target, timestamp, readySeconds, completedLeftSeconds = null) {
+    writeTimer({
+      phase: readySeconds > 0 ? 'GET_READY' : 'WORK', side,
+      startedAt: timestamp, targetSeconds: target.setTimer, readySeconds,
+      completedLeftSeconds, manualPaused: false,
+      pausedAt: activePauseReasons.size ? timestamp : null,
+    }, timestamp);
   }
 
   function advanceToNextSet({ keepAdjustments = false, timestamp = null } = {}) {
@@ -781,11 +842,7 @@ export function createWorkoutSession({
         const pending = describePendingSet();
         const pendingSet = pending?.set || null;
         const nativePaused = activePauseReasons.has('workout');
-        const remaining = restInfo.isPaused
-          ? (restInfo.pausedRemaining ?? 0)
-          : nativePaused && Number.isFinite(restInfo.nativePausedRemainingMs)
-            ? Math.ceil(restInfo.nativePausedRemainingMs / 1000)
-            : Math.ceil((restInfo.endsAt - now) / 1000);
+        const remaining = restRemaining(now);
         rest = {
           duration: restInfo.duration,
           remaining,
@@ -846,6 +903,7 @@ export function createWorkoutSession({
       });
 
       const base = {
+        timedSet: timedView(now),
         state,
         unit,
         programId: plan?.programId ?? null,
@@ -911,6 +969,87 @@ export function createWorkoutSession({
       applyEvent({ type: EVENT_TYPES.START_WORKOUT, timestamp });
     },
 
+    startTimedSet({ timestamp = Date.now(), getReadySeconds = 5 } = {}) {
+      if (activePauseReasons.size || activeTimer?.manualPaused) return;
+      if (activeTimer) {
+        if (activeTimer.phase === 'GET_READY') {
+          writeTimer({ ...activeTimer, phase: 'WORK', startedAt: timestamp }, timestamp);
+        }
+        return;
+      }
+      if (!timedView(timestamp)) return;
+      let readySeconds = Math.max(0, Number.isFinite(getReadySeconds) ? getReadySeconds : 5);
+      const target = describePendingSet()?.set;
+      if (!target?.setTimer) return;
+      const hadRest = Boolean(restInfo);
+      if (restInfo) {
+        const remaining = Math.max(0, restRemaining(timestamp));
+        readySeconds = Math.min(readySeconds, remaining);
+        if (remaining > readySeconds) {
+          startTimerSide(target.isUnilateral ? 'LEFT' : null, target, timestamp, readySeconds);
+          writeTimer({ ...activeTimer, phase: 'REST' }, timestamp);
+          return;
+        }
+        applyEvent({ type: EVENT_TYPES.NEXT_SET, timestamp });
+      }
+      // Existing rest belongs to the previous set; the next set's rest cannot shorten it.
+      if (!hadRest && target.restSeconds === 0) readySeconds = 0;
+      startTimerSide(target.isUnilateral ? 'LEFT' : null, target, timestamp, readySeconds);
+    },
+
+    advanceTimedSet({ timestamp = Date.now() } = {}) {
+      const timer = timedView(timestamp);
+      if (timer?.phase === 'REST') {
+        if (timer.isPaused || timer.remaining > timer.preparationSeconds) return false;
+        const remaining = Math.max(0, timer.remaining);
+        applyEvent({ type: EVENT_TYPES.NEXT_SET, timestamp });
+        writeTimer({ ...activeTimer, phase: remaining > 0 ? 'GET_READY' : 'WORK',
+          startedAt: timestamp, readySeconds: remaining }, timestamp);
+        return true;
+      }
+      if (timer?.phase !== 'GET_READY' || timer.isPaused || timer.remaining > 0) return false;
+      // A sleeping watch cannot assume the lifter began exercising at the old deadline.
+      writeTimer({ ...activeTimer, phase: 'WORK', startedAt: timestamp }, timestamp);
+      return true;
+    },
+
+    pauseTimedSet({ timestamp = Date.now() } = {}) {
+      if (!activeTimer || activeTimer.manualPaused) return;
+      writeTimer({ ...activeTimer, manualPaused: true, pausedAt: activeTimer.pausedAt ?? timestamp }, timestamp);
+    },
+
+    resumeTimedSet({ timestamp = Date.now() } = {}) {
+      if (!activeTimer?.manualPaused) return;
+      const timer = { ...activeTimer, manualPaused: false };
+      if (!activePauseReasons.size) {
+        timer.startedAt += Math.max(0, timestamp - timer.pausedAt);
+        timer.pausedAt = null;
+      }
+      writeTimer(timer, timestamp);
+    },
+
+    stopTimedSide({ timestamp = Date.now(), getReadySeconds = 5 } = {}) {
+      const timer = timedView(timestamp);
+      if (timer?.phase !== 'WORK' || timer.isWorkoutPaused) return;
+      // Repeated native clicks must not complete a side that has only just started.
+      if (timer.elapsedSeconds === 0) return;
+      const target = describePendingSet()?.set;
+      if (timer.side === 'LEFT') {
+        const ready = target.restSeconds === 0 ? 0 : Math.max(0, getReadySeconds);
+        startTimerSide('RIGHT', target, timestamp, ready, timer.elapsedSeconds);
+        return;
+      }
+      const prog = currentProgress();
+      const exercise = currentExercise();
+      applyEvent({ type: EVENT_TYPES.COMPLETE_SET, timestamp, payload: {
+        exerciseIndex: exercise.index, setIndex: prog.currentSetIndex + 1,
+        entryId: exercise.entryId, setId: target.setId,
+        weight: prog.currentWeight, reps: prog.currentReps, rpe: prog.currentRpe,
+        setTimer: timer.elapsedSeconds, setTimerLeft: timer.completedLeftSeconds,
+        unit: target.unit || unit,
+      } });
+    },
+
     selectExercise(exerciseIndex, { timestamp = Date.now() } = {}) {
       if (!canSelectExercise(exerciseIndex)) return;
       applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex }, timestamp });
@@ -937,6 +1076,7 @@ export function createWorkoutSession({
       timestamp = Date.now(),
       repsLeft = null,
       setTimer = null,
+      setTimerLeft = null,
       userVars = null,
     } = {}) {
       if (state !== SESSION_STATES.ACTIVE_SET) return;
@@ -945,6 +1085,7 @@ export function createWorkoutSession({
       const setIndex = prog ? prog.currentSetIndex : 0;
       const target = exercise?.sets[setIndex] || null;
       if (!exercise || !prog || !target || prog.completedSets.length >= exercise.sets.length) return;
+      if (activeTimer) return;
 
       const payload = {
         exerciseIndex: exercise?.index ?? currentExerciseIndex + 1,
@@ -956,6 +1097,7 @@ export function createWorkoutSession({
         rpe: prog?.currentRpe ?? null,
         repsLeft,
         setTimer,
+        ...(setTimerLeft !== null ? { setTimerLeft } : {}),
         userVars,
         unit: target?.unit || unit,
       };
@@ -1004,6 +1146,7 @@ export function createWorkoutSession({
     },
 
     finishWorkout({ timestamp = Date.now() } = {}) {
+      if (activeTimer) return;
       if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN) return;
       applyEvent({ type: EVENT_TYPES.FINISH_WORKOUT, timestamp });
     },
@@ -1077,6 +1220,9 @@ function formatSetWrite(set) {
   }
   if (set.setTimer !== null && set.setTimer !== undefined) {
     completed.setTimer = set.setTimer;
+  }
+  if (set.setTimerLeft !== null && set.setTimerLeft !== undefined) {
+    completed.setTimerLeft = set.setTimerLeft;
   }
   if (set.userVars !== null && set.userVars !== undefined) {
     completed.userVars = set.userVars;
