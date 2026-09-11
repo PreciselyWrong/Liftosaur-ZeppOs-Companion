@@ -54,6 +54,8 @@
 
 ## Forbidden
 
+- Do not split the timed-set changes into a separate 0.4.10 release - they belong to the combined 0.4.9 release requested by the user.
+
 - Do not take desktop control for simulator checks unless explicitly requested - the user performs visual checks; launch through the terminal.
 
 - Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
@@ -111,7 +113,7 @@
 
 ## State
 
-- Version 0.4.10 beta: both apps run timed and unilateral sets with durable preparation, pause and duration recording; 596 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle and alerts require physical validation.
-- Now: validate timed sets in Lifto 0.4.10 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
+- Version 0.4.9 beta: both apps run timed and unilateral sets with durable preparation, pause and duration recording; 596 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle and alerts require physical validation.
+- Now: validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

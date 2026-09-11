@@ -1,21 +1,13 @@
 # Changelog
 
-## [0.4.10] - 11 September 2026
-
-### Added
-- Timed exercises now run on the watch, including separate left and right holds.
-- A yellow Get Ready countdown helps you get into position.
-- Choose a 3, 5 or 10 second countdown, or turn it off.
-- Pause a hold and resume it without losing your time.
-
-### Changed
-- Hold timers alert at the target and keep counting until you tap Stop.
-- An interrupted hold keeps its timing and completed left side.
-
 ## [0.4.9] - 11 September 2026
 
 ### Added
 - Lifto Workout is now available in Free Training as well as Strength Training.
+- Timed exercises now run on the watch, including separate left and right holds.
+- A yellow Get Ready countdown helps you get into position.
+- Choose a 3, 5 or 10 second countdown, or turn it off.
+- Pause a hold and resume it without losing your time.
 
 ### Fixed
 - Sets without a planned weight now start at zero and sync normally.
@@ -26,6 +18,8 @@
 
 ### Changed
 - Both watch apps now share the same menu symbol and set progress circles.
+- Hold timers alert at the target and keep counting until you tap Stop.
+- An interrupted hold keeps its timing and completed left side.
 
 ## [0.4.8] - 8 September 2026
 

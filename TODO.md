@@ -2,7 +2,7 @@
 
 ## Now
 
-- Validate timed sets in Lifto 0.4.10 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
+- Validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 
 ## Next
 
@@ -20,7 +20,7 @@
 - Started: 1 September 2026
 - Last updated: 11 September 2026
 - Current phase: 15 - Active 2 integration refinement
-- Overall status: Version 0.4.10 adds timed sets; timed alerts and both workout modes await physical testing
+- Overall status: Version 0.4.9 includes timed sets; timed alerts and both workout modes await physical testing
 
 ## Status legend
 
