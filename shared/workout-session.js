@@ -41,6 +41,10 @@ export function weightStepFor(unit) {
   return unit === 'lb' ? 5 : 2.5;
 }
 
+function initialWeightFor(set) {
+  return set?.targetWeight ?? (set?.askWeight ? 0 : null);
+}
+
 function combineExerciseDetails(exercise) {
   return formatExerciseDetails(exercise);
 }
@@ -151,7 +155,7 @@ export function createWorkoutSession({
 
   const progress = exercises.map((exercise) => ({
     currentSetIndex: 0,
-    currentWeight: exercise.sets[0]?.targetWeight ?? null,
+    currentWeight: initialWeightFor(exercise.sets[0]),
     currentReps: exercise.sets[0]?.targetReps ?? null,
     currentRpe: exercise.sets[0]?.targetRpe ?? null,
     completedSets: [],
@@ -191,7 +195,7 @@ export function createWorkoutSession({
       prog.currentSetIndex = nextSetIdx;
       if (nextSetIdx < exercise.sets.length) {
         const next = exercise.sets[nextSetIdx];
-        prog.currentWeight = next.targetWeight;
+        prog.currentWeight = initialWeightFor(next);
         prog.currentReps = next.targetReps;
         prog.currentRpe = next.targetRpe;
       }
@@ -274,7 +278,7 @@ export function createWorkoutSession({
     const target = exercise.sets[setIdx];
     prog.currentSetIndex = setIdx;
     if (target) {
-      prog.currentWeight = target.targetWeight;
+      prog.currentWeight = initialWeightFor(target);
       prog.currentReps = target.targetReps;
       prog.currentRpe = target.targetRpe;
     }
@@ -604,7 +608,7 @@ export function createWorkoutSession({
         progress.forEach((prog, i) => {
           prog.completedSets = [];
           prog.currentSetIndex = 0;
-          prog.currentWeight = exercises[i].sets[0]?.targetWeight ?? null;
+          prog.currentWeight = initialWeightFor(exercises[i].sets[0]);
           prog.currentReps = exercises[i].sets[0]?.targetReps ?? null;
           prog.currentRpe = exercises[i].sets[0]?.targetRpe ?? null;
         });

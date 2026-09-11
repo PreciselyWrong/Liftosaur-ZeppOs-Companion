@@ -3,7 +3,7 @@
 ## What
 
 - Lifto Companion is an unofficial Liftosaur Cloud client for Amazfit watches on Zepp OS 3.6+.
-- The shipped target is a standalone Mini Program. `feat/workout-extension` is adding a separately packaged Strength Training Workout Extension with shared domain logic.
+- The shipped target is a standalone Mini Program. `feat/workout-extension` is adding a separately packaged Workout Extension for Strength Training and Free Training with shared domain logic.
 - The watch owns the session UI and durable local journal. The phone Side Service owns authenticated HTTPS calls. Session loss or corruption is the highest-severity failure.
 - The confirmed standalone target is Amazfit Active 2. Workout Extension support requires separate model and firmware evidence.
 - Everything committed to this repository is English and uses ASCII hyphens only, including agent files, UI, logs and release notes.
@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 8 September 2026 with 546 passing tests.
+- Test: `npm test` - verified on 11 September 2026 with 550 passing tests.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -21,7 +21,7 @@
 ## Map
 
 - `page/common/` - standalone lifecycle, renderer, Cloud orchestration and recovery UI.
-- `data-widget/common/` - Strength Training Workout Extension single-page DataWidget click-only UI.
+- `data-widget/common/` - Workout Extension single-page DataWidget click-only UI.
 - `shared/workout-session.js` - pure session state machine and event journal.
 - `shared/workout-controller.js` - shared local workout state, persistence, Cloud synchronization, polling, conflicts and terminal writes.
 - `shared/workout-api-plan.js`, `shared/day-plan.js` - authoritative API response to plan and legacy replay mappings.
@@ -109,7 +109,7 @@
 
 ## State
 
-- Version 0.4.8 beta: both apps preserve set edits and pause timing across live updates, reject phantom sets and verify uncertain history saves; 546 tests cover shared session and product contracts. Public previews use Companion App ID 1123411 and Workout App ID 1125789.
-- Now: validate the refined Strength Training Workout Extension integration on Active 2 firmware 7.23.0.1 at API level 400.
-- Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; sync conflicts reported on an unspecified Lifto build. Await feedback from normal use of 0.4.6.
+- Version 0.4.9 beta: both apps record missing required weights as zero, preserve rapid set changes and ignore stale synchronization replies; 550 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789.
+- Now: validate Lifto Workout 0.4.9 in Strength Training and Free Training on Active 2 firmware 7.23.0.1 at API level 400.
+- Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

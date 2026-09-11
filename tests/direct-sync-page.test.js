@@ -171,15 +171,14 @@ test('shows pending synchronization instead of hiding an offline queue', () => {
   assert.match(readWatchPage(), /syncWarning \? truncate\(syncWarning, 16\) : formatHeartRate/);
 });
 
-test('required set inputs are never guessed by the watch', () => {
+test('Companion uses the shared set input guard and workout navigation labels', () => {
   const source = readWatchPage();
-  const inputGuard = source.slice(source.indexOf('function requiredPhoneInput('), source.indexOf('async function synchronizeDirectSets('));
-  assert.match(inputGuard, /promptedVars/);
-  assert.match(inputGuard, /setTimer/);
-  assert.match(inputGuard, /isAmrap/);
-  assert.match(inputGuard, /askWeight/);
-  assert.match(inputGuard, /logRpe/);
-  assert.match(inputGuard, /repsLeft: set\?\.isUnilateral \? set\.reps : null/);
+  assert.match(source, /checkRequiredPhoneInput/);
+  assert.match(source, /MENU_LABEL/);
+  assert.match(source, /formatDots/);
+  assert.doesNotMatch(source, /function requiredPhoneInput\(/);
+  assert.doesNotMatch(source, /function formatDots\(/);
+  assert.match(source, /repsLeft: set\?\.isUnilateral \? set\.reps : null/);
 });
 
 test('a batch is adopted only after every newer local set is acknowledged', () => {

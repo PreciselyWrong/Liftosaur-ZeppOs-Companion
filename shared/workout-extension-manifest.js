@@ -1,4 +1,6 @@
 const STRENGTH_TRAINING_SUBTYPE = 52;
+const FREE_TRAINING_SUBTYPE = 5;
+const WORKOUT_SUBTYPES = Object.freeze([STRENGTH_TRAINING_SUBTYPE, FREE_TRAINING_SUBTYPE]);
 
 function assertAppId(appId) {
   if (!Number.isInteger(appId) || appId <= 0) {
@@ -26,7 +28,7 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
       version: { code: versionCode, name: version },
       icon: 'icon.png',
       vender: 'Sni3rs',
-      description: 'Liftosaur session companion for Zepp Strength Training',
+      description: 'Liftosaur session companion for Zepp workouts',
     },
     permissions: [
       'device:os.local_storage',
@@ -45,7 +47,7 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
               name: 'Lifto',
               icon: 'icon.png',
               window: { isPinned: 1 },
-              runtime: { ability: [{ type: 1, subType: [STRENGTH_TRAINING_SUBTYPE] }] },
+              runtime: { ability: [{ type: 1, subType: [...WORKOUT_SUBTYPES] }] },
             }],
           },
           'app-side': { path: 'app-side/index' },
@@ -62,7 +64,7 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
               name: 'Lifto',
               icon: 'icon.png',
               window: { isPinned: 1 },
-              runtime: { ability: [{ type: 1, subType: [STRENGTH_TRAINING_SUBTYPE] }] },
+              runtime: { ability: [{ type: 1, subType: [...WORKOUT_SUBTYPES] }] },
             }],
           },
           'app-side': { path: 'app-side/index' },

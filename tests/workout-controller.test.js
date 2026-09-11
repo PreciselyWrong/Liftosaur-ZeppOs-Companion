@@ -714,6 +714,90 @@ test('concurrent drains share one promise and acknowledge only confirmed batch l
   assert.equal(controller.sync().acknowledgedSetCount, 2);
 });
 
+test('rapid exercise changes append writes behind the in-flight batch without conflict', async () => {
+  const transport = createFakeTransport();
+  const syncResolvers = [];
+  const plan = {
+    ...SAMPLE_DIRECT_PLAN,
+    exercises: SAMPLE_DIRECT_PLAN.exercises.map((exercise) => ({
+      ...exercise,
+      sets: exercise.sets.map((set) => ({ ...set, restSeconds: 0 })),
+    })),
+  };
+  const firstSnapshot = structuredClone(SAMPLE_SERVER_WORKOUT);
+  firstSnapshot.entries[0].sets[0].completed = { reps: 5, weight: '100kg' };
+  const finalSnapshot = structuredClone(firstSnapshot);
+  finalSnapshot.entries[1].sets[0].completed = { reps: 5, weight: '80kg' };
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ payload: { workout: SAMPLE_SERVER_WORKOUT } })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    new Promise((resolve) => syncResolvers.push(resolve))
+  );
+
+  const controller = createWorkoutController({ request: transport.request, now: () => 1000 });
+  controller.loadPlan(plan);
+  controller.startWorkout();
+  await controller.ensureStarted();
+
+  controller.completeSet();
+  await Promise.resolve();
+  assert.equal(syncResolvers.length, 1);
+
+  controller.selectExercise(1);
+  controller.completeSet();
+  const drain = controller.syncSets();
+
+  syncResolvers[0]({ payload: { workout: firstSnapshot } });
+  await Promise.resolve();
+  await Promise.resolve();
+  assert.equal(syncResolvers.length, 2);
+  syncResolvers[1]({ payload: { workout: finalSnapshot } });
+  await drain;
+
+  const batches = transport.calls
+    .filter(({ type }) => type === MESSAGE_TYPES.SYNC_WORKOUT_SETS)
+    .map(({ payload }) => payload.sets.map(({ setId }) => setId));
+  assert.deepEqual(batches, [['set-1'], ['set-3']]);
+  assert.equal(controller.sync().acknowledgedSetCount, 2);
+  assert.equal(controller.sync().conflict, false);
+  assert.equal(controller.view().currentSet.setId, 'set-2');
+});
+
+test('a set response from a replaced session cannot mutate the new session', async () => {
+  const transport = createFakeTransport();
+  let resolveSync;
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ payload: { workout: SAMPLE_SERVER_WORKOUT } })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    new Promise((resolve) => { resolveSync = resolve; })
+  );
+
+  const controller = createWorkoutController({ request: transport.request, now: () => 1000 });
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet();
+  await Promise.resolve();
+
+  const replacement = {
+    ...SAMPLE_DIRECT_PLAN,
+    programId: 'replacement-program',
+    exercises: SAMPLE_DIRECT_PLAN.exercises.map((exercise) => ({ ...exercise })),
+  };
+  controller.clear();
+  controller.loadPlan(replacement, { sync: { mode: 'DIRECT', startConfirmed: true } });
+  resolveSync({ payload: { workout: SAMPLE_SERVER_WORKOUT } });
+  await Promise.resolve();
+  await Promise.resolve();
+
+  assert.equal(controller.view().programId, 'replacement-program');
+  assert.equal(controller.sync().acknowledgedSetCount, 0);
+  assert.equal(controller.sync().conflict, false);
+});
+
 test('retryable transport failure preserves queue and returns pending status', async () => {
   const adapter = createMemoryStorageAdapter();
   const store = createSessionStore(adapter);

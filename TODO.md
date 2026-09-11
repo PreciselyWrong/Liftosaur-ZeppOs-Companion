@@ -2,7 +2,7 @@
 
 ## Now
 
-- Validate the refined Workout Extension on Active 2 firmware 7.23.0.1 at API level 400.
+- Validate Lifto Workout 0.4.9 in Strength Training and Free Training on Active 2 firmware 7.23.0.1 at API level 400.
 
 ## Next
 
@@ -14,9 +14,9 @@
 - Base commit: `190a1749f32196b6f4360a307fc8f6eb34c2a87d`
 - Current commit: `dbf210f`
 - Started: 1 September 2026
-- Last updated: 2 September 2026
+- Last updated: 11 September 2026
 - Current phase: 15 - Active 2 integration refinement
-- Overall status: Active 2 loads the extension; refined lifecycle behaviour awaits physical retesting
+- Overall status: Version 0.4.9 is automated-test and build validated; both workout modes await physical testing
 
 ## Status legend
 
@@ -49,7 +49,7 @@
 
 | ID | Question | Status | Evidence | Decision | Consequence |
 | --- | --- | --- | --- | --- | --- |
-| EXT-001 | Can an extension target Strength Training? | completed | Official Quick Start lists `52` as Strength Training | Use `subType: [52]` | Extension is scoped to Strength Training |
+| EXT-001 | Can an extension target Strength and Free Training? | completed | Official Quick Start lists `52` and `5` and permits multiple subtypes | Use `subType: [52, 5]` | One extension is scoped to both workout types |
 | EXT-002 | Can a standalone app and extension share one package or App ID? | completed | Official Quick Start requires an independent app and appId | Create a second package target | Settings and credentials stay package-local |
 | EXT-003 | Can the extension end native Zepp recording? | completed | Official APIs expose read-only sport data | Do not implement a native stop command | Tell the user to finish in Zepp Workout |
 | EXT-004 | Can an extension be validated in workout context in the simulator? | blocked | Simulator images do not include the Workout app | Maintain a real-device plan | Hardware validation stays open |
@@ -165,9 +165,9 @@
 
 - `git fetch origin main`
 - `git pull --ff-only origin main`
-- `npm test` - 484 passing
+- `npm test` - 550 passing
 - `npm run build:companion`
-- `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:workout`
+- `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run build:all`
 - `ZEPP_WORKOUT_EXTENSION_APP_ID=<synthetic> npm run generate:extension`
 - `node --test tests/preview-targets.test.js` - preview orchestration only; no upload performed
@@ -194,6 +194,8 @@
 - 2026-09-03: Restored reliable background redraws and bounded synchronization during rest in both watch apps.
 
 ## Done
+
+- Prepared 0.4.9 with zero-weight logging, stale-sync protection, shared workout markers and Free Training targeting.
 
 - User validated compact superset context, exercise Info and the full-width expired-rest action in demo.
 - Added the animated reminder to finish the native Workout activity after saving.

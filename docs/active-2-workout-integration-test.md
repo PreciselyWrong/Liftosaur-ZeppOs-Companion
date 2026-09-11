@@ -7,19 +7,21 @@ Use this checklist after installing the new Lifto Workout preview.
 - Model: Amazfit Active 2
 - Firmware: 7.23.0.1
 - API level: 400
-- Zepp workout: Strength Training
-- Lifto Workout version: 0.4.0 beta
+- Zepp workouts: Strength Training and Free Training
+- Lifto Workout version: 0.4.9 beta
 
 Record the tested commit and date before starting:
 
 - Commit:
 - Date:
 
+Before the detailed checks, add Lifto to both workout types. Strength Training uses **Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto**. Repeat that path from Free Training and record the exact menu if it differs.
+
 ## 1. Display duration
 
 Repeat the test for `60 seconds`, `120 seconds`, `240 seconds`, and `Always` in Zepp app > Lifto Workout > Settings.
 
-- [ ] Open the Lifto page inside Strength Training.
+- [ ] Open the Lifto page inside Strength Training, then repeat in Free Training.
 - [ ] Keep the wrist still without touching the screen.
 - [ ] Confirm Lifto remains visible for the selected duration.
 - [ ] For a finite duration, confirm the display may sleep after that duration.
@@ -48,7 +50,7 @@ Repeat the test for `60 seconds`, `120 seconds`, `240 seconds`, and `Always` in 
 
 - [ ] Keep Lifto visible for two minutes.
 - [ ] Confirm native duration updates continuously instead of remaining frozen.
-- [ ] Confirm calories update during the workout.
+- [ ] Confirm native BPM remains visible in the top-right corner.
 - [ ] Pause Zepp and confirm native duration stops.
 - [ ] Resume Zepp and confirm native duration restarts.
 
@@ -69,6 +71,8 @@ Zepp suspends Workout Extension callbacks outside the focused page. Exact backgr
 - [ ] Confirm the pending warning clears without completing another set.
 - [ ] Confirm Liftosaur receives the set exactly once.
 - [ ] Repeat with two offline sets and confirm their order is preserved.
+- [ ] Complete sets while changing exercises before the sync footer clears; confirm every set arrives once, in order, without a conflict.
+- [ ] Complete a required-weight set with no planned weight; confirm it starts at zero and Liftosaur records `0kg` or `0lb`.
 
 ## 7. Recovery and finish order
 

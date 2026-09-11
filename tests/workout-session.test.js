@@ -1728,4 +1728,57 @@ describe('Workout API set-write journal support', () => {
       [5000, 10000],
     ]);
   });
+
+  test('plan set with askWeight: true and targetWeight: null defaults weight to numeric 0, survives journal replay and serializes explicit weight', () => {
+    for (const unit of ['kg', 'lb']) {
+      const plan = {
+        programId: 'prog-ask-weight',
+        unit,
+        exercises: [
+          {
+            index: 1,
+            id: 'ex-ask-1',
+            entryId: 'entry-ask-1',
+            name: 'Ask Weight Exercise',
+            sets: [
+              {
+                setId: 'set-ask-1',
+                targetReps: 8,
+                targetWeight: null,
+                askWeight: true,
+                restSeconds: 60,
+              },
+            ],
+          },
+        ],
+      };
+
+      const session = createWorkoutSession({ plan });
+      session.startWorkout({ timestamp: 1000 });
+
+      const activeView = session.view(1000);
+      assert.strictEqual(activeView.currentSet.weight, 0);
+      assert.strictEqual(activeView.currentSet.targetWeight, null);
+
+      const restoredMid = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+      assert.strictEqual(restoredMid.view(1000).currentSet.weight, 0);
+      assert.strictEqual(restoredMid.view(1000).currentSet.targetWeight, null);
+
+      session.completeSet({ timestamp: 2000 });
+      assert.deepEqual(session.getWorkoutSetWrites(), [
+        {
+          entryId: 'entry-ask-1',
+          setId: 'set-ask-1',
+          completed: {
+            reps: 8,
+            weight: `0${unit}`,
+          },
+        },
+      ]);
+
+      const restoredCompleted = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+      assert.deepEqual(restoredCompleted.getWorkoutSetWrites(), session.getWorkoutSetWrites());
+      assert.strictEqual(restoredCompleted.getCompletedSets()[0].weight, 0);
+    }
+  });
 });

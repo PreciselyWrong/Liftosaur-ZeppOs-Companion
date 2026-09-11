@@ -72,7 +72,7 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run preview:workout
 
 ---
 
-## 5. Enable Lifto under Strength Training on Watch
+## 5. Enable Lifto in a Native Workout on Watch
 
 Data page setup differs between watch hardware and Zepp OS versions:
 
@@ -82,6 +82,8 @@ Data page setup differs between watch hardware and Zepp OS versions:
 2. Select **Strength Training**.
 3. Open **Settings** > **More** > **Data Page** > **Add Page**.
 4. Select **Lifto**.
+
+Repeat the same path after selecting **Free Training**. This path is ASSUMED until it is confirmed on physical Active 2 hardware.
 
 ### Amazfit Active 3 Premium (Zepp OS 6, firmware 6.3.13.5)
 

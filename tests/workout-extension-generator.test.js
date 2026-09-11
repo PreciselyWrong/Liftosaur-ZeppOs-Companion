@@ -56,11 +56,12 @@ test('generates a complete Workout Extension project in target directory', () =>
 
     const commonDataWidget = appJson.targets.common.module['data-widget'].widgets[0];
     assert.equal(commonDataWidget.path, 'data-widget/common/index');
-    assert.deepEqual(commonDataWidget.runtime.ability, [{ type: 1, subType: [52] }]);
+    assert.deepEqual(commonDataWidget.runtime.ability, [{ type: 1, subType: [52, 5] }]);
 
     const squareDataWidget = appJson.targets.square.module['data-widget'].widgets[0];
     assert.equal(squareDataWidget.path, 'data-widget/common/index');
-    assert.deepEqual(squareDataWidget.runtime.ability, [{ type: 1, subType: [52] }]);
+    assert.deepEqual(squareDataWidget.runtime.ability, [{ type: 1, subType: [52, 5] }]);
+    assert.doesNotMatch(appJson.app.description, /Strength Training/);
 
     assert.equal(appJson.targets.common.module['app-side'].path, 'app-side/index');
     assert.equal(appJson.targets.common.module.setting.path, 'setting/index');
