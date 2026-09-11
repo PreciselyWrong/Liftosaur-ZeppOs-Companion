@@ -1,6 +1,6 @@
 # Privacy Policy - Lifto Companion and Lifto Workout
 
-Last updated: 1 September 2026.
+Last updated: 11 September 2026.
 
 Lifto Companion and Lifto Workout are unofficial, open-source clients for the public
 Liftosaur Cloud API on Amazfit smartwatches with Zepp OS. Companion is a standalone app.
@@ -23,6 +23,7 @@ communicating directly with Liftosaur's official servers.
 | Heart rate in Lifto Companion | Watch memory only, during the session | Nowhere | Displayed live on the standalone workout screen |
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
+| Optional exercise images | Downloaded and converted on the phone, then stored locally on the watch | Download requests go to Liftosaur; image files travel to the watch over Bluetooth | Displays the exercise picture in Info when enabled |
 
 ## What the application never does
 

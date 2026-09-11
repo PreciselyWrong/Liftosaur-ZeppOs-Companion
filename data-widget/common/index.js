@@ -2,6 +2,9 @@ import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
+import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
+import { normalizeExerciseImages } from '../../shared/exercise-images.js';
+import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type } from '@zos/ui';
 import { px } from '@zos/utils';
@@ -219,6 +222,9 @@ let listPage = 0;
 let readyPage = 0;
 let overviewPage = 0;
 let notesPage = 0;
+let activeNotesImageUrl = null;
+let notesImageWidget = null;
+let exerciseImages = null;
 
 let isOverviewOpen = false;
 let isNotesModalOpen = false;
@@ -501,15 +507,18 @@ function updateClock() {
 }
 
 
-function openNotes(title, content) {
+function openNotes(title, content, imageUrl = null) {
   notesPage = 0;
   activeNotesTitle = title;
   activeNotesContent = content;
+  activeNotesImageUrl = imageUrl;
+  notesImageWidget = null;
+  exerciseImages?.load(imageUrl);
   isNotesModalOpen = true;
   renderUI();
 }
 
-function renderExerciseInfo(exerciseName, details, y, height) {
+function renderExerciseInfo(exerciseName, details, y, height, imageUrl) {
   addWidget(widget.BUTTON, {
     x: px(356),
     y: px(y),
@@ -522,12 +531,13 @@ function renderExerciseInfo(exerciseName, details, y, height) {
     text: 'Info',
     text_size: font('micro'),
     click_func: () => openNotes(exerciseName,
-      details || 'No exercise notes or description available.'),
+      details || 'No exercise notes or description available.', imageUrl),
   });
 }
 
 function closeNotes() {
   isNotesModalOpen = false;
+  notesImageWidget = null;
   activeNotesTitle = '';
   activeNotesContent = '';
   notesPage = 0;
@@ -1334,7 +1344,7 @@ function renderTimedSetScreen(view) {
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
   renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
-  renderExerciseInfo(view.exerciseName, view.exerciseDetails, 88, 36);
+  renderExerciseInfo(view.exerciseName, view.exerciseDetails, 88, 36, view.exerciseImageUrl);
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
     color, normal_color: THEME.bg, press_color: THEME.bg, radius: 0,
@@ -1480,7 +1490,7 @@ function renderActiveSetScreen(view) {
     text: truncate(exerciseName, 20),
   });
 
-  renderExerciseInfo(exerciseName, exerciseDetails, 88, 36);
+  renderExerciseInfo(exerciseName, exerciseDetails, 88, 36, isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
 
   const ssColor = supersetColor(supersetGroup);
   const ssBadge = supersetGroup ? ` (SS ${supersetGroup})` : '';
@@ -1775,7 +1785,7 @@ function renderRestScreen(view) {
       text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
 
-    renderExerciseInfo(rest.nextExerciseName, rest.nextExerciseDetails, 246, 32);
+    renderExerciseInfo(rest.nextExerciseName, rest.nextExerciseDetails, 246, 32, rest.nextExerciseImageUrl);
 
     addWidget(widget.TEXT, {
       x: px(60),
@@ -2006,8 +2016,31 @@ function renderOverviewScreen(view) {
   }
 }
 
+function updateNotesImage() {
+  if (!isNotesModalOpen) return;
+  const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
+  const imagePage = enabled && activeNotesImageUrl && notesPage === 0;
+  const image = exerciseImages?.get(activeNotesImageUrl);
+  notesImageWidget?.setProperty(prop.VISIBLE, false);
+  if (!imagePage) return;
+  updateLiveWidget('modal-content', { text: image?.status === 'ready' ? '' : image?.status === 'loading' ? 'Loading image...' : 'Image unavailable. See the next page for details.' });
+  if (image?.status !== 'ready') return;
+  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, { x: px(110), y: px(96), w: px(260), h: px(218), src: image.src, auto_scale: true, auto_scale_obj_fit: false });
+  notesImageWidget.setProperty(prop.VISIBLE, true);
+}
+
+function moveNotesPage(delta) {
+  const pages = exerciseInfoPages(paginateNotes(activeNotesContent), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
+  notesPage = (notesPage + delta + pages.length) % pages.length;
+  updateLiveWidget('modal-content', { text: pages[notesPage] || '' });
+  updateLiveWidget('modal-page', { text: `${notesPage + 1}/${pages.length}` });
+  updateNotesImage();
+  redraw();
+}
+
 function renderNotesScreen() {
-  const pages = paginateNotes(activeNotesContent);
+  notesImageWidget = null;
+  const pages = exerciseInfoPages(paginateNotes(activeNotesContent), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -2023,7 +2056,7 @@ function renderNotesScreen() {
     color: THEME.card,
   });
 
-  addWidget(widget.TEXT, {
+  addLiveLabel('modal-content', {
     x: px(66),
     y: px(96),
     w: px(348),
@@ -2033,9 +2066,10 @@ function renderNotesScreen() {
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: pages[notesPage] || 'No notes for this exercise.',
+    text: pages[notesPage] || '',
   });
 
+  updateNotesImage();
   if (totalPages > 1) {
     addWidget(widget.BUTTON, {
       x: px(50),
@@ -2047,13 +2081,10 @@ function renderNotesScreen() {
       press_color: THEME.card,
       text: '<',
       text_size: font('button'),
-      click_func: () => {
-        notesPage = (notesPage - 1 + totalPages) % totalPages;
-        renderUI();
-      },
+      click_func: () => moveNotesPage(-1),
     });
 
-    addWidget(widget.TEXT, {
+    addLiveLabel('modal-page', {
       x: px(126),
       y: px(348),
       w: px(50),
@@ -2076,10 +2107,7 @@ function renderNotesScreen() {
       press_color: THEME.card,
       text: '>',
       text_size: font('button'),
-      click_func: () => {
-        notesPage = (notesPage + 1) % totalPages;
-        renderUI();
-      },
+      click_func: () => moveNotesPage(1),
     });
 
     addWidget(widget.BUTTON, {
@@ -2509,7 +2537,14 @@ function startInitialNetworkLoad() {
 
 function loadDisplaySettings() {
   return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+    const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
     accountSettings = settingsRes.payload || {};
+    exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
+    if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
+      notesPage = 0;
+      exerciseImages?.load(activeNotesImageUrl);
+      renderUI();
+    }
     workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
     applyDisplayHold();
     return accountSettings;
@@ -2730,6 +2765,7 @@ function stopClock() {
 DataWidget(
   BasePage({
     onInit() {
+      exerciseImages = createWatchExerciseImages({ request: send, onChange: () => { updateNotesImage(); redraw(); } });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');
 
@@ -2828,7 +2864,13 @@ DataWidget(
       }
     },
 
+    onReceivedFile(file) {
+      exerciseImages?.receive(file);
+    },
+
     onDestroy() {
+      exerciseImages?.dispose();
+      exerciseImages = null;
       console.log('[lifto-ext] data-widget onDestroy');
       resetDisplayHold();
       stopClock();

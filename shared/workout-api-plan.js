@@ -140,6 +140,7 @@ export function workoutToDayPlan(workout, { units = null, isCurrent = false } = 
       exerciseNotes: entry.exerciseNotes ?? null,
       historyNotes: entry.historyNotes ?? null,
       description: entry.description ?? null,
+      ...(entry.imageUrl !== undefined ? { imageUrl: entry.imageUrl } : {}),
       hasUpdateScript: Boolean(entry.hasUpdateScript),
       promptedVars: entry.promptedVars ?? null,
       warmupSets,

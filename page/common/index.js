@@ -2,6 +2,9 @@ import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
+import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
+import { normalizeExerciseImages } from '../../shared/exercise-images.js';
+import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
@@ -226,6 +229,9 @@ let isRestMinimized = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
+let activeNotesImageUrl = null;
+let notesImageWidget = null;
+let exerciseImages = null;
 let clockTimer = null;
 let lastRenderedClock = null;
 let lastRenderedSecond = null;
@@ -264,7 +270,14 @@ function resetDisplayHold() {
 }
 
 function adoptAccountSettings(payload) {
+  const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   accountSettings = payload || {};
+  exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
+  if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
+    notesPage = 0;
+    exerciseImages?.load(activeNotesImageUrl);
+    renderUI();
+  }
   workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
   applyDisplayHold();
 }
@@ -1067,21 +1080,37 @@ let notesPage = 0;
 
 function closeTextModal() {
   isNotesModalOpen = false;
+  notesImageWidget = null;
   notesPage = 0;
   renderUI();
 }
 
 function moveNotesPage(delta) {
-  const pages = paginateNotes(activeNotesContent, 90, 6);
+  const pages = exerciseInfoPages(paginateNotes(activeNotesContent, 90, 6), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
   const totalPages = pages.length;
   notesPage = (notesPage + delta + totalPages) % totalPages;
-  updateLiveWidget('modal-content', { text: pages[notesPage] || 'No notes for this exercise.' });
+  updateLiveWidget('modal-content', { text: pages[notesPage] || '' });
   updateLiveWidget('modal-page', { text: `${notesPage + 1}/${totalPages}` });
+  updateNotesImage();
   redraw();
 }
 
+function updateNotesImage() {
+  if (!isNotesModalOpen) return;
+  const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
+  const imagePage = enabled && activeNotesImageUrl && notesPage === 0;
+  const image = exerciseImages?.get(activeNotesImageUrl);
+  notesImageWidget?.setProperty(prop.VISIBLE, false);
+  if (!imagePage) return;
+  updateLiveWidget('modal-content', { text: image?.status === 'ready' ? '' : image?.status === 'loading' ? 'Loading image...' : 'Image unavailable. See the next page for details.' });
+  if (image?.status !== 'ready') return;
+  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, { x: px(110), y: px(88), w: px(260), h: px(246), src: image.src, auto_scale: true, auto_scale_obj_fit: false });
+  notesImageWidget.setProperty(prop.VISIBLE, true);
+}
+
 function renderNotesModal() {
-  const pages = paginateNotes(activeNotesContent, 90, 6);
+  notesImageWidget = null;
+  const pages = exerciseInfoPages(paginateNotes(activeNotesContent, 90, 6), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -1121,7 +1150,7 @@ function renderNotesModal() {
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: pages[notesPage] || 'No notes for this exercise.',
+    text: pages[notesPage] || '',
   });
 
   if (totalPages > 1) {
@@ -1143,6 +1172,7 @@ function renderNotesModal() {
 
   }
 
+  updateNotesImage();
   ensureModalControls(totalPages);
 }
 
@@ -1474,7 +1504,7 @@ function renderMarqueeTitle(text, color = THEME.primaryLight) {
   });
 }
 
-function openTextModal(title, content) {
+function openTextModal(title, content, imageUrl = null) {
   // Controls survive page changes, but not modal lifetimes: Zepp preserves a
   // reused widget's old z-order, which would place it behind the new overlay.
   destroyModalControls();
@@ -1482,6 +1512,9 @@ function openTextModal(title, content) {
   isNotesModalOpen = true;
   activeNotesTitle = title;
   activeNotesContent = content;
+  activeNotesImageUrl = imageUrl;
+  notesImageWidget = null;
+  exerciseImages?.load(imageUrl);
   renderUI();
 }
 
@@ -2333,7 +2366,7 @@ function renderTimedSetScreen(view) {
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
   renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
-  addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.') });
+  addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.', view.exerciseImageUrl) });
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
     color, normal_color: THEME.bg, press_color: THEME.bg, radius: 0,
@@ -2470,7 +2503,7 @@ function renderActiveSetScreen(view) {
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(92),
-    w: exerciseDetails ? px(306) : px(356),
+    w: px(306),
     h: px(30),
     color: THEME.textPrimary,
     text_size: font('title'),
@@ -2480,7 +2513,7 @@ function renderActiveSetScreen(view) {
     text: truncate(exerciseName, 22),
   });
 
-  if (exerciseDetails) {
+  {
     addWidget(widget.BUTTON, {
       x: px(344),
       y: px(84),
@@ -2492,7 +2525,7 @@ function renderActiveSetScreen(view) {
       color: THEME.primaryLight,
       text: 'Info',
       text_size: font('caption'),
-      click_func: () => openTextModal(exerciseName, exerciseDetails),
+      click_func: () => openTextModal(exerciseName, exerciseDetails || 'No exercise details available.', isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl),
     });
   }
 
@@ -2786,7 +2819,7 @@ function renderRestScreen(view) {
     addWidget(widget.TEXT, {
       x: px(60),
       y: px(244),
-      w: rest.nextExerciseDetails ? px(300) : px(360),
+      w: px(300),
       h: px(26),
       color: THEME.textPrimary,
       text_size: font('body'),
@@ -2796,7 +2829,7 @@ function renderRestScreen(view) {
       text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
 
-    if (rest.nextExerciseDetails) {
+    {
       addWidget(widget.BUTTON, {
         x: px(342),
         y: px(238),
@@ -2808,7 +2841,7 @@ function renderRestScreen(view) {
         color: THEME.primaryLight,
         text: 'Info',
         text_size: font('caption'),
-        click_func: () => openTextModal(rest.nextExerciseName, rest.nextExerciseDetails),
+        click_func: () => openTextModal(rest.nextExerciseName, rest.nextExerciseDetails || 'No exercise details available.', rest.nextExerciseImageUrl),
       });
     }
 
@@ -3197,6 +3230,7 @@ function stopClock() {
 Page(
   BasePage({
     onInit() {
+      exerciseImages = createWatchExerciseImages({ request: send, onChange: () => { updateNotesImage(); redraw(); } });
       pageInstance = this;
       console.log('[liftosaur] page init');
     },
@@ -3242,7 +3276,13 @@ Page(
       startClock();
     },
 
+    onReceivedFile(file) {
+      exerciseImages?.receive(file);
+    },
+
     onDestroy() {
+      exerciseImages?.dispose();
+      exerciseImages = null;
       stopClock();
       offGesture();
       try {

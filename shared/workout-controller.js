@@ -211,6 +211,7 @@ export function createWorkoutController({
         return {
           ...exercise,
           description: exercise.description ?? local.description ?? null,
+          imageUrl: exercise.imageUrl !== undefined ? exercise.imageUrl : local.imageUrl ?? null,
           notes: exercise.notes ?? local.notes ?? null,
           exerciseNotes: exercise.exerciseNotes ?? local.exerciseNotes ?? null,
           historyNotes: exercise.historyNotes ?? local.historyNotes ?? null,
@@ -541,6 +542,7 @@ export function createWorkoutController({
       return {
         ...exercise,
         entryId: live.entryId,
+        imageUrl: live.imageUrl !== undefined ? live.imageUrl : exercise.imageUrl ?? null,
         warmupSets: bindSets(exercise.warmupSets || [], live.warmupSets),
         sets: bindSets(exercise.sets || [], live.sets),
       };
