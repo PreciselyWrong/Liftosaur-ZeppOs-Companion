@@ -1,4 +1,13 @@
+import { normalizeExerciseImageUrl } from './exercise-images.js';
+
 const clean = (value) => typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : '';
+
+const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*(https:\/\/[^\s)]+)\s*\)/i;
+
+export function exerciseDisplayImageUrl(details, apiImageUrl = null) {
+  const markdownUrl = MARKDOWN_IMAGE.exec(clean(details))?.[1] || null;
+  return normalizeExerciseImageUrl(markdownUrl) || normalizeExerciseImageUrl(apiImageUrl);
+}
 
 export function formatExerciseDetails(exercise) {
   if (!exercise) return null;
@@ -18,7 +27,9 @@ export function formatExerciseDetails(exercise) {
 }
 
 function plain(text) {
-  return text.replace(/\[(.*?)\]\(.*?\)/g, '$1')
+  return text.replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
+    .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
     .replace(/\*\*|__|`/g, '')
     .replace(/\*([^*]+)\*/g, '$1');

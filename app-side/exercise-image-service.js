@@ -1,4 +1,4 @@
-import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/exercise-images.js';
+import { exerciseImageFileExtension, MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/exercise-images.js';
 
 export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV1';
 export const MAX_EXERCISE_IMAGE_FILES = 32;
@@ -36,7 +36,7 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           files.push({ url, ready: false });
           save(files);
         }
-        const source = `data://download/lifto-exercise-${index}-source.png`;
+        const source = `data://download/lifto-exercise-${index}-source.${exerciseImageFileExtension(url)}`;
         const target = `data://download/lifto-exercise-${index}.png`;
         // Ready slots are immutable because transfers can survive Side Service teardown.
         if (!files[index].ready) {

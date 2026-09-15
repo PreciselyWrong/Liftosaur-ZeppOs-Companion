@@ -55,6 +55,7 @@
 
 ## Forbidden
 
+- ⛔ Let Companion and Workout Extension behavior diverge without a platform constraint - shared behavior should match by default.
 - ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
 - Do not describe optional exercise images as new in 0.5.0 - they already shipped in 0.4.9.
@@ -100,7 +101,6 @@
 - ⛔ Create new checklists or ask community testers to complete them for routine fixes - keep feedback requests brief and limited to normal use.
 
 ## Traps
-
 - Stale workout after a local set -> an old poll returned during a write -> keep the signature guard and adopt only after acknowledgement.
 - Side Service forgets state -> Zepp destroys it between requests -> carry durable identity and session data from the watch.
 - Live record lacks targets -> Playground serializes only completed exercises -> preserve the known prescription in the plan.

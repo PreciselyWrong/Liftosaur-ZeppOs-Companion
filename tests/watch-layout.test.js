@@ -182,7 +182,7 @@ test('ready-screen swipes mirror its paging buttons', () => {
 
 test('modal pages stay short enough to clear their controls', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
-  assert.match(source, /import \{ paginateNotes \} from '..\/..\/shared\/exercise-notes.js'/);
+  assert.match(source, /import \{ exerciseDisplayImageUrl, paginateNotes \} from '..\/..\/shared\/exercise-notes.js'/);
   assert.match(source, /paginateNotes\(activeNotesContent, 90, 6\)/);
 });
 

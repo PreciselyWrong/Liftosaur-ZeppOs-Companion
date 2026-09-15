@@ -5,7 +5,7 @@ import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { paginateNotes } from '../../shared/exercise-notes.js';
+import { exerciseDisplayImageUrl, paginateNotes } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
@@ -225,6 +225,7 @@ let notesPage = 0;
 let activeNotesImageUrl = null;
 let notesImageWidget = null;
 let exerciseImages = null;
+let preparationImageUrl = null;
 
 let isOverviewOpen = false;
 let isNotesModalOpen = false;
@@ -512,9 +513,9 @@ function openNotes(title, content, imageUrl = null) {
   notesPage = 0;
   activeNotesTitle = title;
   activeNotesContent = content;
-  activeNotesImageUrl = imageUrl;
+  activeNotesImageUrl = exerciseDisplayImageUrl(content, imageUrl);
   notesImageWidget = null;
-  exerciseImages?.load(imageUrl);
+  exerciseImages?.load(activeNotesImageUrl);
   isNotesModalOpen = true;
   renderUI();
 }
@@ -1494,10 +1495,17 @@ function renderActiveSetScreen(view) {
     });
   }
 
+  const showsPreparationImage = isResting && renderPreparationImage(
+    exerciseDetails,
+    pending?.exerciseImageUrl,
+  );
+  const headerX = showsPreparationImage ? 134 : 62;
+  const headerWidth = showsPreparationImage ? 208 : 290;
+
   addWidget(widget.TEXT, {
-    x: px(62),
+    x: px(headerX),
     y: px(92),
-    w: px(290),
+    w: px(headerWidth),
     h: px(30),
     color: THEME.textPrimary,
     text_size: font('title'),
@@ -1517,9 +1525,9 @@ function renderActiveSetScreen(view) {
     : `SET ${(set?.workSetIndex || setIndex + 1)}/${set?.totalWorkSets || totalSets}${ssBadge}`;
 
   addWidget(widget.TEXT, {
-    x: px(62),
+    x: px(headerX),
     y: px(122),
-    w: px(356),
+    w: px(showsPreparationImage ? 208 : 356),
     h: px(26),
     color: set?.isWarmup ? 0xffb544 : (supersetGroup ? ssColor : THEME.textSecondary),
     text_size: font('caption'),
@@ -1548,9 +1556,9 @@ function renderActiveSetScreen(view) {
   }
 
   addWidget(widget.TEXT, {
-    x: px(62),
+    x: px(headerX),
     y: px(146),
-    w: px(356),
+    w: px(showsPreparationImage ? 208 : 356),
     h: px(22),
     color: THEME.textSecondary,
     text_size: font('micro'),
@@ -1889,6 +1897,25 @@ function renderRestScreen(view) {
       renderUI();
     },
   });
+}
+
+function renderPreparationImage(details, apiImageUrl) {
+  if (!normalizeExerciseImages(accountSettings?.exerciseImages)) return false;
+  const imageUrl = exerciseDisplayImageUrl(details, apiImageUrl);
+  if (!imageUrl) return false;
+  preparationImageUrl = imageUrl;
+  exerciseImages?.load(imageUrl);
+  const image = exerciseImages?.get(imageUrl);
+  addWidget(widget.FILL_RECT, {
+    x: px(62), y: px(88), w: px(64), h: px(64), radius: px(12), color: THEME.card,
+  });
+  if (image?.status === 'ready') {
+    addWidget(widget.IMG, {
+      x: px(62), y: px(88), w: px(64), h: px(64), src: image.src,
+      auto_scale: true, auto_scale_obj_fit: false,
+    });
+  }
+  return true;
 }
 
 function openRestControls() {
@@ -2496,9 +2523,23 @@ function renderConflictScreen() {
   });
 }
 
+function handleExerciseImageChange() {
+  if (isNotesModalOpen) {
+    updateNotesImage();
+    redraw();
+    return;
+  }
+  if (preparationImageUrl && exerciseImages?.get(preparationImageUrl)?.status === 'ready') {
+    renderUI();
+    return;
+  }
+  redraw();
+}
+
 function renderUI() {
   if (!hasBuilt) return;
   consumeControllerUiChange();
+  preparationImageUrl = null;
   updateSyncWarning();
   clearWidgets();
 
@@ -2892,7 +2933,7 @@ function stopClock() {
 DataWidget(
   BasePage({
     onInit() {
-      exerciseImages = createWatchExerciseImages({ request: send, onChange: () => { updateNotesImage(); redraw(); } });
+      exerciseImages = createWatchExerciseImages({ request: send, onChange: handleExerciseImageChange });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');
 
