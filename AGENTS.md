@@ -3,7 +3,7 @@
 ## What
 
 - Lifto Companion is an unofficial Liftosaur Cloud client for Amazfit watches on Zepp OS 3.6+.
-- The shipped target is a standalone Mini Program. `feat/workout-extension` is adding a separately packaged Workout Extension for Strength Training and Free Training with shared domain logic.
+- The shipped products are a standalone Mini Program and a separately packaged Workout Extension for Strength Training and Free Training with shared domain logic.
 - The watch owns the session UI and durable local journal. The phone Side Service owns authenticated HTTPS calls. Session loss or corruption is the highest-severity failure.
 - The confirmed standalone target is Amazfit Active 2. Workout Extension support requires separate model and firmware evidence.
 - Everything committed to this repository is English and uses ASCII hyphens only, including agent files, UI, logs and release notes.
@@ -11,7 +11,7 @@
 ## Commands
 
 - Install: `npm ci`.
-- Test: `npm test` - verified on 11 September 2026 with 621 passing tests.
+- Test: `npm test`.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release plan: `.\publish.ps1 -Plan`.
@@ -112,7 +112,7 @@
 
 ## State
 
-- Version 0.4.9 beta: both apps run timed and unilateral sets and optional exercise images in Info; 621 tests cover shared session and product contracts. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
+- Version 0.4.9 beta: both apps run timed and unilateral sets and optional exercise images in Info. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
 - Now: validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.
