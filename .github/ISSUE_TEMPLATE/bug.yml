@@ -1,0 +1,32 @@
+name: Bug
+description: Report something that is not working.
+title: "[Bug] "
+labels: ["bug"]
+projects: ["PreciselyWrong/1"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What happened?
+      description: Describe the problem and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: How can we reproduce it?
+      placeholder: "1. Open...\n2. Tap...\n3. See..."
+    validations:
+      required: true
+  - type: input
+    id: environment
+    attributes:
+      label: Watch and app version
+      placeholder: "Active 2, firmware 7.23.0.1, Lifto 0.5.0"
+    validations:
+      required: true
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Add screenshots, logs, or anything else that may help.
