@@ -576,6 +576,7 @@ function renderSubtitle(text, { isError = false } = {}) {
 
 function renderTopBar(view, onBack) {
   const topBar = EXTENSION_TOP_BAR_LAYOUT;
+  const metricIconWidth = 24;
   addWidget(widget.BUTTON, {
     x: px(topBar.menu.x),
     y: px(topBar.y),
@@ -603,10 +604,23 @@ function renderTopBar(view, onBack) {
     text: formatSeconds(view.elapsedSeconds),
   });
 
-  addWidget(widget.SPORT_DATA, {
+  addWidget(widget.TEXT, {
     x: px(topBar.metric.x),
     y: px(topBar.y),
-    w: px(topBar.metric.width),
+    w: px(metricIconWidth),
+    h: px(topBar.height),
+    color: THEME.textSecondary,
+    text_size: font('caption'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: '\u2665',
+  });
+
+  addWidget(widget.SPORT_DATA, {
+    x: px(topBar.metric.x + metricIconWidth),
+    y: px(topBar.y),
+    w: px(topBar.metric.width - metricIconWidth),
     h: px(topBar.height),
     edit_id: 1,
     category: edit_widget_group_type.SPORTS,
@@ -615,7 +629,7 @@ function renderTopBar(view, onBack) {
     text_color: THEME.textSecondary,
     text_x: 0,
     text_y: 0,
-    text_w: px(topBar.metric.width),
+    text_w: px(topBar.metric.width - metricIconWidth),
     text_h: px(topBar.height),
     sub_text_visible: false,
     rect_visible: false,

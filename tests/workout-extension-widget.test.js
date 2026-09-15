@@ -230,17 +230,19 @@ test('top bar renders native BPM without a live text ticker even during sync war
       `${extractFunction(source, 'renderTopBar')}; return renderTopBar;`)(
       (type, props) => widgets.push({ type, ...props }),
       (key, props) => widgets.push({ key, ...props }),
-      { BUTTON: 'button', SPORT_DATA: 'sport' }, { HR: 123 }, { SPORTS: 456 },
+      { BUTTON: 'button', SPORT_DATA: 'sport', TEXT: 'text' }, { HR: 123 }, { SPORTS: 456 },
       { y: 48, height: 40, menu: { x: 100, width: 82 }, elapsed: { x: 186, width: 96 }, metric: { x: 286, width: 96 } },
       x => x, () => 20, {}, {}, {}, String, '\u2261', syncWarning);
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
+    const heart = widgets.find(w => w.type === 'text' && w.text === '\u2665');
     assert.ok(hr, 'BPM must be a native sport widget');
+    assert.ok(heart, 'BPM must have a visible heart icon');
     assert.equal(hr.default_type, 123);
     assert.equal(hr.category, 456);
     assert.equal(hr.sub_text_visible, false);
-    assert.equal(hr.x, 286);
-    assert.equal(hr.w, 96);
+    assert.ok(hr.x > heart.x);
+    assert.ok(hr.x + hr.w <= 286 + 96);
     assert.ok(!widgets.some(w => w.key === 'sport-metric'));
   }
 });

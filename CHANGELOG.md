@@ -14,6 +14,7 @@
 - Discarding a workout now returns to the home screen in both apps.
 - Exercise images no longer prevent either app from installing.
 - Sets without a planned weight now start at zero and sync normally.
+- Lifto Workout now shows a heart beside the native BPM.
 - Late sync replies can no longer alter a newer workout.
 - Rapid exercise changes keep every completed set in order.
 - Starting the next set no longer restores an older workout over pending sets.
