@@ -12,6 +12,7 @@
 
 ### Fixed
 - Exercise images no longer prevent either app from installing.
+- Exercise pictures can now load on the watch when enabled.
 - Sets without a planned weight now start at zero and sync normally.
 - Late sync replies can no longer alter a newer workout.
 - Rapid exercise changes keep every completed set in order.

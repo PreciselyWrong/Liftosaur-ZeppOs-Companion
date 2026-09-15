@@ -177,9 +177,9 @@ AppSideService(
       console.log('[liftosaur-side] onInit');
       sideServiceInstance = this;
       exerciseImageService = createExerciseImageService({
-        downloader: typeof network !== 'undefined' ? network.downloader : null,
-        image: typeof image !== 'undefined' ? image : null,
-        outbox: typeof transferFile !== 'undefined' ? transferFile.getOutbox() : null,
+        download: (url, options) => this.download(url, options),
+        convert: (options) => this.convert(options),
+        sendFile: (path, params) => this.sendFile(path, params),
         isEnabled: () => normalizeExerciseImages(getEffectiveStorage()?.getItem('exerciseImages')),
         storage: getEffectiveStorage(),
       });
