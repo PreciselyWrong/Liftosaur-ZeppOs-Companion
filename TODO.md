@@ -13,6 +13,8 @@
 
 ## Done
 
+- Fixed the Workout rest pause control and scrolling heart icon.
+
 - Added a safe command for cleaning reproducible local output.
 - Moved beta QR distribution and release history to GitHub Releases.
 - Reduced project status to a short current roadmap.
