@@ -17,6 +17,14 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
     if (current?.src) { try { removeFile(current.src); } catch {} }
     current = null;
   }
+  function abandon() {
+    disposed = true;
+    enabled = false;
+    if (timer !== null) clearTimeout(timer);
+    timer = null;
+    transfer = null;
+    current = null;
+  }
   function receive() {
     if (disposed) return;
     const file = inbox.getNextFile();
@@ -26,7 +34,8 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
     function accept(event) {
       const state = event?.data?.readyState || file.readyState;
       if (state !== 'transferred' && state !== 'error' && state !== 'canceled') return;
-      if (disposed || !enabled || !expected || current !== expected || url !== current.url || file.params.requestId !== expected.requestId) {
+      if (disposed) return;
+      if (!enabled || !expected || current !== expected || url !== current.url || file.params.requestId !== expected.requestId) {
         if (state === 'transferred' && file.filePath !== current?.src) { try { removeFile(file.filePath); } catch {} }
         return;
       }
@@ -76,6 +85,7 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
       })
         .then((response) => { if (response?.payload?.status !== 'queued') fail(); }).catch(fail);
     },
+    abandon,
     dispose() { disposed = true; enabled = false; cleanup(); },
   };
 }
