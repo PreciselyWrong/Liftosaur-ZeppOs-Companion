@@ -13,6 +13,7 @@
 
 ## Done
 
+- Rendered linked note images in Info and Prepare across both apps.
 - Made both running rest timers open reliable Pause/Resume controls and fixed the Workout scrolling heart icon.
 
 - Added a safe command for cleaning reproducible local output.

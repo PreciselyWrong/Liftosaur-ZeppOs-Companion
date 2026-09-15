@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { formatExerciseDetails, paginateNotes } from '../shared/exercise-notes.js';
+import { exerciseDisplayImageUrl, formatExerciseDetails, paginateNotes } from '../shared/exercise-notes.js';
+
+const linkedGif = '[![](https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif)](https://www.youtube.com/watch?v=9BfxdGmekv4)';
 
 test('exercise details label each source and preserve authored lines', () => {
   assert.equal(formatExerciseDetails({ historyNotes: 'Past sessions\nYesterday: good', notes: 'Today\nGo easy', exerciseNotes: 'Brace', description: 'Three rounds' }),
@@ -16,6 +18,15 @@ test('details omit empty sources and prefer Exercise for duplicate live notes', 
 test('pagination preserves explicit lines, bullets and blank paragraphs', () => {
   assert.deepEqual(paginateNotes('**Brace**\n- Feet flat\n\n[Slow](https://example.com)'), ['Brace\n- Feet flat\n\nSlow']);
   assert.deepEqual(paginateNotes(''), ['No notes for this exercise.']);
+});
+
+test('linked Markdown images become the display image without leaving markup in notes', () => {
+  const details = `${linkedGif}\nKeep the chest against the bench.`;
+  assert.equal(exerciseDisplayImageUrl(details, '/externalimages/exercises/single/small/fallback.png'),
+    'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif');
+  assert.deepEqual(paginateNotes(details), ['Keep the chest against\nthe bench.']);
+  assert.equal(exerciseDisplayImageUrl('No image', '/externalimages/exercises/single/small/fallback.png'),
+    'https://www.liftosaur.com/externalimages/exercises/single/small/fallback.png');
 });
 
 test('sections start fresh pages and repeat their heading on continuations', () => {
