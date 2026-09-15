@@ -101,3 +101,8 @@ test('published icon assets stay below the repository audit threshold', () => {
     assert.ok(fs.statSync(path.join(root, relativePath)).size <= 500 * 1024, `${relativePath} exceeds 500 KB`);
   }
 });
+
+test('the production tree contains no abandoned phase-zero prototype', () => {
+  assert.equal(fs.existsSync(path.join(root, 'page', 'common', 'state.js')), false);
+  assert.equal(fs.existsSync(path.join(root, 'tests', 'widget-state.test.js')), false);
+});
