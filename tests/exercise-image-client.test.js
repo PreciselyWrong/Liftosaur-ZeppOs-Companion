@@ -48,6 +48,28 @@ test('a disposed client never consumes an inbox file belonging to a new lifecycl
   assert.equal(h.consumed(), 0);
 });
 
+test('abandon stops callbacks without touching native transfer or files during host teardown', async () => {
+  const h = harness();
+  let cancelled = 0;
+  let complete;
+  h.client.load(url);
+  await flush();
+  h.receive({
+    params: { type: 'exercise-image', ...h.requests[0] },
+    fileSize: 100,
+    filePath: 'data://download/image.png',
+    on(_, callback) { complete = callback; },
+    cancel() { cancelled++; },
+  });
+
+  h.client.abandon();
+  complete({ data: { readyState: 'transferred' } });
+
+  assert.equal(cancelled, 0);
+  assert.deepEqual(h.removed, []);
+  assert.equal(h.client.get(url).status, 'disabled');
+});
+
 test('a late same-URL transfer is rejected when its request belongs to an earlier lifecycle', async () => {
   const h = harness();
   h.client.load(url);

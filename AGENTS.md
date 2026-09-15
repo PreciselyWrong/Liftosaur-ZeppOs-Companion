@@ -85,7 +85,7 @@
 - ⛔ Remove the local screen-on duration option - Liftosaur does not expose this watch display preference through its API.
 - ⛔ Direct Active 2 testers to a generic Motion Extensions menu - use Workout > Strength Training > Settings > More > Data Page > Add Page > Lifto.
 - ⛔ Make only the rest countdown pausable - the purple elapsed workout timer opens the durable global Pause/Resume modal in both apps.
-- ⛔ Use `onDestroy` as a save path - it is cleanup only.
+- ⛔ Save or call device, UI, storage, transport or file APIs from Workout `onDestroy` - it is inert cleanup; `onPause` owns safe cleanup and the local journal remains recoverable.
 - ⛔ Start a second heart-rate sensor in the standalone app - it already owns `@zos/sensor` HeartRate.
 - ⛔ Delete unsynced sessions automatically - offer resume, retry or explicit discard.
 - ⛔ Add fast polling, continuous services or unsupported extension gestures - use event-driven click-only extension UI.
