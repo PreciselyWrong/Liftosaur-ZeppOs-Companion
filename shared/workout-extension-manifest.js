@@ -75,6 +75,11 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
       },
     },
     defaultLanguage: 'en-US',
-    i18n: { 'en-US': { 'data-widget': { widgets: [{ name: 'Lifto' }] } } },
+    i18n: {
+      'en-US': {
+        appName: 'Lifto Workout',
+        'data-widget': { widgets: [{ name: 'Lifto' }] },
+      },
+    },
   };
 }

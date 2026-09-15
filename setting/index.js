@@ -361,7 +361,7 @@ AppSettingsPage({
               },
             }),
             Select({
-              label: 'Exercise images (Info)',
+              label: 'Exercise images (Info + Prepare)',
               value: String(this.state.exerciseImages),
               options: [{ name: 'Off', value: 'false' }, { name: 'On', value: 'true' }],
               onChange: (value) => {

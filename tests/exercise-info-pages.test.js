@@ -10,15 +10,28 @@ test('Info only adds an image page for enabled API images', () => {
 });
 
 for (const product of ['page', 'data-widget']) {
+  test(`${product} renders the resolved exercise image on the Prepare editor`, () => {
+    const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
+    const helperStart = source.indexOf('function renderPreparationImage(');
+    assert.ok(helperStart >= 0);
+    const helper = source.slice(helperStart, source.indexOf('\nfunction ', helperStart + 1));
+    assert.match(helper, /exerciseDisplayImageUrl\(/);
+    assert.match(helper, /exerciseImages\?\.load\(/);
+    assert.match(helper, /widget\.IMG/);
+    const activeStart = source.indexOf('function renderActiveSetScreen(');
+    const active = source.slice(activeStart, source.indexOf('\nfunction ', activeStart + 1));
+    assert.match(active, /isResting.*renderPreparationImage/s);
+  });
+
   test(`${product} forwards received ZML files to the image client`, () => {
     const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
     const callback = source.match(/onReceivedFile\(file\) \{([\s\S]*?)\n    \}/);
     assert.ok(callback);
     const received = [];
     const file = { filePath: '/data/image.png' };
-    new Function('exerciseImages', 'file', callback[1])({ receive: (value) => received.push(value) }, file);
+    new Function('exerciseImages', 'file', 'isTearingDown', callback[1])({ receive: (value) => received.push(value) }, file, false);
     assert.deepEqual(received, [file]);
-    new Function('exerciseImages', 'file', callback[1])(null, file);
+    new Function('exerciseImages', 'file', 'isTearingDown', callback[1])(null, file, false);
   });
 
   test(`${product} image page handles loading, failure, navigation and disabling`, () => {

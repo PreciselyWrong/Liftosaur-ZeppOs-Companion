@@ -8,6 +8,7 @@ test('builds a Workout Extension for Strength Training and Free Training', () =>
   assert.equal(manifest.app.appType, 'app');
   assert.equal(manifest.app.extType, 'workout');
   assert.equal(manifest.app.appId, 7654321);
+  assert.equal(manifest.i18n['en-US'].appName, 'Lifto Workout');
   assert.equal(manifest.runtime.apiVersion.minVersion, '3.6');
   assert.deepEqual(manifest.permissions, [
     'device:os.local_storage',

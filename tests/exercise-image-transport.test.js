@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { normalizeExerciseImageUrl, normalizeExerciseImages } from '../shared/exercise-images.js';
+import { exerciseImageFileExtension, normalizeExerciseImageUrl, normalizeExerciseImages } from '../shared/exercise-images.js';
 import { createExerciseImageService, EXERCISE_IMAGE_STORAGE_KEY } from '../app-side/exercise-image-service.js';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
 
@@ -21,9 +21,20 @@ test('exercise image runtime avoids optional calls unsupported by Zepp QuickJS',
   assert.doesNotMatch(onInit, /typeof (?:network|image|transferFile)/);
 });
 
-test('image policy accepts only the public PNG exercise directory and explicit opt-in', () => {
+test('image policy accepts public HTTPS image files and explicit opt-in', () => {
   assert.equal(normalizeExerciseImageUrl(imageUrl), `https://www.liftosaur.com${imageUrl}`);
-  for (const url of ['https://evil.test/a.png', '/externalimages/exercises/../secret.png', imageUrl + '?key=secret', imageUrl.replace('.png', '.gif')]) assert.equal(normalizeExerciseImageUrl(url), null);
+  const gif = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
+  assert.equal(normalizeExerciseImageUrl(gif), gif);
+  assert.equal(exerciseImageFileExtension(gif), 'gif');
+  for (const url of [
+    'http://example.com/a.png',
+    'https://localhost/a.png',
+    'https://127.0.0.1/a.png',
+    'https://user:password@example.com/a.png',
+    'https://example.com/a.svg',
+    'https://example.com/a.png?key=secret',
+    '/externalimages/exercises/../secret.png',
+  ]) assert.equal(normalizeExerciseImageUrl(url), null, url);
   for (const value of [undefined, null, false, 'false', 1, 'yes']) assert.equal(normalizeExerciseImages(value), false);
   assert.equal(normalizeExerciseImages('{"value":true}'), true);
   assert.equal(normalizeExerciseImages({ value: 'true' }), true);
@@ -62,6 +73,14 @@ test('image service downloads without authentication, converts and transfers bou
   h.task.onSuccess({ statusCode: 200, filePath: h.options().filePath });
   assert.equal((await result).status, 'queued');
   assert.equal(h.transfers[0].params.imageUrl, `https://www.liftosaur.com${imageUrl}`);
+});
+test('image service preserves a Markdown GIF extension for the experimental native conversion', async () => {
+  const gif = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
+  const h = serviceHarness();
+  const result = h.service.load({ imageUrl: gif });
+  assert.match(h.options().filePath, /-source\.gif$/);
+  h.task.onSuccess({ statusCode: 200, filePath: h.options().filePath });
+  assert.equal((await result).status, 'queued');
 });
 test('download failure is optional and never queues a file', async () => {
   const h = serviceHarness();
