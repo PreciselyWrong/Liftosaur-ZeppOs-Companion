@@ -1,0 +1,17 @@
+name: Improvement
+description: Suggest a concrete improvement to existing behaviour.
+title: "[Improvement] "
+labels: ["enhancement"]
+projects: ["PreciselyWrong/1"]
+body:
+  - type: textarea
+    id: improvement
+    attributes:
+      label: What should improve?
+      description: Describe the current friction and the desired outcome.
+    validations:
+      required: true
+  - type: textarea
+    id: value
+    attributes:
+      label: Why would this help?
