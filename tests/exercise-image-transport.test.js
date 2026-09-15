@@ -12,6 +12,13 @@ test('exercise image runtime avoids optional calls unsupported by Zepp QuickJS',
     'shared/exercise-image-client.js',
     'shared/watch-exercise-images.js',
   ]) assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /\?\.\(/, file);
+  const source = fs.readFileSync('app-side/index.js', 'utf8');
+  const onInit = source.slice(source.indexOf('onInit()'), source.indexOf('onSettingsChange'));
+
+  assert.match(onInit, /download:\s*\(url, options\) => this\.download\(url, options\)/);
+  assert.match(onInit, /convert:\s*\(options\) => this\.convert\(options\)/);
+  assert.match(onInit, /sendFile:\s*\(path, params\) => this\.sendFile\(path, params\)/);
+  assert.doesNotMatch(onInit, /typeof (?:network|image|transferFile)/);
 });
 
 test('image policy accepts only the public PNG exercise directory and explicit opt-in', () => {
@@ -27,15 +34,21 @@ function serviceHarness(enabled = true) {
   const task = {};
   const transfers = [];
   const saved = new Map();
+  let downloadImpl = (url, value) => { options = { url, ...value }; return task; };
+  let convertImpl = async (value) => ({ targetFilePath: value.targetFilePath, options: { size: 100 } });
   const dependencies = {
     storage: { getItem: (key) => saved.get(key), setItem: (key, value) => saved.set(key, value) },
     isEnabled: () => enabled,
-    downloader: { downloadFile(value) { options = value; return task; } },
-    image: { async convert(value) { return { targetFilePath: value.targetFilePath, options: { size: 100 } }; } },
-    outbox: { enqueueFile(path, params) { transfers.push({ path, params }); return { on() {} }; } },
+    download: (...args) => downloadImpl(...args),
+    convert: (...args) => convertImpl(...args),
+    sendFile(path, params) { transfers.push({ path, params }); return { on() {} }; },
   };
   const service = createExerciseImageService(dependencies);
-  return { service, task, transfers, dependencies, saved, options: () => options };
+  return {
+    service, task, transfers, dependencies, saved, options: () => options,
+    setDownload: (value) => { downloadImpl = value; },
+    setConvert: (value) => { convertImpl = value; },
+  };
 }
 test('disabled image service performs no download', async () => {
   const h = serviceHarness(false);
@@ -62,7 +75,7 @@ test('immutable converted images are reused after Side Service restart without o
   const first = h.service.load({ imageUrl, requestId: 'first' });
   h.task.onSuccess({ statusCode: 200 });
   await first;
-  h.dependencies.downloader.downloadFile = () => { throw new Error('Must reuse'); };
+  h.setDownload(() => { throw new Error('Must reuse'); });
   const restarted = createExerciseImageService(h.dependencies);
   assert.equal((await restarted.load({ imageUrl, requestId: 'second' })).status, 'queued');
   assert.equal(h.transfers[0].path, h.transfers[1].path);
@@ -85,7 +98,7 @@ test('failed downloads retry their reserved slot and oversize downloads never tr
 test('disabling during conversion suppresses transfer even when enabled again', async () => {
   const h = serviceHarness();
   let convertDone;
-  h.dependencies.image.convert = () => new Promise((resolve) => { convertDone = resolve; });
+  h.setConvert(() => new Promise((resolve) => { convertDone = resolve; }));
   const result = h.service.load({ imageUrl });
   h.task.onSuccess({ statusCode: 200 });
   await Promise.resolve();
@@ -103,7 +116,7 @@ test('full immutable slots refuse new URLs without network activity', async () =
 test('conversion timeout releases service but keeps unfinished native output protected', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });
   const h = serviceHarness();
-  h.dependencies.image.convert = () => new Promise(() => {});
+  h.setConvert(() => new Promise(() => {}));
   const result = h.service.load({ imageUrl });
   h.task.onSuccess({ statusCode: 200 });
   await Promise.resolve();

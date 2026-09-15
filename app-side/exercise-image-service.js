@@ -3,7 +3,7 @@ import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/e
 export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV1';
 export const MAX_EXERCISE_IMAGE_FILES = 32;
 
-export function createExerciseImageService({ downloader, image, outbox, isEnabled, storage }) {
+export function createExerciseImageService({ download, convert, sendFile, isEnabled, storage }) {
   let operation = null;
   function records() {
     try {
@@ -23,7 +23,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
     async load({ imageUrl, requestId } = {}) {
       if (!isEnabled()) return { status: 'disabled' };
       const url = normalizeExerciseImageUrl(imageUrl);
-      if (!url || operation || !downloader || !image || !outbox || !storage) return { status: 'unavailable' };
+      if (!url || operation || !download || !convert || !sendFile || !storage) return { status: 'unavailable' };
       const active = operation = { canceled: false };
       const allowed = () => !active.canceled && isEnabled();
       try {
@@ -43,7 +43,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
           if (files[index].converting) return { status: 'unavailable' };
           await new Promise((resolve, reject) => {
             active.reject = reject;
-            const task = active.task = downloader.downloadFile({ url, timeout: 20000, filePath: source });
+            const task = active.task = download(url, { timeout: 20000, filePath: source });
             task.onProgress = ({ total, loaded }) => {
               if (total > MAX_EXERCISE_IMAGE_BYTES || loaded > MAX_EXERCISE_IMAGE_BYTES || !allowed()) cancel();
             };
@@ -56,7 +56,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
           files[index].converting = true;
           save(files);
           let timeout;
-          const conversion = (async () => image.convert({ filePath: source, targetFilePath: target }))();
+          const conversion = (async () => convert({ filePath: source, targetFilePath: target }))();
           conversion.then(() => {
             const latest = records();
             if (latest?.[index]?.url === url) { latest[index].converting = false; save(latest); }
@@ -78,7 +78,7 @@ export function createExerciseImageService({ downloader, image, outbox, isEnable
           save(files);
         }
         if (!allowed()) return { status: 'disabled' };
-        outbox.enqueueFile(target, { type: 'exercise-image', imageUrl: url, requestId });
+        sendFile(target, { type: 'exercise-image', imageUrl: url, requestId });
         return { status: 'queued', imageUrl: url };
       } catch {
         return { status: 'unavailable' };
