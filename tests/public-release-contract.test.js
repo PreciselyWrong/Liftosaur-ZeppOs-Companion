@@ -60,14 +60,11 @@ test('program integration coverage uses an explicitly synthetic fixture', () => 
   assert.doesNotMatch(source, /Semaine|Mardi|Mercredi|Jeudi|Vendredi|Samedi|Dimanche/);
 });
 
-test('the README test badge matches the published test suite', () => {
-  const testCount = fs
-    .readdirSync(path.join(root, 'tests'))
-    .filter((name) => name.endsWith('.test.js'))
-    .reduce((total, name) => total + (read(path.join('tests', name)).match(/^\s*test\(/gm) || []).length, 0);
+test('the README reports live CI status instead of a hard-coded test count', () => {
   const readme = read('README.md');
 
-  assert.match(readme, new RegExp(`tests-${testCount}%20passing-brightgreen`));
+  assert.match(readme, /actions\/workflows\/ci\.yml\/badge\.svg/);
+  assert.doesNotMatch(readme, /badge\/tests-[0-9]+/);
 });
 
 test('published preview documentation carries the current Companion QR expiry', () => {

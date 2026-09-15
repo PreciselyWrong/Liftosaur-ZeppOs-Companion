@@ -54,3 +54,12 @@ test('README gives the verified Active 2 path for adding Lifto to Strength Train
   );
   assert.match(readme, /installing.*does not.*add.*data page/is);
 });
+
+test('TODO stays a lightweight roadmap', () => {
+  const todo = read('TODO.md');
+  const sections = [...todo.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+
+  assert.deepEqual(sections, ['Now', 'Next', 'Ideas', 'Done', 'Dropped']);
+  assert.ok(todo.split(/\r?\n/).length <= 30);
+  assert.doesNotMatch(todo, /^\|/m);
+});
