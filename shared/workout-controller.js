@@ -280,11 +280,9 @@ export function createWorkoutController({
         }
       : null;
 
-    let isWorkoutPaused = false;
-    for (const event of session.getJournal()) {
-      if (event.type === EVENT_TYPES.PAUSE_WORKOUT) isWorkoutPaused = true;
-      if (event.type === EVENT_TYPES.RESUME_WORKOUT) isWorkoutPaused = false;
-    }
+    const openPauseSource = view.isManualWorkoutPaused
+      ? 'manual'
+      : (view.isNativeWorkoutPaused ? 'native' : null);
 
     return {
       pendingSet,
@@ -292,31 +290,39 @@ export function createWorkoutController({
         view.startedAt,
         capturedAt,
         session.getWorkoutIntervals(capturedAt),
-        isWorkoutPaused
+        openPauseSource
       ),
     };
   }
 
   // Rebuild pause gaps so snapshot adoption and journal replay retain the same elapsed time.
-  function buildTimingEvents(startedAt, capturedAt, activeIntervals, keepFinalPauseOpen) {
+  function buildTimingEvents(startedAt, capturedAt, activeIntervals, openPauseSource) {
     if (!Number.isFinite(startedAt) || !Number.isFinite(capturedAt)) return [];
     const events = [];
     let cursor = startedAt;
     for (const [start, end] of activeIntervals) {
       if (!Number.isFinite(start) || !Number.isFinite(end) || end < start) continue;
       if (start > cursor) {
-        events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: cursor });
-        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, timestamp: start });
+        events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, payload: { source: 'manual' }, timestamp: cursor });
+        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source: 'manual' }, timestamp: start });
       }
       cursor = Math.max(cursor, end);
     }
     if (cursor < capturedAt) {
-      events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: cursor });
-      if (!keepFinalPauseOpen) {
-        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, timestamp: capturedAt });
+      events.push({
+        type: EVENT_TYPES.PAUSE_WORKOUT,
+        payload: { source: openPauseSource || 'manual' },
+        timestamp: cursor,
+      });
+      if (!openPauseSource) {
+        events.push({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source: 'manual' }, timestamp: capturedAt });
       }
-    } else if (keepFinalPauseOpen) {
-      events.push({ type: EVENT_TYPES.PAUSE_WORKOUT, timestamp: capturedAt });
+    } else if (openPauseSource) {
+      events.push({
+        type: EVENT_TYPES.PAUSE_WORKOUT,
+        payload: { source: openPauseSource },
+        timestamp: capturedAt,
+      });
     }
     return events;
   }
@@ -325,9 +331,9 @@ export function createWorkoutController({
     if (!localState) return;
     for (const event of localState.timingEvents) {
       if (event.type === EVENT_TYPES.PAUSE_WORKOUT) {
-        session.pauseWorkout({ timestamp: event.timestamp });
+        session.pauseWorkout({ timestamp: event.timestamp, source: event.payload?.source });
       } else {
-        session.resumeWorkout({ timestamp: event.timestamp });
+        session.resumeWorkout({ timestamp: event.timestamp, source: event.payload?.source });
       }
     }
 
@@ -1047,9 +1053,15 @@ export function createWorkoutController({
     resumeRest: (options = {}) =>
       mutateSession(() => session.resumeRest({ timestamp: options.timestamp ?? now() })),
     pauseWorkout: (options = {}) =>
-      mutateSession(() => session.pauseWorkout({ timestamp: options.timestamp ?? now() })),
+      mutateSession(() => session.pauseWorkout({
+        timestamp: options.timestamp ?? now(),
+        source: options.source,
+      })),
     resumeWorkout: (options = {}) =>
-      mutateSession(() => session.resumeWorkout({ timestamp: options.timestamp ?? now() })),
+      mutateSession(() => session.resumeWorkout({
+        timestamp: options.timestamp ?? now(),
+        source: options.source,
+      })),
     toggleRestPause: (options = {}) =>
       mutateSession(() =>
         session.toggleRestPause({ timestamp: options.timestamp ?? now() })
