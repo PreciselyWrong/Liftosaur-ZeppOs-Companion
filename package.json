@@ -5,6 +5,7 @@
   "main": "app.js",
   "scripts": {
     "test": "node --test \"tests/**/*.test.js\"",
+    "clean": "node tools/clean-generated.js",
     "build:companion": "node tools/build-targets.js companion",
     "build:workout": "node tools/build-targets.js workout",
     "build:all": "node tools/build-targets.js all",
