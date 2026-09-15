@@ -299,7 +299,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
       restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
-      workoutController: { nextSet: () => { started++; } }, renderUI() {},
+      workoutController: { nextSet: () => { started++; } }, renderUI() {}, openRestControls() {},
     };
     const render = new Function('env', `with (env) { ${extractFunction(source, 'renderRestScreen')}; return renderRestScreen; }`)(env);
     render({ rest: { remaining, isPaused: false } });
