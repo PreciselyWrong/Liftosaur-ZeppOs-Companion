@@ -40,7 +40,8 @@ test('README explains the two products and links their public guides', () => {
   assert.match(readme, /docs\/workout-extension-manual-actions\.md/);
   assert.match(readme, /docs\/workout-extension-hardware-test-plan\.md/);
   assert.match(readme, /silent_jacob/);
-  assert.match(readme, /co-creator, lead tester, and contributor/i);
+  assert.match(readme, /lead tester/i);
+  assert.match(readme, /(?:main )?contributor/i);
   assert.match(readme, /https:\/\/www\.reddit\.com\/user\/silent_jacob\//);
 });
 
