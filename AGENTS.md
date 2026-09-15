@@ -14,9 +14,8 @@
 - Test: `npm test`.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
-- Release plan: `.\publish.ps1 -Plan`.
-- Release from clean `main`: run `/public-release-audit`, then `.\publish.ps1 -Confirm -AuditedCommit <HEAD>`. The script tests, scans, builds, pushes and verifies `origin/main`.
-- Preview QR: Companion uses App ID `1123411`; Workout uses App ID `1125789`. Generate both tracked README QR assets before publishing either branch.
+- Release work: use `.agents/skills/lifto-release/SKILL.md`. It owns planning, audit, QR generation, GitHub release creation or refresh, and verification.
+- GitHub Releases are the only public release history. Versions below `1.0.0` are pre-releases; GitHub generates their notes from merged pull requests. Do not add `CHANGELOG.md` or `.github/release.yml`.
 - Pull requests: exactly one commit and one subject per PR; split independent changes into separate branches and PRs.
 
 ## Map
@@ -58,8 +57,8 @@
 
 - ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
-- Do not bump the app version for optional exercise images - include them in 0.4.9.
-- Do not split the timed-set changes into a separate 0.4.10 release - they belong to the combined 0.4.9 release requested by the user.
+- Do not describe optional exercise images as new in 0.5.0 - they already shipped in 0.4.9.
+- Do not describe timed-set support as new in 0.5.0 - it already shipped in 0.4.9.
 - Do not take desktop control for simulator checks unless explicitly requested - the user performs visual checks; launch through the terminal.
 - Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
 - ⛔ Keep Prepare beside Start set after the rest timer expires - replace both with one full-width Start set button on the timer screen.
@@ -67,9 +66,7 @@
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
 - ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
 - ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.
-
 - ⛔ Show a duration/calorie ticker in the extension top-right metric - display native workout BPM there to avoid restarting horizontal text every second.
-
 - ⛔ Copy, fork or scrape Liftosaur code - its AGPL code is outside this MIT repository's license boundary.
 - ⛔ Reimplement Liftoscript - Liftosaur and Playground own its calculations; only the documented plate-loading exception is local.
 - ⛔ Infer programs, weeks, days or missing values from names - server identifiers and explicit nulls are authoritative.
@@ -93,8 +90,11 @@
 - ⛔ Add fast polling, continuous services or unsupported extension gestures - use event-driven click-only extension UI.
 - ⛔ Start a second `zeus dev` watcher - concurrent watchers race to refresh one simulator.
 - ⛔ Push without `/public-release-audit` - the public repository must remain free of secrets and personal data.
-- ⛔ Publish 1.0.0 while `releaseStage` is `beta` - physical-watch validation must clear the release gate.
-- ⛔ Push the public Companion or Workout branches with stale or missing README preview QR codes - testers need installable builds for both real App IDs and every claimed compatible model.
+- ⛔ Publish 1.0.0 before physical-watch validation clears the release gate - every `0.x` version is beta.
+- ⛔ Commit expiring preview QR codes or expiry dates - `publish.ps1` records both assets and their exact validity timestamps in the matching GitHub release.
+- ⛔ Preserve stale QR validity timestamps when refreshing release assets - replace only the marked QR metadata block because every generated code has its own expiry.
+- ⛔ Publish the release workflow as v0.4.9 - that version is already current; this release is v0.5.0.
+- ⛔ Put preview QR images back in README.md - expiring QR codes belong only to the matching GitHub release.
 - ⛔ Generate a public Workout preview with a synthetic App ID - only App ID `1125789` maps to the registered Lifto Workout Extension application.
 - ⛔ Infer a tested build, exact test date or root cause from report age or a generic sync screenshot - capture the build and error evidence separately.
 - ⛔ Create new checklists or ask community testers to complete them for routine fixes - keep feedback requests brief and limited to normal use.
@@ -113,7 +113,7 @@
 
 ## State
 
-- Version 0.4.9 beta: both apps run timed and unilateral sets and optional exercise images in Info. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
-- Now: validate timed sets in Lifto 0.4.9 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
+- Version 0.5.0 beta: both apps run timed and unilateral sets and optional exercise images in Info. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
+- Now: validate timed sets in Lifto 0.5.0 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.

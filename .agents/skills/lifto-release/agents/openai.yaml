@@ -1,0 +1,4 @@
+interface:
+  display_name: "Lifto Release"
+  short_description: "Publish verified Lifto releases and QR codes"
+  default_prompt: "Use $lifto-release to publish or refresh the current Lifto release safely."

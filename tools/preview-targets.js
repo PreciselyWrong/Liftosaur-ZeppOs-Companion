@@ -9,8 +9,8 @@ import {
 export const SUPPORTED_PREVIEW_PRODUCTS = ['companion', 'workout'];
 
 export const DEFAULT_PREVIEW_OUTPUTS = {
-  companion: 'docs/test-build-qr.png',
-  workout: 'docs/workout-extension-preview-qr.png',
+  companion: 'build/lifto-companion-qr.png',
+  workout: 'build/lifto-workout-qr.png',
 };
 
 export const DEFAULT_PREVIEW_SCALE = 10;
