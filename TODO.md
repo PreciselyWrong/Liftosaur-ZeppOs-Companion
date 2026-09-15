@@ -13,6 +13,7 @@
 
 ## Done
 
+- Added a safe command for cleaning reproducible local output.
 - Moved beta QR distribution and release history to GitHub Releases.
 - Reduced project status to a short current roadmap.
 - Added optional API exercise images in Info for both 0.4.9 apps.

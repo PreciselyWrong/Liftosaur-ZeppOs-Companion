@@ -12,6 +12,7 @@
 
 - Install: `npm ci`.
 - Test: `npm test`.
+- Clean generated output: `npm run clean`. It preserves local audit and review evidence under `build/`.
 - Development plan: `.\dev.ps1 -Plan`. Live development: `.\dev.ps1` for Companion or `.\dev.ps1 -Product workout` for the generated extension; each checks Zeus then runs `zeus dev -t "Amazfit Active 2 (Round)"`.
 - Build: `npm run build:companion`, `npm run build:workout` (with `ZEPP_WORKOUT_EXTENSION_APP_ID=1125789`), or `npm run build:all`.
 - Release work: use `.agents/skills/lifto-release/SKILL.md`. It owns planning, audit, QR generation, GitHub release creation or refresh, and verification.
@@ -20,8 +21,7 @@
 
 ## Map
 
-- `page/common/` - standalone lifecycle, renderer, Cloud orchestration and recovery UI.
-- `data-widget/common/` - Workout Extension single-page DataWidget click-only UI.
+- `page/common/`, `data-widget/common/` - standalone and Workout Extension watch UIs.
 - `shared/workout-session.js` - pure session state machine and event journal.
 - `shared/workout-controller.js` - shared local workout state, persistence, Cloud synchronization, polling, conflicts and terminal writes.
 - `shared/workout-api-plan.js`, `shared/day-plan.js` - authoritative API response to plan and legacy replay mappings.
@@ -33,7 +33,7 @@
 - `app-side/workout-details.js` - bounded exercise-note and recent-history enrichment for running-workout reads.
 - `app-side/` - protocol routing, the only HTTP client, Cloud services and stable client identity.
 - `setting/` - phone-side API key settings. Secrets never belong on the watch.
-- `tests/` - Node contract, state, security, renderer and build tests.
+- `tests/`, `tools/` - Node contracts plus build, preview, generation and cleanup commands.
 - `docs/` - tester installation, Workout hardware validation, privacy and store guidance.
 
 ## Decisions
