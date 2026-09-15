@@ -16,7 +16,8 @@
   "author": "",
   "license": "MIT",
   "devDependencies": {
-    "@zeppos/device-types": "^3.0.0"
+    "@zeppos/device-types": "^3.0.0",
+    "esbuild": "^0.28.2"
   },
   "type": "module",
   "dependencies": {

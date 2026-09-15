@@ -13,6 +13,7 @@
 
 ## Done
 
+- Kept API 4.2 Simulator development launches below the JavaScript memory ceiling.
 - Rendered linked note images in Info and Prepare across both apps.
 - Made the purple workout timer pause/resume the durable session in both apps.
 - Kept native Workout BPM and its heart icon stable.
