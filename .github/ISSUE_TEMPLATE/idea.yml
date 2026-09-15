@@ -1,0 +1,17 @@
+name: Idea
+description: Capture an idea that may be worth exploring later.
+title: "[Idea] "
+labels: ["idea"]
+projects: ["PreciselyWrong/1"]
+body:
+  - type: textarea
+    id: idea
+    attributes:
+      label: What is the idea?
+      description: Keep it short and describe the user benefit.
+    validations:
+      required: true
+  - type: textarea
+    id: notes
+    attributes:
+      label: Useful context

@@ -19,20 +19,21 @@
 - GitHub Releases are the only public release history. Versions below `1.0.0` are pre-releases; GitHub generates their notes from merged pull requests. Do not add `CHANGELOG.md` or `.github/release.yml`.
 - Pull requests: exactly one commit and one subject per PR; split independent changes into separate branches and PRs.
 
+## Work tracking
+
+- GitHub Issues and [Lifto Companion Tracker](https://github.com/users/PreciselyWrong/projects/1) are the only backlog; do not create or restore `TODO.md`. Use exactly one primary label: `bug`, `enhancement`, or `idea`.
+- Agents own the lifecycle: search before creating, add the issue to Project #1, set `In Progress` when work starts, and keep its status current.
+- Keep issues outcome-focused and implementation detail in the pull request. After verification, link the pull request, close the issue, and confirm `Done`; close abandoned work as not planned with one factual reason.
+
 ## Map
 
-- `page/common/`, `data-widget/common/` - standalone and Workout Extension watch UIs.
+- `page/common/`, `data-widget/common/` - standalone and Workout Extension watch UIs; `shared/screen-layout.js`, `shared/watch-layout.js` own layout.
 - `shared/workout-session.js` - pure session state machine and event journal.
 - `shared/workout-controller.js` - shared local workout state, persistence, Cloud synchronization, polling, conflicts and terminal writes.
 - `shared/workout-api-plan.js`, `shared/day-plan.js` - authoritative API response to plan and legacy replay mappings.
-- `shared/session-storage.js`, `shared/workout-refresh-policy.js` - crash recovery, queue state and refresh timing.
-- `shared/screen-layout.js`, `shared/watch-layout.js` - the only screen-size and renderer layout rules.
-- `shared/rest-alert.js` - rest alert state tracking, foreground zero-crossing, and resume expiry.
-- `shared/workout-extension-nav.js`, `shared/workout-extension-metrics.js` - extension screen formatting and defensive native metric parsing.
-- `shared/workout-extension-manifest.js` - separate extension manifest contract.
-- `app-side/workout-details.js` - bounded exercise-note and recent-history enrichment for running-workout reads.
-- `app-side/` - protocol routing, the only HTTP client, Cloud services and stable client identity.
-- `setting/` - phone-side API key settings. Secrets never belong on the watch.
+- `shared/session-storage.js`, `shared/workout-refresh-policy.js`, `shared/rest-alert.js` - recovery, queue state, refresh timing and alerts.
+- `shared/workout-extension-nav.js`, `shared/workout-extension-metrics.js`, `shared/workout-extension-manifest.js` - extension navigation, metrics and package contract.
+- `app-side/`, `setting/` - phone protocol, the only HTTP client, Cloud enrichment, stable identity and API key settings; secrets never belong on the watch.
 - `tests/`, `tools/` - Node contracts plus build, preview, generation and cleanup commands.
 - `docs/` - tester installation, Workout hardware validation, privacy and store guidance.
 
@@ -57,9 +58,9 @@
 - ⛔ Let fewer than 90% of user-visible elements and interactions match between Companion and Workout without a documented platform constraint - shared behavior and visual language are the default.
 - ⛔ Use distorted QEMU screenshots to dismiss API 4.2 black screens - screenshots are not display evidence, and launch failures require isolation against a minimal Mini Program.
 - ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
+- ⛔ Restore `TODO.md` as a backlog - GitHub Issues and Project #1 are the single source of truth.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
-- Do not describe optional exercise images as new in 0.5.0 - they already shipped in 0.4.9.
-- Do not describe timed-set support as new in 0.5.0 - it already shipped in 0.4.9.
+- Do not describe optional exercise images or timed sets as new in 0.5.0 - they already shipped in 0.4.9.
 - Do not take desktop control for simulator checks unless explicitly requested - the user performs visual checks; launch through the terminal.
 - Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
 - ⛔ Keep Prepare beside Start set after the rest timer expires - replace both with one full-width Start set button on the timer screen.
@@ -114,6 +115,5 @@
 ## State
 
 - Version 0.5.0 beta: both apps run timed and unilateral sets and optional exercise images in Info. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
-- Now: validate timed sets in Lifto 0.5.0 and Workout integration on Active 2 firmware 7.23.0.1 at API level 400.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
-- Next: confirm display duration, native pause, retry, rest alert and finish behaviour on additional physical watches; simulator images cannot prove native Workout integration.
+- Current priorities and next steps live in Project #1; simulator images cannot prove native Workout integration.

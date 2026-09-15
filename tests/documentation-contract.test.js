@@ -55,13 +55,29 @@ test('README gives the verified Active 2 path for adding Lifto to Strength Train
   assert.match(readme, /installing.*does not.*add.*data page/is);
 });
 
-test('TODO stays a lightweight roadmap', () => {
-  const todo = read('TODO.md');
-  const sections = [...todo.matchAll(/^## (.+)$/gm)].map((match) => match[1]);
+test('GitHub Issues and Project own the work backlog', () => {
+  assert.equal(fs.existsSync(path.join(root, 'TODO.md')), false);
 
-  assert.deepEqual(sections, ['Now', 'Next', 'Ideas', 'Done', 'Dropped']);
-  assert.ok(todo.split(/\r?\n/).length <= 30);
-  assert.doesNotMatch(todo, /^\|/m);
+  const agents = read('AGENTS.md');
+  assert.match(agents, /github\.com\/users\/PreciselyWrong\/projects\/1/i);
+  assert.match(agents, /only backlog/i);
+  assert.match(agents, /set `In Progress` when work starts/i);
+  assert.match(agents, /close the issue, and confirm `Done`/i);
+
+  const forms = [
+    ['bug.yml', 'bug'],
+    ['improvement.yml', 'enhancement'],
+    ['idea.yml', 'idea'],
+  ];
+  for (const [file, label] of forms) {
+    const form = read(path.join('.github', 'ISSUE_TEMPLATE', file));
+    assert.match(form, /^projects: \["PreciselyWrong\/1"\]$/m);
+    assert.match(form, new RegExp(`^labels: \\["${label}"\\]$`, 'm'));
+    assert.match(form, /^body:$/m);
+  }
+
+  const config = read(path.join('.github', 'ISSUE_TEMPLATE', 'config.yml'));
+  assert.match(config, /^blank_issues_enabled: false$/m);
 });
 
 test('AGENTS requires merged pull-request branches to be deleted', () => {
