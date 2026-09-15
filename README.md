@@ -204,6 +204,9 @@ ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:workout
 
 # Build both targets
 ZEPP_WORKOUT_EXTENSION_APP_ID=1125789 npm run build:all
+
+# Remove generated packages, preview QR codes and temporary output
+npm run clean
 ```
 
 ### Running on Simulator or Generating Previews
