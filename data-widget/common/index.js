@@ -1,6 +1,6 @@
 import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { REST_PAUSE_MODAL_LAYOUT, TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
+import { TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -232,7 +232,7 @@ let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
 let isRestMinimized = false;
-let isRestControlsOpen = false;
+let isWorkoutTimerControlsOpen = false;
 let phoneRequiredReason = null;
 let discardConfirmationRequested = false;
 
@@ -325,9 +325,9 @@ function applyNativePauseActions(actions) {
   if (!workoutController || !Array.isArray(actions) || actions.length === 0) return;
   for (const action of actions) {
     if (action.type === 'pause') {
-      workoutController.pauseWorkout({ timestamp: action.timestamp });
+      workoutController.pauseWorkout({ timestamp: action.timestamp, source: 'native' });
     } else if (action.type === 'resume') {
-      workoutController.resumeWorkout({ timestamp: action.timestamp });
+      workoutController.resumeWorkout({ timestamp: action.timestamp, source: 'native' });
     }
   }
   renderUI();
@@ -593,17 +593,21 @@ function renderTopBar(view, onBack) {
     click_func: onBack,
   });
 
-  addLiveLabel('elapsed', {
+  addLiveButton('elapsed', {
     x: px(topBar.elapsed.x),
     y: px(topBar.y),
     w: px(topBar.elapsed.width),
     h: px(topBar.height),
-    color: THEME.primaryLight,
+    radius: px(12),
+    normal_color: THEME.bg,
+    press_color: THEME.primaryDark,
+    color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
     text_size: font('button'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: formatSeconds(view.elapsedSeconds),
+    click_func: openWorkoutTimerControls,
   });
 
   addLiveLabel('heart', {
@@ -1723,7 +1727,7 @@ function renderRestScreen(view) {
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: formatSeconds(rest.remaining),
-    click_func: openRestControls,
+    click_func: openWorkoutTimerControls,
   });
 
   // Quick timer controls: -10s, Pause/Resume, +10s
@@ -1918,22 +1922,22 @@ function renderPreparationImage(details, apiImageUrl) {
   return true;
 }
 
-function openRestControls() {
-  isRestControlsOpen = true;
+function openWorkoutTimerControls() {
+  isWorkoutTimerControlsOpen = true;
   controllerUiDirty = true;
 }
 
-function closeRestControls() {
-  isRestControlsOpen = false;
+function closeWorkoutTimerControls() {
+  isWorkoutTimerControlsOpen = false;
   controllerUiDirty = true;
 }
 
-function renderRestControlsModal(view) {
-  const rest = view.rest;
-  const layout = REST_PAUSE_MODAL_LAYOUT;
-  const restColor = rest.isOvertime
-    ? THEME.error
-    : (rest.isPaused ? THEME.yellow : THEME.primaryPale);
+function renderWorkoutTimerControlsModal(view) {
+  const layout = WORKOUT_TIMER_MODAL_LAYOUT;
+  const isPaused = view.isWorkoutPaused;
+  const stateText = view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+    ? 'Zepp paused'
+    : (isPaused ? 'Paused' : 'Running');
 
   addWidget(widget.FILL_RECT, {
     x: px(layout.panelX),
@@ -1953,49 +1957,53 @@ function renderRestControlsModal(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: 'Rest timer',
+    text: 'Workout timer',
   });
-  addLiveLabel('restModalState', {
+  addLiveLabel('workoutTimerModalState', {
     x: px(layout.contentX),
     y: px(layout.stateY),
     w: px(layout.contentWidth),
     h: px(28),
-    color: rest.isPaused ? THEME.yellow : THEME.textSecondary,
+    color: isPaused ? THEME.yellow : THEME.textSecondary,
     text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: rest.isPaused ? 'Paused' : 'Running',
+    text: stateText,
   });
-  addLiveLabel('restModalValue', {
+  addLiveLabel('workoutTimerModalValue', {
     x: px(layout.contentX),
     y: px(layout.valueY),
     w: px(layout.contentWidth),
     h: px(layout.valueHeight),
-    color: restColor,
+    color: isPaused ? THEME.yellow : THEME.primaryPale,
     text_size: font('timer'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: formatSeconds(rest.remaining),
+    text: formatSeconds(view.elapsedSeconds),
   });
-  addLiveButton('restModalPause', {
+  addLiveButton('workoutTimerModalPause', {
     x: px(layout.pauseX),
     y: px(layout.pauseY),
     w: px(layout.pauseWidth),
     h: px(layout.pauseHeight),
     radius: px(layout.pauseHeight / 2),
-    normal_color: rest.isPaused ? THEME.yellow : THEME.primary,
-    press_color: rest.isPaused ? THEME.yellow : THEME.primaryDark,
-    color: rest.isPaused ? 0x000000 : THEME.textPrimary,
-    text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
+    normal_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primary,
+    press_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primaryDark,
+    color: view.isManualWorkoutPaused ? 0x000000 : THEME.textPrimary,
+    text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+      ? 'Zepp paused'
+      : (view.isManualWorkoutPaused ? 'Resume' : 'Pause'),
     text_size: font('button'),
     click_func: () => {
-      if (workoutController.view().rest?.isWorkoutPaused) return;
-      workoutController.toggleRestPause();
+      const current = workoutController.view();
+      if (current.isNativeWorkoutPaused && !current.isManualWorkoutPaused) return;
+      if (current.isManualWorkoutPaused) workoutController.resumeWorkout();
+      else workoutController.pauseWorkout();
     },
   });
-  addLiveButton('restModalClose', {
+  addLiveButton('workoutTimerModalClose', {
     x: px(layout.closeX),
     y: px(layout.closeY),
     w: px(layout.closeWidth),
@@ -2006,7 +2014,7 @@ function renderRestControlsModal(view) {
     color: THEME.textPrimary,
     text: 'Close',
     text_size: font('caption'),
-    click_func: closeRestControls,
+    click_func: closeWorkoutTimerControls,
   });
 }
 
@@ -2552,12 +2560,12 @@ function renderUI() {
 }
 
 function renderScreen() {
-  if (isRestControlsOpen) {
-    const restView = workoutController.view();
-    if (restView.state === SESSION_STATES.REST && restView.rest) {
-      return renderRestControlsModal(restView);
+  if (isWorkoutTimerControlsOpen) {
+    const timerView = workoutController.view();
+    if (timerView.state === SESSION_STATES.ACTIVE_SET || timerView.state === SESSION_STATES.REST) {
+      return renderWorkoutTimerControlsModal(timerView);
     }
-    isRestControlsOpen = false;
+    isWorkoutTimerControlsOpen = false;
   }
   if (discardConfirmationRequested) return renderDiscardConfirmation();
   if (phoneRequiredReason) return renderPhoneRequiredModal();
@@ -2907,14 +2915,22 @@ function tick() {
 
       updateLiveWidget('restLabel', { text: labelText, color: labelColor });
       updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor });
-      updateLiveWidget('restModalState', {
-        text: view.rest.isPaused ? 'Paused' : 'Running',
-        color: view.rest.isPaused ? THEME.yellow : THEME.textSecondary,
-      });
-      updateLiveWidget('restModalValue', { text: formatSeconds(view.rest.remaining), color: restColor });
       updateLiveWidget('restBannerText', { text: `Rest ${formatSeconds(view.rest.remaining)}`, color: restColor });
     }
-    updateLiveWidget('elapsed', { text: formatSeconds(view.elapsedSeconds) });
+    updateLiveWidget('elapsed', {
+      text: formatSeconds(view.elapsedSeconds),
+      color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
+    });
+    updateLiveWidget('workoutTimerModalState', {
+      text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+        ? 'Zepp paused'
+        : (view.isWorkoutPaused ? 'Paused' : 'Running'),
+      color: view.isWorkoutPaused ? THEME.yellow : THEME.textSecondary,
+    });
+    updateLiveWidget('workoutTimerModalValue', {
+      text: formatSeconds(view.elapsedSeconds),
+      color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryPale,
+    });
   }
 }
 

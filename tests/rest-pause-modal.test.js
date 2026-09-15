@@ -13,33 +13,36 @@ function extractFunction(source, name) {
 }
 
 for (const product of ['page', 'data-widget']) {
-  test(`${product} opens pause controls from the running rest timer`, () => {
+  test(`${product} opens global pause controls from the purple elapsed timer`, () => {
     const source = readProductSource(product);
+    const topBar = extractFunction(source, 'renderTopBar');
     const restScreen = extractFunction(source, 'renderRestScreen');
-    const open = extractFunction(source, 'openRestControls');
+    const open = extractFunction(source, 'openWorkoutTimerControls');
     const root = extractFunction(source, 'renderScreen');
 
-    assert.match(source, /let isRestControlsOpen = false/);
+    assert.match(source, /let isWorkoutTimerControlsOpen = false/);
+    assert.match(topBar, /addLiveButton\('elapsed'/);
+    assert.match(topBar, /click_func: openWorkoutTimerControls/);
     assert.match(restScreen, /addLiveButton\('restValue'/);
-    assert.match(restScreen, /click_func: openRestControls/);
-    assert.match(open, /isRestControlsOpen = true/);
+    assert.match(restScreen, /click_func: openWorkoutTimerControls/);
+    assert.match(open, /isWorkoutTimerControlsOpen = true/);
     assert.match(open, /controllerUiDirty = true/);
     assert.doesNotMatch(open, /renderUI\(\)/);
-    assert.match(root, /isRestControlsOpen[\s\S]*renderRestControlsModal/);
+    assert.match(root, /isWorkoutTimerControlsOpen[\s\S]*renderWorkoutTimerControlsModal/);
   });
 
-  test(`${product} rest modal toggles the authoritative timer and closes safely`, () => {
+  test(`${product} timer modal pauses the whole Lifto workout and closes safely`, () => {
     const source = readProductSource(product);
-    const modal = extractFunction(source, 'renderRestControlsModal');
-    const close = extractFunction(source, 'closeRestControls');
-    const toggleOwner = product === 'page' ? 'session' : 'workoutController';
+    const modal = extractFunction(source, 'renderWorkoutTimerControlsModal');
+    const close = extractFunction(source, 'closeWorkoutTimerControls');
 
-    assert.match(modal, /addLiveLabel\('restModalValue'/);
-    assert.match(modal, /addLiveButton\('restModalPause'/);
-    assert.match(modal, /rest\.isPaused \? 'Resume' : 'Pause'/);
-    assert.match(modal, new RegExp(`${toggleOwner}\\.toggleRestPause\\(\\)`));
-    assert.match(modal, /click_func: closeRestControls/);
-    assert.match(close, /isRestControlsOpen = false/);
+    assert.match(modal, /addLiveLabel\('workoutTimerModalValue'/);
+    assert.match(modal, /addLiveButton\('workoutTimerModalPause'/);
+    assert.match(modal, /isManualWorkoutPaused \? 'Resume' : 'Pause'/);
+    assert.match(modal, /workoutController\.pauseWorkout\(\)/);
+    assert.match(modal, /workoutController\.resumeWorkout\(\)/);
+    assert.match(modal, /click_func: closeWorkoutTimerControls/);
+    assert.match(close, /isWorkoutTimerControlsOpen = false/);
     assert.match(close, /controllerUiDirty = true/);
     assert.doesNotMatch(close, /renderUI\(\)/);
   });

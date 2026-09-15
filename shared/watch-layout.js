@@ -16,7 +16,7 @@ export const TIMED_SET_LAYOUT = Object.freeze({
   valueX: 176, valueWidth: 128, valueY: 195, valueHeight: 74, labelY: 316, detailY: 346,
   actionY: 382, actionHeight: 40, actionX: 82, actionWidth: 152, actionGap: 12,
 });
-export const REST_PAUSE_MODAL_LAYOUT = Object.freeze({
+export const WORKOUT_TIMER_MODAL_LAYOUT = Object.freeze({
   panelX: 44,
   panelY: 52,
   panelWidth: 392,
