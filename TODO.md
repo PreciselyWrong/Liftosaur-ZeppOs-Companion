@@ -13,7 +13,7 @@
 
 ## Done
 
-- Fixed the Workout rest pause control and scrolling heart icon.
+- Made both running rest timers open reliable Pause/Resume controls and fixed the Workout scrolling heart icon.
 
 - Added a safe command for cleaning reproducible local output.
 - Moved beta QR distribution and release history to GitHub Releases.
