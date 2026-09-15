@@ -2,6 +2,9 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDummyProgramService } from '../app-side/dummy-program-service.js';
+import { exerciseDisplayImageUrl } from '../shared/exercise-notes.js';
+
+const demoDescriptionImage = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
 
 test('dummy program service lists sample programs', async () => {
   const service = createDummyProgramService();
@@ -56,6 +59,16 @@ test('every demo exercise includes a description and its latest session note', a
     assert.match(exercise.notes, /^Description\n.+/s, exercise.name);
     assert.match(exercise.notes, /\n\nPast sessions\n• \d{4}-\d{2}-\d{2}: .+$/s, exercise.name);
   }
+});
+
+test('demo descriptions include a renderable Markdown image', async () => {
+  const service = createDummyProgramService();
+  const plan = await service.getDayPlan('dummy-gzclp', 1, 2);
+  const exercise = plan.exercises.find(item => item.name === 'Dumbbell Row');
+
+  assert.equal(exerciseDisplayImageUrl(exercise.notes), demoDescriptionImage);
+  assert.equal(exercise.imageUrl, demoDescriptionImage);
+  assert.match(exercise.notes, new RegExp(`!\\[\\]\\(${demoDescriptionImage.replaceAll('.', '\\.') }\\)`));
 });
 
 test('dummy program service finishes workout cleanly', async () => {

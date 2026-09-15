@@ -23,6 +23,10 @@ test('API image metadata distinguishes omitted values from explicit null without
 test('session exposes current and upcoming images across rest and journal recovery', () => {
   const plan = workoutToDayPlan(workout());
   const session = createWorkoutSession({ plan });
+  assert.deepEqual(session.view(1000).overviewExercises.map(exercise => exercise.imageUrl), [
+    imageUrl,
+    '/externalimages/second.png',
+  ]);
   session.startWorkout({ timestamp: 1000 });
   assert.equal(session.view(1000).exerciseImageUrl, imageUrl);
   session.completeSet({ timestamp: 2000 });

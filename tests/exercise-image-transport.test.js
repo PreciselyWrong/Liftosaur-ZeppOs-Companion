@@ -36,6 +36,8 @@ test('image policy accepts public HTTPS image files and explicit opt-in', () => 
     '/externalimages/exercises/../secret.png',
   ]) assert.equal(normalizeExerciseImageUrl(url), null, url);
   for (const value of [undefined, null, false, 'false', 1, 'yes']) assert.equal(normalizeExerciseImages(value), false);
+  assert.equal(normalizeExerciseImages(undefined, true), true);
+  assert.equal(normalizeExerciseImages(false, true), false);
   assert.equal(normalizeExerciseImages('{"value":true}'), true);
   assert.equal(normalizeExerciseImages({ value: 'true' }), true);
 });

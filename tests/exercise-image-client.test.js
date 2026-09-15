@@ -34,11 +34,54 @@ test('explicit reopening retries unavailable images but repeated loading does no
   h.client.load(url);
   await flush();
   assert.equal(h.requests.length, 1);
-  h.client.load(url);
+  h.client.load(url, { retry: true });
   await flush();
   assert.equal(h.requests.length, 2);
   assert.notEqual(h.requests[0].requestId, h.requests[1].requestId);
   h.client.dispose();
+});
+
+test('serializes distinct image requests and keeps completed images available together', async () => {
+  const h = harness();
+  const secondUrl = '/externalimages/exercises/single/small/deadlift.png';
+  h.client.load(url);
+  h.client.load(secondUrl);
+  await flush();
+  assert.deepEqual(h.requests.map(request => request.imageUrl), [
+    'https://www.liftosaur.com/externalimages/exercises/single/small/squat.png',
+  ]);
+
+  h.receive({ params: { type: 'exercise-image', ...h.requests[0] }, fileSize: 100,
+    filePath: 'data://download/squat.png', readyState: 'transferred', on() {}, cancel() {} });
+  await flush();
+  assert.deepEqual(h.requests.map(request => request.imageUrl), [
+    'https://www.liftosaur.com/externalimages/exercises/single/small/squat.png',
+    'https://www.liftosaur.com/externalimages/exercises/single/small/deadlift.png',
+  ]);
+
+  h.receive({ params: { type: 'exercise-image', ...h.requests[1] }, fileSize: 100,
+    filePath: 'data://download/deadlift.png', readyState: 'transferred', on() {}, cancel() {} });
+  assert.equal(h.client.get(url).src, 'data://download/squat.png');
+  assert.equal(h.client.get(secondUrl).src, 'data://download/deadlift.png');
+  h.client.dispose();
+});
+
+test('keeps four images and removes evicted and disposed watch files', async () => {
+  const h = harness();
+  const urls = Array.from({ length: 5 }, (_, index) =>
+    `/externalimages/exercises/single/small/exercise-${index}.png`);
+
+  for (let index = 0; index < urls.length; index++) {
+    h.client.load(urls[index]);
+    await flush();
+    h.receive({ params: { type: 'exercise-image', ...h.requests[index] }, fileSize: 100,
+      filePath: `data://download/exercise-${index}.png`, readyState: 'transferred', on() {}, cancel() {} });
+  }
+
+  assert.equal(h.client.get(urls[0]).status, 'unavailable');
+  assert.deepEqual(h.removed, ['data://download/exercise-0.png']);
+  h.client.dispose();
+  assert.deepEqual(h.removed, urls.map((_, index) => `data://download/exercise-${index}.png`));
 });
 
 test('a disposed client never consumes an inbox file belonging to a new lifecycle', () => {

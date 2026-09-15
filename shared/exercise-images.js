@@ -1,6 +1,7 @@
 export const MAX_EXERCISE_IMAGE_BYTES = 512 * 1024;
 
-export function normalizeExerciseImages(value) {
+export function normalizeExerciseImages(value, fallback = false) {
+  if (value === undefined || value === null) return fallback;
   if (typeof value === 'string') {
     try { value = JSON.parse(value); } catch { return false; }
   }

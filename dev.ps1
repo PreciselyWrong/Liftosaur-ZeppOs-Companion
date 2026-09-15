@@ -13,7 +13,7 @@ $ErrorActionPreference = 'Stop'
 $projectRoot = $PSScriptRoot
 $target = 'Amazfit Active 2 (Round)'
 $sourceRoot = if ($Product -eq 'workout') { Join-Path $projectRoot 'build/workout-extension' } else { $projectRoot }
-$projectName = Split-Path -Leaf $sourceRoot
+$projectName = if ($Product -eq 'workout') { 'workout-extension' } else { 'lifto-companion' }
 $devRoot = Join-Path $projectRoot "build/dev/$Product/$projectName"
 $prepareScript = Join-Path $projectRoot 'tools/prepare-dev-project.js'
 

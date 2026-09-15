@@ -3,9 +3,15 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import { spawn, spawnSync } from 'node:child_process';
+import { transform } from 'esbuild';
 
 const root = process.cwd();
 const scriptPath = path.join(root, 'tools', 'prepare-dev-project.js');
+
+test('development staging helper survives the Zepp ES2015 source scan', async () => {
+  const source = fs.readFileSync(scriptPath, 'utf8');
+  await assert.doesNotReject(() => transform(source, { format: 'esm', target: 'es2015' }));
+});
 
 test('development staging minifies JavaScript and preserves assets', () => {
   const tempRoot = path.join(root, 'build', 'dev-test-source');

@@ -23,7 +23,7 @@ communicating directly with Liftosaur's official servers.
 | Heart rate in Lifto Companion | Watch memory only, during the session | Nowhere | Displayed live on the standalone workout screen |
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
-| Optional exercise images | Downloaded and converted on the phone, then stored locally on the watch | Download requests go to Liftosaur; image files travel to the watch over Bluetooth | Displays the exercise picture in Info when enabled |
+| Optional exercise images | Downloaded and converted on the phone, then stored locally on the watch | Download requests go to Liftosaur; image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
 
 ## What the application never does
 

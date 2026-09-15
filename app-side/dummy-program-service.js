@@ -289,8 +289,9 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Dumbbell Row',
+          imageUrl: 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif',
           notes: demoNotes(
-            'Keep your torso still and pull the dumbbell toward your hip.',
+            'Keep your torso still and pull the dumbbell toward your hip.\n\n![](https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif)',
             'Use the adjustable bench at setting 3.',
           ),
           equipment: 'dumbbell',

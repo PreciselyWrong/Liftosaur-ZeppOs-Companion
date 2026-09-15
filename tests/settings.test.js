@@ -8,9 +8,27 @@ import { normalizeExerciseImages } from '../shared/exercise-images.js';
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
 const appSideSource = fs.readFileSync(path.join(process.cwd(), 'app-side', 'index.js'), 'utf8');
 let settingsPage;
-new Function('AppSettingsPage', 'normalizeGetReadySeconds', 'normalizeExerciseImages', source.replace(/^import .*;\r?\n/gm, ''))((definition) => {
-  settingsPage = definition;
-}, normalizeGetReadySeconds, normalizeExerciseImages);
+const component = (type) => (props, ...children) => ({ type, props, children });
+new Function(
+  'AppSettingsPage',
+  'normalizeGetReadySeconds',
+  'normalizeExerciseImages',
+  'View',
+  'Text',
+  'TextInput',
+  'Button',
+  'Select',
+  source.replace(/^import .*;\r?\n/gm, ''),
+)(
+  (definition) => { settingsPage = definition; },
+  normalizeGetReadySeconds,
+  normalizeExerciseImages,
+  component('View'),
+  component('Text'),
+  component('TextInput'),
+  component('Button'),
+  component('Select'),
+);
 
 function loadSettings(initial = {}) {
   const values = new Map(Object.entries(initial));
@@ -30,6 +48,32 @@ function loadSettings(initial = {}) {
   return { state: context.state, writes };
 }
 
+function renderSettings(initial = {}) {
+  const values = new Map(Object.entries(initial));
+  const writes = [];
+  const props = {
+    settingsStorage: {
+      getItem: (key) => values.get(key),
+      setItem: (key, value) => {
+        values.set(key, value);
+        writes.push([key, value]);
+      },
+      removeItem: (key) => values.delete(key),
+    },
+  };
+  const context = { state: {}, getStorage: settingsPage.getStorage };
+  const tree = settingsPage.build.call(context, props);
+  const selects = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'Select') selects.push(node);
+    visit(node.children);
+  };
+  visit(tree);
+  return { tree, selects, writes };
+}
+
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
@@ -40,6 +84,58 @@ test('loads Liftosaur API key and screen-on duration default 120 without writing
 test('exercise images are opt-in and preserve the saved preference', () => {
   assert.equal(loadSettings({ exerciseImages: 'true' }).state.exerciseImages, true);
   assert.equal(loadSettings({ exerciseImages: 'false' }).state.exerciseImages, false);
+});
+
+test('every dropdown shows its current choice and persists a string value', () => {
+  const { selects, writes } = renderSettings();
+
+  assert.deepEqual(selects.map(({ props }) => props.value), ['5', 'false', '120']);
+  assert.deepEqual(selects.map(({ props }) => props.options.length), [4, 2, 4]);
+  assert.deepEqual(selects.map(({ props }) => props.label), [
+    'Ready countdown: 5 sec',
+    'Exercise images: Off',
+    'Screen timeout: 120 sec',
+  ]);
+  assert.deepEqual(selects.map(({ props }) => props.title), [undefined, undefined, undefined]);
+
+  selects[0].props.onChange('10');
+  selects[1].props.onChange('true');
+  selects[2].props.onChange('always');
+  assert.deepEqual(writes, [
+    ['getReadySeconds', '10'],
+    ['exerciseImages', 'true'],
+    ['screenOnDuration', 'always'],
+  ]);
+});
+
+test('the settings page is three coherent cards with centered headings and compact controls', () => {
+  const { tree } = renderSettings();
+  const cardStyle = source.slice(source.indexOf('const CARD_STYLE'), source.indexOf('function settingsHeading'));
+
+  assert.equal(tree.children[0].length, 3);
+  assert.match(cardStyle, /display:\s*'flex'/);
+  assert.match(cardStyle, /flexDirection:\s*'column'/);
+  assert.match(source, /'Lifto Companion'/);
+  assert.match(source, /'Workout settings'/);
+  assert.match(source, /'Account help'/);
+  assert.match(source, /alignItems:\s*'center'[\s\S]*?textAlign:\s*'center'/);
+  assert.doesNotMatch(source, /title:\s*'Get ready countdown'/);
+  assert.doesNotMatch(source, /Exercise images \(List \+ Info \+ Prepare\)/);
+  assert.doesNotMatch(source, /'REST TIMERS'|'WORKOUT DISPLAY'|'API KEY'/);
+});
+
+test('account status uses separate centered lines instead of ignored newline characters', () => {
+  const statusStyle = source.slice(source.indexOf('const STATUS_STYLE'), source.indexOf('function settingsHeading'));
+
+  assert.match(statusStyle, /flexDirection:\s*'column'/);
+  assert.match(source, /hasKey \? 'Connected to Liftosaur' : 'Demo mode'/);
+  assert.match(source, /hasKey \? maskedKey : 'Add an API key to sync your workouts\.'/);
+  assert.doesNotMatch(source, /Demo mode\\n|Liftosaur\\n/);
+});
+
+test('the Side Service defaults exercise images off even in demo mode', () => {
+  assert.match(appSideSource, /let exerciseImages = false/);
+  assert.match(appSideSource, /normalizeExerciseImages\(storage\.getItem\('exerciseImages'\)\)/);
 });
 
 test('the settings page explains that Liftosaur owns rest defaults', () => {

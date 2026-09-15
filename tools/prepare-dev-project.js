@@ -75,13 +75,13 @@ export async function prepareDevProject(source, destination) {
   return destinationRoot;
 }
 
-if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
-  const [, , source, destination] = process.argv;
+async function main(args = process.argv.slice(2)) {
+  const [source, destination] = args;
   if (!source || !destination) {
     throw new Error('Usage: node tools/prepare-dev-project.js <source> <destination>');
   }
-  const watchMode = process.argv.includes('--watch');
-  const skipInitial = process.argv.includes('--skip-initial');
+  const watchMode = args.includes('--watch');
+  const skipInitial = args.includes('--skip-initial');
   if (!skipInitial) {
     const prepared = await prepareDevProject(source, destination);
     console.log(`Development project prepared: ${prepared}`);
@@ -124,4 +124,11 @@ if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.me
       sourceWatcher.once('error', reject);
     });
   }
+}
+
+if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
+  void main().catch((error) => {
+    console.error(error);
+    process.exitCode = 1;
+  });
 }

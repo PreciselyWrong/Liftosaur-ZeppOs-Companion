@@ -87,6 +87,8 @@ test('companion stays default and generation failure prevents workout watcher st
   assert.equal(companion.status, 0, companion.stderr);
   assert.doesNotMatch(companion.stdout, /GENERATE:/);
   assert.match(companion.stdout, /PREPARE:.*prepare-dev-project\.js/);
+  assert.match(companion.stdout, /build[\\/]dev[\\/]companion[\\/]lifto-companion/);
+  assert.doesNotMatch(companion.stdout, /build[\\/]dev[\\/]companion[\\/](?:note-images|minified-dev|liftosaur-ZeppOs)/);
   assert.match(companion.stdout, /ZEUS:dev/);
   const failed = runMockedDev('-Product workout -NonInteractive', 7);
   assert.equal(failed.status, 7, failed.stderr);

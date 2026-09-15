@@ -60,7 +60,7 @@ test('demo mode is explicit in settings and on every watch screen', () => {
   );
 
   assert.match(settingsSource, /isDemoApiKey/);
-  assert.match(settingsSource, /No Liftosaur account is connected/);
+  assert.match(settingsSource, /Demo mode/);
   assert.match(watchSource, /serviceMode === 'DEMO'/);
   assert.match(watchSource, /function renderDemoBadge/);
   assert.match(watchSource, /renderDemoBadge\(\)/);
@@ -157,8 +157,8 @@ test('the ready preview shows three readable rows above fixed actions', () => {
 
   assert.match(ready, /exercises\.forEach/);
   assert.match(ready, /const rowY = 108 \+ index \* 58/);
-  assert.match(ready, /y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: truncate\(exercise\.name, 20\)/);
-  assert.match(ready, /y: px\(rowY \+ 28\)[\s\S]*?h: px\(26\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
+  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: truncate\(exercise\.name, showsImage \? 17 : 20\)/);
+  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY \+ 28\)[\s\S]*?h: px\(26\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
   assert.doesNotMatch(ready, /`\$\{truncate\(exercise\.name, 20\)\}\\n\$\{exercise\.prescriptionSummary\}`/);
   assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
 });
@@ -182,8 +182,9 @@ test('ready-screen swipes mirror its paging buttons', () => {
 
 test('modal pages stay short enough to clear their controls', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
-  assert.match(source, /import \{ exerciseDisplayImageUrl, paginateNotes \} from '..\/..\/shared\/exercise-notes.js'/);
-  assert.match(source, /paginateNotes\(activeNotesContent, 90, 6\)/);
+  const pages = fs.readFileSync(path.join(root, 'shared', 'exercise-info-pages.js'), 'utf8');
+  assert.match(source, /import \{ exerciseInfoPages \} from '..\/..\/shared\/exercise-info-pages.js'/);
+  assert.match(pages, /hasImage \? 60 : 90, hasImage \? 3 : 6/);
 });
 
 test('modal actions use large central touch targets and ASCII labels', () => {
@@ -232,11 +233,12 @@ test('reopening a modal recreates controls above the new modal content', () => {
   assert.ok(openModal.indexOf('destroyModalControls()') < openModal.indexOf('renderUI()'));
 });
 
-test('modal gestures are registered directly and removed on teardown', () => {
+test('modal gestures are registered directly while teardown stays native-free', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const onDestroy = source.slice(source.indexOf('onDestroy()'), source.indexOf('\n    },', source.indexOf('onDestroy()')));
 
   assert.match(source, /onGesture\(\{ callback: handleGesture \}\)/);
-  assert.match(source, /offGesture\(\)/);
+  assert.doesNotMatch(onDestroy, /offGesture\(\)/);
   assert.match(source, /GESTURE_LEFT/);
   assert.match(source, /GESTURE_RIGHT/);
   assert.match(source, /GESTURE_DOWN/);
@@ -261,7 +263,7 @@ test('connection title uses the same marquee renderer as long program names', ()
   const connection = source.slice(source.indexOf('function renderConnectionScreen'), source.indexOf('function renderHomeScreen'));
 
   assert.match(source, /function renderMarqueeTitle\(text, color/);
-  assert.match(connection, /renderMarqueeTitle\('Phone connection needed', THEME\.orange\)/);
+  assert.match(connection, /renderMarqueeTitle\(PHONE_CONNECTION_TITLE, THEME\.orange\)/);
 });
 
 test('the exercise details control is a labeled button without emoji', () => {
@@ -297,7 +299,7 @@ test('the home screen separates the fixed workout position from the moving day n
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const home = source.slice(source.indexOf('function renderHomeScreen'), source.indexOf('function renderProgramsScreen'));
 
-  assert.match(home, /renderMarqueeTitle\(outline\.programName \|\| 'Liftosaur'\)/);
+  assert.match(home, /renderMarqueeTitle\(outline\.programName \|\| 'Lifto Companion'\)/);
   assert.match(home, /text: formatWorkoutPosition\(start\.week\.number, start\.day\.number\)/);
   assert.match(home, /text: formatMarqueeText\(start\.day\.name\)/);
   assert.doesNotMatch(home, /formatWorkoutButtonLabel/);
@@ -390,4 +392,28 @@ test('the production page never invents a heart rate when the sensor is unavaila
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
 
   assert.doesNotMatch(source, /liveHr\s*=\s*['"]138['"]/);
+});
+
+test('standalone loading and setup screens use the Lifto Companion name', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const setup = source.slice(source.indexOf('function renderSetupScreen()'), source.indexOf('function renderConnectionScreen()'));
+  const loading = source.slice(source.indexOf('function renderLoadingScreen()'), source.indexOf('function handleExerciseImageChange'));
+
+  assert.match(setup, /renderTitle\('Lifto Companion'\)/);
+  assert.match(loading, /renderTitle\('Lifto Companion'\)/);
+});
+
+test('Companion teardown cannot perform native work that breaks the next launch', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  const renderUI = source.slice(source.indexOf('function renderUI()'), source.indexOf('\nfunction ', source.indexOf('function renderUI()') + 1));
+  const onDestroy = source.slice(source.indexOf('onDestroy()'), source.indexOf('\n    },', source.indexOf('onDestroy()')));
+
+  assert.match(source, /let isTearingDown = false/);
+  assert.match(renderUI, /if \(isTearingDown\) return/);
+  assert.match(onDestroy, /isTearingDown = true/);
+  assert.match(onDestroy, /exerciseImages\?\.abandon\(\)/);
+  assert.doesNotMatch(
+    onDestroy,
+    /\.dispose\(|stopClock\(|stopVibration\(|offGesture\(|offCurrentChange|resetDisplayHold\(|clearWidgets\(|destroyModalControls\(/,
+  );
 });
