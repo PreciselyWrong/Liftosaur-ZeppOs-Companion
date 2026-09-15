@@ -103,3 +103,7 @@ test('the production tree contains no abandoned phase-zero prototype', () => {
   assert.equal(fs.existsSync(path.join(root, 'page', 'common', 'state.js')), false);
   assert.equal(fs.existsSync(path.join(root, 'tests', 'widget-state.test.js')), false);
 });
+
+test('the production tree contains only the maintained preview QR builder', () => {
+  assert.equal(fs.existsSync(path.join(root, 'tools', 'qr-ascii-to-png.mjs')), false);
+});
