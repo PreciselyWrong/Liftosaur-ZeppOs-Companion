@@ -66,7 +66,7 @@
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
 - ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
 - ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.
-- ⛔ Show a duration/calorie ticker in the extension top-right metric - display native workout BPM there to avoid restarting horizontal text every second.
+- ⛔ Show a duration/calorie ticker or replace visible native BPM when only its heart glyph scrolls - keep native workout BPM and fix the icon independently.
 - ⛔ Copy, fork or scrape Liftosaur code - its AGPL code is outside this MIT repository's license boundary.
 - ⛔ Reimplement Liftoscript - Liftosaur and Playground own its calculations; only the documented plate-loading exception is local.
 - ⛔ Infer programs, weeks, days or missing values from names - server identifiers and explicit nulls are authoritative.
