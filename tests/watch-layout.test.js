@@ -351,6 +351,8 @@ test('discarding a restored workout reloads programs when no outline is in memor
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const handler = source.match(/function returnAfterDiscard\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
 
+  assert.match(handler, /isBusy = false/);
+  assert.match(handler, /statusMessage = ''/);
   assert.match(handler, /if \(outline\)/);
   assert.match(handler, /loadPrograms\(\)/);
   assert.match(handler, /workoutController\.clear\(\)/);

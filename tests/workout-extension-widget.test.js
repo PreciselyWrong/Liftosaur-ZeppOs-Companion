@@ -16,6 +16,11 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     path.join(process.cwd(), 'data-widget', 'common', 'index.js'),
     'utf8',
   );
+  const returnAfterDiscard = source.match(/function returnAfterDiscard\(\) \{([\s\S]*?)\n\}/)?.[1] || '';
+
+  assert.match(returnAfterDiscard, /isBusy = false/);
+  assert.match(returnAfterDiscard, /statusMessage = ''/);
+  assert.match(returnAfterDiscard, /screen = EXTENSION_SCREENS\.HOME/);
 
   // 1. DataWidget BasePage structure
   assert.match(source, /DataWidget\(\s*BasePage\(/, 'Must use DataWidget(BasePage({...}))');
