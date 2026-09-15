@@ -56,6 +56,7 @@
 
 ## Forbidden
 
+- ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
 - Do not bump the app version for optional exercise images - include them in 0.4.9.
 - Do not split the timed-set changes into a separate 0.4.10 release - they belong to the combined 0.4.9 release requested by the user.
