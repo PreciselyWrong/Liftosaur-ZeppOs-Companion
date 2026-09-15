@@ -2652,6 +2652,9 @@ function handleDiscardWorkout() {
 }
 
 function returnAfterDiscard() {
+  isBusy = false;
+  statusMessage = '';
+  errorMessage = '';
   workoutController.clear();
   dayPlan = null;
   listPage = 0;
