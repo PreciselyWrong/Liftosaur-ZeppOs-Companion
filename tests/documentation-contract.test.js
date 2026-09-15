@@ -24,6 +24,13 @@ test('publishes only documentation useful to users, testers, and maintainers', (
     'workout-extension-hardware-test-plan.md',
     'workout-extension-manual-actions.md',
   ]);
+
+  const agentInstructions = read('AGENTS.md');
+  assert.match(
+    agentInstructions,
+    /Pull requests: exactly one commit and one subject per PR; split independent changes into separate branches and PRs\./,
+  );
+  assert.ok(agentInstructions.split(/\r?\n/).length <= 120, 'AGENTS.md must stay within 120 lines');
 });
 
 test('README explains the two products and links their public guides', () => {
