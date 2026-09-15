@@ -8,7 +8,7 @@ Use this checklist after installing the new Lifto Workout preview.
 - Firmware: 7.23.0.1
 - API level: 400
 - Zepp workouts: Strength Training and Free Training
-- Lifto Workout version: 0.5.0 beta
+- Lifto Workout version: 0.5.1 beta
 
 Record the tested commit and date before starting:
 
