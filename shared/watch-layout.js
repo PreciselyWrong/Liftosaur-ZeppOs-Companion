@@ -16,6 +16,27 @@ export const TIMED_SET_LAYOUT = Object.freeze({
   valueX: 176, valueWidth: 128, valueY: 195, valueHeight: 74, labelY: 316, detailY: 346,
   actionY: 382, actionHeight: 40, actionX: 82, actionWidth: 152, actionGap: 12,
 });
+export const REST_PAUSE_MODAL_LAYOUT = Object.freeze({
+  panelX: 44,
+  panelY: 52,
+  panelWidth: 392,
+  panelHeight: 382,
+  panelRadius: 28,
+  contentX: 64,
+  contentWidth: 352,
+  titleY: 72,
+  stateY: 114,
+  valueY: 146,
+  valueHeight: 100,
+  pauseX: 82,
+  pauseY: 278,
+  pauseWidth: 316,
+  pauseHeight: 70,
+  closeX: 140,
+  closeY: 368,
+  closeWidth: 200,
+  closeHeight: 52,
+});
 export const OVERVIEW_PAGE_SIZE = 3;
 export const READY_PREVIEW_SIZE = 3;
 

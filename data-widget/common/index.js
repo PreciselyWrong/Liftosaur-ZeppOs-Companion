@@ -1,6 +1,6 @@
 import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
+import { REST_PAUSE_MODAL_LAYOUT, TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -231,6 +231,7 @@ let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
 let isRestMinimized = false;
+let isRestControlsOpen = false;
 let phoneRequiredReason = null;
 let discardConfirmationRequested = false;
 
@@ -1700,17 +1701,21 @@ function renderRestScreen(view) {
     text: labelText,
   });
 
-  addLiveLabel('restValue', {
+  addLiveButton('restValue', {
     x: px(62),
     y: px(118),
     w: px(356),
     h: px(64),
+    radius: px(12),
+    normal_color: THEME.bg,
+    press_color: THEME.primaryDark,
     color: restColor,
     text_size: font('timer'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: formatSeconds(rest.remaining),
+    click_func: openRestControls,
   });
 
   // Quick timer controls: -10s, Pause/Resume, +10s
@@ -1883,6 +1888,98 @@ function renderRestScreen(view) {
       else workoutController.nextSet();
       renderUI();
     },
+  });
+}
+
+function openRestControls() {
+  isRestControlsOpen = true;
+  controllerUiDirty = true;
+}
+
+function closeRestControls() {
+  isRestControlsOpen = false;
+  controllerUiDirty = true;
+}
+
+function renderRestControlsModal(view) {
+  const rest = view.rest;
+  const layout = REST_PAUSE_MODAL_LAYOUT;
+  const restColor = rest.isOvertime
+    ? THEME.error
+    : (rest.isPaused ? THEME.yellow : THEME.primaryPale);
+
+  addWidget(widget.FILL_RECT, {
+    x: px(layout.panelX),
+    y: px(layout.panelY),
+    w: px(layout.panelWidth),
+    h: px(layout.panelHeight),
+    radius: px(layout.panelRadius),
+    color: THEME.card,
+  });
+  addWidget(widget.TEXT, {
+    x: px(layout.contentX),
+    y: px(layout.titleY),
+    w: px(layout.contentWidth),
+    h: px(34),
+    color: THEME.textPrimary,
+    text_size: font('title'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: 'Rest timer',
+  });
+  addLiveLabel('restModalState', {
+    x: px(layout.contentX),
+    y: px(layout.stateY),
+    w: px(layout.contentWidth),
+    h: px(28),
+    color: rest.isPaused ? THEME.yellow : THEME.textSecondary,
+    text_size: font('body'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: rest.isPaused ? 'Paused' : 'Running',
+  });
+  addLiveLabel('restModalValue', {
+    x: px(layout.contentX),
+    y: px(layout.valueY),
+    w: px(layout.contentWidth),
+    h: px(layout.valueHeight),
+    color: restColor,
+    text_size: font('timer'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: formatSeconds(rest.remaining),
+  });
+  addLiveButton('restModalPause', {
+    x: px(layout.pauseX),
+    y: px(layout.pauseY),
+    w: px(layout.pauseWidth),
+    h: px(layout.pauseHeight),
+    radius: px(layout.pauseHeight / 2),
+    normal_color: rest.isPaused ? THEME.yellow : THEME.primary,
+    press_color: rest.isPaused ? THEME.yellow : THEME.primaryDark,
+    color: rest.isPaused ? 0x000000 : THEME.textPrimary,
+    text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
+    text_size: font('button'),
+    click_func: () => {
+      if (workoutController.view().rest?.isWorkoutPaused) return;
+      workoutController.toggleRestPause();
+    },
+  });
+  addLiveButton('restModalClose', {
+    x: px(layout.closeX),
+    y: px(layout.closeY),
+    w: px(layout.closeWidth),
+    h: px(layout.closeHeight),
+    radius: px(layout.closeHeight / 2),
+    normal_color: THEME.cardActive,
+    press_color: THEME.card,
+    color: THEME.textPrimary,
+    text: 'Close',
+    text_size: font('caption'),
+    click_func: closeRestControls,
   });
 }
 
@@ -2414,6 +2511,13 @@ function renderUI() {
 }
 
 function renderScreen() {
+  if (isRestControlsOpen) {
+    const restView = workoutController.view();
+    if (restView.state === SESSION_STATES.REST && restView.rest) {
+      return renderRestControlsModal(restView);
+    }
+    isRestControlsOpen = false;
+  }
   if (discardConfirmationRequested) return renderDiscardConfirmation();
   if (phoneRequiredReason) return renderPhoneRequiredModal();
   if (isNotesModalOpen) return renderNotesScreen();
@@ -2762,6 +2866,11 @@ function tick() {
 
       updateLiveWidget('restLabel', { text: labelText, color: labelColor });
       updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor });
+      updateLiveWidget('restModalState', {
+        text: view.rest.isPaused ? 'Paused' : 'Running',
+        color: view.rest.isPaused ? THEME.yellow : THEME.textSecondary,
+      });
+      updateLiveWidget('restModalValue', { text: formatSeconds(view.rest.remaining), color: restColor });
       updateLiveWidget('restBannerText', { text: `Rest ${formatSeconds(view.rest.remaining)}`, color: restColor });
     }
     updateLiveWidget('elapsed', { text: formatSeconds(view.elapsedSeconds) });
