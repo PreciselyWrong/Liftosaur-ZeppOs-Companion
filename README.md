@@ -6,6 +6,10 @@ Standalone app and Workout Extension for [Liftosaur](https://www.liftosaur.com) 
 ![Zepp OS](https://img.shields.io/badge/Zepp%20OS-3.6%2B-purple.svg)
 ![Tests](https://img.shields.io/badge/tests-620%20passing-brightgreen.svg)
 
+## Collaborators
+
+Lifto for Zepp OS is built together with [u/silent_jacob](https://www.reddit.com/user/silent_jacob/), co-creator, lead tester, and contributor.
+
 <p align="center">
   <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
   <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
