@@ -1,6 +1,6 @@
 import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { REST_PAUSE_MODAL_LAYOUT, TIMED_SET_LAYOUT } from '../../shared/watch-layout.js';
+import { TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -226,7 +226,7 @@ let flashWidget = null;
 let flashTimer = null;
 let vibrationTimer = null;
 let isRestMinimized = false;
-let isRestControlsOpen = false;
+let isWorkoutTimerControlsOpen = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
@@ -1184,9 +1184,9 @@ function renderNotesModal() {
 // Swipes mirror reversible controls only, so an accidental movement cannot
 // finish a set, discard a workout or write history.
 function handleGesture(gesture) {
-  if (isRestControlsOpen) {
+  if (isWorkoutTimerControlsOpen) {
     if (gesture !== GESTURE_DOWN) return false;
-    closeRestControls();
+    closeWorkoutTimerControls();
     return true;
   }
 
@@ -2209,17 +2209,21 @@ function renderTopBar(view, onBack) {
     click_func: onBack,
   });
 
-  addLiveLabel('elapsed', {
+  addLiveButton('elapsed', {
     x: px(138),
     y: px(45),
     w: px(120),
     h: px(40),
-    color: THEME.primaryLight,
+    radius: px(12),
+    normal_color: THEME.bg,
+    press_color: THEME.primaryDark,
+    color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
     text_size: font('button'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: elapsedLabel(view),
+    click_func: openWorkoutTimerControls,
   });
 
   addLiveLabel('hr', {
@@ -2761,7 +2765,7 @@ function renderRestScreen(view) {
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: formatSeconds(rest.remaining),
-    click_func: openRestControls,
+    click_func: openWorkoutTimerControls,
   });
 
   // Quick timer controls: -10s, Pause/Resume, +10s
@@ -2964,22 +2968,22 @@ function renderPreparationImage(details, apiImageUrl) {
   return true;
 }
 
-function openRestControls() {
-  isRestControlsOpen = true;
+function openWorkoutTimerControls() {
+  isWorkoutTimerControlsOpen = true;
   controllerUiDirty = true;
 }
 
-function closeRestControls() {
-  isRestControlsOpen = false;
+function closeWorkoutTimerControls() {
+  isWorkoutTimerControlsOpen = false;
   controllerUiDirty = true;
 }
 
-function renderRestControlsModal(view) {
-  const rest = view.rest;
-  const layout = REST_PAUSE_MODAL_LAYOUT;
-  const restColor = rest.isOvertime
-    ? THEME.error
-    : (rest.isPaused ? THEME.yellow : THEME.primaryPale);
+function renderWorkoutTimerControlsModal(view) {
+  const layout = WORKOUT_TIMER_MODAL_LAYOUT;
+  const isPaused = view.isWorkoutPaused;
+  const stateText = view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+    ? 'Zepp paused'
+    : (isPaused ? 'Paused' : 'Running');
 
   addWidget(widget.FILL_RECT, {
     x: px(layout.panelX),
@@ -2999,49 +3003,54 @@ function renderRestControlsModal(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: 'Rest timer',
+    text: 'Workout timer',
   });
-  addLiveLabel('restModalState', {
+  addLiveLabel('workoutTimerModalState', {
     x: px(layout.contentX),
     y: px(layout.stateY),
     w: px(layout.contentWidth),
     h: px(28),
-    color: rest.isPaused ? THEME.yellow : THEME.textSecondary,
+    color: isPaused ? THEME.yellow : THEME.textSecondary,
     text_size: font('body'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: rest.isPaused ? 'Paused' : 'Running',
+    text: stateText,
   });
-  addLiveLabel('restModalValue', {
+  addLiveLabel('workoutTimerModalValue', {
     x: px(layout.contentX),
     y: px(layout.valueY),
     w: px(layout.contentWidth),
     h: px(layout.valueHeight),
-    color: restColor,
+    color: isPaused ? THEME.yellow : THEME.primaryPale,
     text_size: font('timer'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: formatSeconds(rest.remaining),
+    text: elapsedLabel(view),
   });
-  addLiveButton('restModalPause', {
+  addLiveButton('workoutTimerModalPause', {
     x: px(layout.pauseX),
     y: px(layout.pauseY),
     w: px(layout.pauseWidth),
     h: px(layout.pauseHeight),
     radius: px(layout.pauseHeight / 2),
-    normal_color: rest.isPaused ? THEME.yellow : THEME.primary,
-    press_color: rest.isPaused ? THEME.yellow : THEME.primaryDark,
-    color: rest.isPaused ? 0x000000 : THEME.textPrimary,
-    text: rest.isPaused ? 'Resume' : 'Pause',
+    normal_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primary,
+    press_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primaryDark,
+    color: view.isManualWorkoutPaused ? 0x000000 : THEME.textPrimary,
+    text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+      ? 'Zepp paused'
+      : (view.isManualWorkoutPaused ? 'Resume' : 'Pause'),
     text_size: font('button'),
     click_func: () => {
-      session.toggleRestPause();
+      const current = workoutController.view();
+      if (current.isNativeWorkoutPaused && !current.isManualWorkoutPaused) return;
+      if (current.isManualWorkoutPaused) workoutController.resumeWorkout();
+      else workoutController.pauseWorkout();
       requestWorkoutRefresh();
     },
   });
-  addLiveButton('restModalClose', {
+  addLiveButton('workoutTimerModalClose', {
     x: px(layout.closeX),
     y: px(layout.closeY),
     w: px(layout.closeWidth),
@@ -3052,7 +3061,7 @@ function renderRestControlsModal(view) {
     color: THEME.textPrimary,
     text: 'Close',
     text_size: font('caption'),
-    click_func: closeRestControls,
+    click_func: closeWorkoutTimerControls,
   });
 }
 
@@ -3210,12 +3219,12 @@ function renderUI() {
 }
 
 function renderScreen() {
-  if (isRestControlsOpen) {
-    const restView = session.view();
-    if (restView.state === SESSION_STATES.REST && restView.rest) {
-      return renderRestControlsModal(restView);
+  if (isWorkoutTimerControlsOpen) {
+    const timerView = workoutController.view();
+    if (timerView.state === SESSION_STATES.ACTIVE_SET || timerView.state === SESSION_STATES.REST) {
+      return renderWorkoutTimerControlsModal(timerView);
     }
-    isRestControlsOpen = false;
+    isWorkoutTimerControlsOpen = false;
   }
   if (isNotesModalOpen) return renderNotesModal();
   if (screen === SCREEN.CONNECTION) return renderConnectionScreen();
@@ -3319,8 +3328,24 @@ function tick() {
   if (second === lastRenderedSecond) return;
   lastRenderedSecond = second;
 
-  let patched = updateLiveWidget('elapsed', { text: elapsedLabel(view) });
+  let patched = updateLiveWidget('elapsed', {
+    text: elapsedLabel(view),
+    color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
+  });
   patched = updateLiveWidget('hr', { text: formatHeartRate(liveHr), color: heartRateColor(liveHr) }) && patched;
+
+  if (liveWidgets.workoutTimerModalValue) {
+    patched = updateLiveWidget('workoutTimerModalValue', {
+      text: elapsedLabel(view),
+      color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryPale,
+    }) && patched;
+    patched = updateLiveWidget('workoutTimerModalState', {
+      text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
+        ? 'Zepp paused'
+        : (view.isWorkoutPaused ? 'Paused' : 'Running'),
+      color: view.isWorkoutPaused ? THEME.yellow : THEME.textSecondary,
+    }) && patched;
+  }
 
   if (view.rest) {
     const restColor = view.rest.isOvertime
@@ -3335,15 +3360,6 @@ function tick() {
 
     patched =
       updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor }) && patched;
-    if (liveWidgets.restModalValue) {
-      patched =
-        updateLiveWidget('restModalValue', { text: formatSeconds(view.rest.remaining), color: restColor }) && patched;
-      patched =
-        updateLiveWidget('restModalState', {
-          text: view.rest.isPaused ? 'Paused' : 'Running',
-          color: view.rest.isPaused ? THEME.yellow : THEME.textSecondary,
-        }) && patched;
-    }
     patched =
       updateLiveWidget('restLabel', {
         text: labelText,

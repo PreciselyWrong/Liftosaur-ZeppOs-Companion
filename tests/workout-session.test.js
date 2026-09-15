@@ -3,6 +3,32 @@ import assert from 'node:assert/strict';
 
 import { createWorkoutSession, SESSION_STATES, weightStepFor } from '../shared/workout-session.js';
 
+test('manual workout pause survives native pause reconciliation', () => {
+  const session = createWorkoutSession({ plan: {
+    programId: 'pause-sources',
+    unit: 'kg',
+    exercises: [{
+      index: 1,
+      name: 'Squat',
+      sets: [{ index: 1, targetReps: 5, targetWeight: 100, restSeconds: 60 }],
+    }],
+  } });
+
+  session.startWorkout({ timestamp: 0 });
+  session.pauseWorkout({ timestamp: 5_000 });
+  assert.equal(session.view(10_000).isManualWorkoutPaused, true);
+  assert.equal(session.view(10_000).elapsedSeconds, 5);
+
+  session.pauseWorkout({ timestamp: 11_000, source: 'native' });
+  session.resumeWorkout({ timestamp: 12_000, source: 'native' });
+  assert.equal(session.view(20_000).isManualWorkoutPaused, true);
+  assert.equal(session.view(20_000).elapsedSeconds, 5);
+
+  session.resumeWorkout({ timestamp: 20_000 });
+  assert.equal(session.view(25_000).isManualWorkoutPaused, false);
+  assert.equal(session.view(25_000).elapsedSeconds, 10);
+});
+
 test('superset context follows actual pending progression without changing the journal', () => {
   for (const counts of [[2, 2], [2, 2, 2], [1, 3, 2]]) {
     const session = createWorkoutSession({ plan: makePlan({ exercises: counts.map((count, i) => ({
