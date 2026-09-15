@@ -180,7 +180,7 @@ AppSideService(
         download: (url, options) => this.download(url, options),
         convert: (options) => this.convert(options),
         sendFile: (path, params) => this.sendFile(path, params),
-        isEnabled: () => normalizeExerciseImages(getEffectiveStorage()?.getItem('exerciseImages')),
+        isEnabled: () => getEffectiveSettings().exerciseImages,
         storage: getEffectiveStorage(),
       });
     },
