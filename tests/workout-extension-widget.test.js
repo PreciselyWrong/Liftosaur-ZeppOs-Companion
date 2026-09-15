@@ -93,7 +93,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     'Must not dump payloads or secrets in logs'
   );
 
-  // 11. Screen controls from @zos/display and safe reset in onPause / onDestroy
+  // 11. Screen controls from @zos/display and safe reset before native teardown
   assert.match(source, /from\s+['"]@zos\/display['"]/, 'Must import display controls from @zos/display');
   assert.match(source, /setPageBrightTime/, 'Must set the focused page bright time');
   assert.match(source, /pauseDropWristScreenOff/, 'Must prevent wrist-drop screen off while focused');
@@ -102,7 +102,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   const onPause = source.slice(source.indexOf('onPause()'), source.indexOf('onDestroy()'));
   const onDestroy = source.slice(source.indexOf('onDestroy()'));
   assert.match(onPause, /resetDisplayHold/, 'onPause must safely reset screen controls');
-  assert.match(onDestroy, /resetDisplayHold/, 'onDestroy must safely reset screen controls');
+  assert.doesNotMatch(onDestroy, /resetDisplayHold/, 'onDestroy must not call display APIs during native teardown');
 
   // 12. Periodic sport metrics refresh from tick
   const tickBody = source.slice(source.indexOf('function tick('), source.indexOf('function startClock('));
@@ -261,6 +261,23 @@ test('rest pause keeps its native button alive until the click callback returns'
     pauseControl,
     /renderUI\(\)/,
     'Pause must not delete its active native button synchronously',
+  );
+});
+
+test('native workout destruction performs no device work and blocks late redraws', () => {
+  const source = readWidgetSource();
+  const renderUI = extractFunction(source, 'renderUI');
+  const onDestroy = source.slice(source.indexOf('onDestroy()'), source.indexOf('onReceivedFile', source.indexOf('onDestroy()')));
+
+  assert.match(source, /let isTearingDown = false/);
+  assert.match(renderUI, /if \(!hasBuilt\) return/);
+  assert.match(onDestroy, /isTearingDown = true/);
+  assert.match(onDestroy, /hasBuilt = false/);
+  assert.match(onDestroy, /exerciseImages\?\.abandon\(\)/);
+  assert.doesNotMatch(
+    onDestroy,
+    /resetDisplayHold|stopVibration|clearWidgets|\.dispose\(|\.persist\(|renderUI\(|request\(/,
+    'onDestroy must not call native device, persistence, transport, or UI work',
   );
 });
 

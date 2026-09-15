@@ -201,6 +201,7 @@ let widgetInstance = null;
 let workoutController = null;
 let restAlertTracker = createRestAlertTracker();
 let hasBuilt = false;
+let isTearingDown = false;
 let initialLoadPending = false;
 let restoredDisplaySettingsPending = false;
 let terminalActionPending = null;
@@ -322,7 +323,7 @@ function handlePollFailure(err) {
 }
 
 function applyNativePauseActions(actions) {
-  if (!workoutController || !Array.isArray(actions) || actions.length === 0) return;
+  if (isTearingDown || !workoutController || !Array.isArray(actions) || actions.length === 0) return;
   for (const action of actions) {
     if (action.type === 'pause') {
       workoutController.pauseWorkout({ timestamp: action.timestamp, source: 'native' });
@@ -337,6 +338,7 @@ function refreshSportMetrics() {
   const requestedAt = Date.now();
   try {
     getSportData({ type: 'duration' }, (result) => {
+      if (isTearingDown) return;
       const parsed = parseSportDataResult(result, 'duration');
       const durationSeconds = parsed.ok ? parseDurationToSeconds(parsed.value) : null;
       const view = workoutController?.view();
@@ -2988,6 +2990,7 @@ DataWidget(
     build() {
       console.log('[lifto-ext] data-widget build');
       hasBuilt = true;
+      isTearingDown = false;
       applyDisplayHold();
       if (restoredDisplaySettingsPending) {
         restoredDisplaySettingsPending = false;
@@ -3049,19 +3052,21 @@ DataWidget(
     },
 
     onReceivedFile(file) {
+      if (isTearingDown) return;
       exerciseImages?.receive(file);
     },
 
     onDestroy() {
-      exerciseImages?.dispose();
-      exerciseImages = null;
-      console.log('[lifto-ext] data-widget onDestroy');
-      resetDisplayHold();
-      stopClock();
-      stopVibration();
-      clearWidgets();
+      isTearingDown = true;
       hasBuilt = false;
+      stopClock();
+      if (vibrationTimer) clearTimeout(vibrationTimer);
+      vibrationTimer = null;
+      exerciseImages?.abandon();
+      exerciseImages = null;
       widgetInstance = null;
+      activeWidgets = [];
+      liveWidgets = {};
     },
   })
 );

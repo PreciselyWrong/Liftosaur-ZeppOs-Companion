@@ -16,6 +16,7 @@
 - Rendered linked note images in Info and Prepare across both apps.
 - Made the purple workout timer pause/resume the durable session in both apps.
 - Kept native Workout BPM and its heart icon stable.
+- Removed native teardown work that could restart the watch when Zepp ends a workout.
 
 - Added a safe command for cleaning reproducible local output.
 - Moved beta QR distribution and release history to GitHub Releases.
