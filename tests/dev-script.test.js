@@ -17,6 +17,8 @@ test('dev.ps1 exposes the standard safe interface', () => {
   assert.match(source, /\[switch\]\$Plan/);
   assert.match(source, /Set-StrictMode -Version Latest/);
   assert.match(source, /\$PSScriptRoot/);
+  assert.match(source, /prepare-dev-project\.js/);
+  assert.match(source, /Get-Command node -CommandType Application \| Select-Object -First 1/);
   assert.match(source, /zeus dev -t \$target/);
   assert.match(source, /\$LASTEXITCODE/);
 });
@@ -31,13 +33,28 @@ test('dev.ps1 plan is side effect free and documents the real command', () => {
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /Amazfit Active 2 \(Round\)/);
   assert.match(result.stdout, /zeus dev/);
+  assert.match(result.stdout, /prepare-dev-project\.js/);
   assert.match(result.stdout, /simulator connection/);
 });
 
 function runMockedDev(args, nodeExit = 0) {
   const command = `
     function Set-Location { param($LiteralPath) $global:devDirectory = $LiteralPath }
-    function node { Write-Output "GENERATE:$($env:ZEPP_WORKOUT_EXTENSION_APP_ID):$args"; $global:LASTEXITCODE = ${nodeExit} }
+    function node {
+      if ("$args" -match 'generate-workout-extension') {
+        Write-Output "GENERATE:$($env:ZEPP_WORKOUT_EXTENSION_APP_ID):$args"
+        $global:LASTEXITCODE = ${nodeExit}
+      } else {
+        Write-Output "PREPARE:$args"
+        $global:LASTEXITCODE = 0
+      }
+    }
+    function Start-Process {
+      param($FilePath, $ArgumentList, $WindowStyle, [switch]$PassThru)
+      Write-Host "WATCH:$ArgumentList"
+      [pscustomobject]@{ Id = 42; HasExited = $false }
+    }
+    function Stop-Process { param($Id) Write-Output "STOP:$Id" }
     function zeus { Write-Output "ZEUS:$args DIRECTORY:$global:devDirectory"; $global:LASTEXITCODE = 0 }
     & '${scriptPath.replaceAll("'", "''")}' ${args}
     exit $LASTEXITCODE
@@ -58,7 +75,10 @@ test('workout dev generates the real app and runs one foreground watcher in its 
   const result = runMockedDev('-Product workout -NonInteractive');
   assert.equal(result.status, 0, result.stderr);
   assert.match(result.stdout, /GENERATE:1125789.*generate-workout-extension\.js/);
-  assert.match(result.stdout, /ZEUS:dev -t Amazfit Active 2 \(Round\) DIRECTORY:.*build[\\/]workout-extension/);
+  assert.match(result.stdout, /PREPARE:.*prepare-dev-project\.js.*build[\\/]workout-extension.*build[\\/]dev[\\/]workout[\\/]workout-extension/);
+  assert.match(result.stdout, /WATCH:.*--watch.*--skip-initial/);
+  assert.match(result.stdout, /ZEUS:dev -t Amazfit Active 2 \(Round\) DIRECTORY:.*build[\\/]dev[\\/]workout[\\/]workout-extension/);
+  assert.match(result.stdout, /STOP:42/);
   assert.equal((result.stdout.match(/ZEUS:dev/g) || []).length, 1);
 });
 
@@ -66,6 +86,7 @@ test('companion stays default and generation failure prevents workout watcher st
   const companion = runMockedDev('-NonInteractive');
   assert.equal(companion.status, 0, companion.stderr);
   assert.doesNotMatch(companion.stdout, /GENERATE:/);
+  assert.match(companion.stdout, /PREPARE:.*prepare-dev-project\.js/);
   assert.match(companion.stdout, /ZEUS:dev/);
   const failed = runMockedDev('-Product workout -NonInteractive', 7);
   assert.equal(failed.status, 7, failed.stderr);
