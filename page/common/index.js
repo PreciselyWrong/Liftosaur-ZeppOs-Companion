@@ -5,7 +5,7 @@ import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { exerciseDisplayImageUrl, paginateNotes } from '../../shared/exercise-notes.js';
+import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
@@ -49,7 +49,15 @@ import {
   formatEditableSetValue,
   formatSupersetProgress,
 } from '../../shared/workout-extension-nav.js';
-import { isTemporaryPhoneError } from '../../shared/connection-state.js';
+import {
+  PHONE_CONNECTING_MESSAGE,
+  PHONE_CONNECTION_TITLE,
+  PHONE_REQUEST_TIMEOUT_MS,
+  isTemporaryPhoneError,
+  nextPhoneRetryDelay,
+  phoneConnectionMessage,
+} from '../../shared/connection-state.js';
+import { withRequestTimeout } from '../../shared/request-timeout.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -193,6 +201,7 @@ const workoutController = createWorkoutController({
 const session = workoutController;
 
 let pageInstance = null;
+let isTearingDown = false;
 let screen = SCREEN.LOADING;
 let statusMessage = '';
 let errorMessage = '';
@@ -235,6 +244,8 @@ let notesImageWidget = null;
 let exerciseImages = null;
 let preparationImageUrl = null;
 let clockTimer = null;
+let connectionRetryTimer = null;
+let connectionRetryAttempt = 0;
 let lastRenderedClock = null;
 let lastRenderedSecond = null;
 let lastRenderedState = null;
@@ -277,7 +288,7 @@ function adoptAccountSettings(payload) {
   exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
   if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
     notesPage = 0;
-    exerciseImages?.load(activeNotesImageUrl);
+    exerciseImages?.load(activeNotesImageUrl, { retry: true });
     renderUI();
   }
   workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
@@ -511,7 +522,9 @@ function send(type, payload = {}) {
   if (!pageInstance || typeof pageInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
-  return pageInstance.request(createMessage({ type, payload })).then((res) => {
+  return withRequestTimeout(pageInstance.request(createMessage({ type, payload })), {
+    timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
+  }).then((res) => {
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
@@ -538,15 +551,37 @@ function failRequest(err) {
   renderUI();
 }
 
+function resetConnectionRetry() {
+  if (connectionRetryTimer) clearTimeout(connectionRetryTimer);
+  connectionRetryTimer = null;
+  connectionRetryAttempt = 0;
+}
+
+function scheduleConnectionRetry() {
+  const delay = nextPhoneRetryDelay(connectionRetryAttempt);
+  if (delay === null || connectionRetryTimer) return;
+  connectionRetryAttempt += 1;
+  connectionRetryTimer = setTimeout(() => {
+    connectionRetryTimer = null;
+    if (!isTearingDown && screen === SCREEN.CONNECTION && !isBusy) loadPrograms();
+  }, delay);
+}
+
+function retryConnection() {
+  resetConnectionRetry();
+  loadPrograms();
+}
+
 /**
  * Launch path. When Liftosaur has an active program the outline is fetched
  * straight away so the home screen can offer its next day in one tap. Without
  * one, the program list is the entry point.
  */
 function loadPrograms() {
-  beginRequest('Loading programs…');
+  beginRequest(PHONE_CONNECTING_MESSAGE);
   send(MESSAGE_TYPES.LIST_PROGRAMS)
     .then((res) => {
+      resetConnectionRetry();
       programs = res.payload?.programs || [];
       serviceMode = res.payload?.serviceMode || 'CLOUD';
       listPage = 0;
@@ -648,8 +683,10 @@ function loadPrograms() {
         errorMessage = '';
         screen = SCREEN.CONNECTION;
         renderUI();
+        scheduleConnectionRetry();
         return;
       }
+      resetConnectionRetry();
       screen = SCREEN.SETUP;
       failRequest(err);
     });
@@ -1038,13 +1075,6 @@ function formatWeight(weight, unit) {
   return `${weight}${unit === 'lb' ? ' lb' : ' kg'}`;
 }
 
-function formatTargetReps(set) {
-  if (set?.setTimer > 0) return `${formatSeconds(set.setTimer)} hold`;
-  if (!set || set.targetReps === null) return '-';
-  const range = set.targetRepsMax ? `${set.targetReps}-${set.targetRepsMax}` : `${set.targetReps}`;
-  return set.isAmrap ? `${range}+` : range;
-}
-
 function formatNextTargetSummary(rest) {
   if (!rest || !rest.nextExerciseName) return 'Last set completed';
   const reps = rest.nextTargetRepsMax
@@ -1091,7 +1121,7 @@ function closeTextModal() {
 }
 
 function moveNotesPage(delta) {
-  const pages = exerciseInfoPages(paginateNotes(activeNotesContent, 90, 6), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
+  const pages = exerciseInfoPages(activeNotesContent, normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
   const totalPages = pages.length;
   notesPage = (notesPage + delta + totalPages) % totalPages;
   updateLiveWidget('modal-content', { text: pages[notesPage] || '' });
@@ -1103,19 +1133,23 @@ function moveNotesPage(delta) {
 function updateNotesImage() {
   if (!isNotesModalOpen) return;
   const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
-  const imagePage = enabled && activeNotesImageUrl && notesPage === 0;
+  const pages = exerciseInfoPages(activeNotesContent, enabled, activeNotesImageUrl);
   const image = exerciseImages?.get(activeNotesImageUrl);
+  const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
   notesImageWidget?.setProperty(prop.VISIBLE, false);
+  updateLiveWidget('modal-content', {
+    y: px(imagePage ? 214 : 88),
+    h: px(imagePage ? 120 : 246),
+    text: pages[notesPage] || '',
+  });
   if (!imagePage) return;
-  updateLiveWidget('modal-content', { text: image?.status === 'ready' ? '' : image?.status === 'loading' ? 'Loading image...' : 'Image unavailable. See the next page for details.' });
-  if (image?.status !== 'ready') return;
-  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, { x: px(110), y: px(88), w: px(260), h: px(246), src: image.src, auto_scale: true, auto_scale_obj_fit: false });
+  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, { x: px(140), y: px(88), w: px(200), h: px(112), src: image.src, auto_scale: true, auto_scale_obj_fit: false });
   notesImageWidget.setProperty(prop.VISIBLE, true);
 }
 
 function renderNotesModal() {
   notesImageWidget = null;
-  const pages = exerciseInfoPages(paginateNotes(activeNotesContent, 90, 6), normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
+  const pages = exerciseInfoPages(activeNotesContent, normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -1525,7 +1559,7 @@ function openTextModal(title, content, imageUrl = null) {
   activeNotesContent = content;
   activeNotesImageUrl = exerciseDisplayImageUrl(content, imageUrl);
   notesImageWidget = null;
-  exerciseImages?.load(activeNotesImageUrl);
+  exerciseImages?.load(activeNotesImageUrl, { retry: true });
   renderUI();
 }
 
@@ -1672,7 +1706,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
 // ── Screen renderers ─────────────────────────────────────────────────────────
 
 function renderSetupScreen() {
-  renderTitle('Liftosaur');
+  renderTitle('Lifto Companion');
 
   addWidget(widget.FILL_RECT, {
     x: px(60),
@@ -1721,12 +1755,12 @@ function renderSetupScreen() {
     press_color: THEME.primaryDeep,
     text: isBusy ? 'Checking…' : 'Retry',
     text_size: font('title'),
-    click_func: loadPrograms,
+    click_func: retryConnection,
   });
 }
 
 function renderConnectionScreen() {
-  renderMarqueeTitle('Phone connection needed', THEME.orange);
+  renderMarqueeTitle(PHONE_CONNECTION_TITLE, THEME.orange);
 
   addWidget(widget.FILL_RECT, {
     x: px(60),
@@ -1747,7 +1781,7 @@ function renderConnectionScreen() {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.WRAP,
-    text: 'Open Zepp on your phone, then tap Retry.',
+    text: phoneConnectionMessage(connectionRetryAttempt),
   });
 
   addWidget(widget.BUTTON, {
@@ -1760,7 +1794,7 @@ function renderConnectionScreen() {
     press_color: THEME.primaryDeep,
     text: 'Retry',
     text_size: font('title'),
-    click_func: loadPrograms,
+    click_func: retryConnection,
   });
 }
 
@@ -1783,7 +1817,7 @@ function renderHomeScreen() {
     return renderWeeksScreen();
   }
 
-  renderMarqueeTitle(outline.programName || 'Liftosaur');
+  renderMarqueeTitle(outline.programName || 'Lifto Companion');
   renderSubtitle(errorMessage || 'Next workout', { isError: Boolean(errorMessage) });
 
   const openWorkout = () => loadDayPlan(start.week, start.day);
@@ -1988,6 +2022,7 @@ function renderReadyScreen(view) {
 
   const ready = readyExercisePage(view.overviewExercises, readyPage);
   const { exercises, page, totalPages } = ready;
+  const imagesEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   readyPage = page;
 
   addWidget(widget.FILL_RECT, {
@@ -2016,6 +2051,13 @@ function renderReadyScreen(view) {
 
   exercises.forEach((exercise, index) => {
     const rowY = 108 + index * 58;
+    const showsImage = imagesEnabled && Boolean(exercise.imageUrl);
+    let image = null;
+
+    if (showsImage) {
+      exerciseImages?.load(exercise.imageUrl);
+      image = exerciseImages?.get(exercise.imageUrl);
+    }
 
     if (exercise.supersetGroup) {
       addWidget(widget.FILL_RECT, {
@@ -2028,23 +2070,35 @@ function renderReadyScreen(view) {
       });
     }
 
+    if (image?.status === 'ready') {
+      addWidget(widget.IMG, {
+        x: px(78),
+        y: px(rowY + 4),
+        w: px(46),
+        h: px(46),
+        src: image.src,
+        auto_scale: true,
+        auto_scale_obj_fit: false,
+      });
+    }
+
     addWidget(widget.TEXT, {
-      x: px(78),
+      x: px(showsImage ? 132 : 78),
       y: px(rowY),
-      w: px(324),
+      w: px(showsImage ? 270 : 324),
       h: px(28),
       color: THEME.textPrimary,
       text_size: font('caption'),
       align_h: align.LEFT,
       align_v: align.TOP,
       text_style: text_style.NONE,
-      text: truncate(exercise.name, 20),
+      text: truncate(exercise.name, showsImage ? 17 : 20),
     });
 
     addWidget(widget.TEXT, {
-      x: px(78),
+      x: px(showsImage ? 132 : 78),
       y: px(rowY + 28),
-      w: px(324),
+      w: px(showsImage ? 270 : 324),
       h: px(26),
       color: THEME.textSecondary,
       text_size: font('micro'),
@@ -2248,27 +2302,48 @@ function renderOverviewScreen(view) {
   });
 
   const all = view.overviewExercises;
+  const imagesEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   const totalPages = Math.max(1, Math.ceil(all.length / OVERVIEW_PAGE_SIZE));
   if (overviewPage >= totalPages) overviewPage = totalPages - 1;
 
   const start = overviewPage * OVERVIEW_PAGE_SIZE;
-  let y = px(94);
+  let rowY = 94;
 
   all.slice(start, start + OVERVIEW_PAGE_SIZE).forEach((ex, i) => {
     const idx = start + i;
     const isCurrent = idx === view.currentExerciseIndex;
+    const showsImage = imagesEnabled && Boolean(ex.imageUrl);
+    let image = null;
     const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
     const ssColor = ex.supersetGroup ? supersetColor(ex.supersetGroup) : null;
+
+    if (showsImage) {
+      exerciseImages?.load(ex.imageUrl);
+      image = exerciseImages?.get(ex.imageUrl);
+      addWidget(widget.FILL_RECT, {
+        x: px(64), y: px(rowY), w: px(352), h: px(68), radius: px(14),
+        color: isCurrent ? THEME.primaryDark : THEME.card,
+      });
+      if (image?.status === 'ready') {
+        addWidget(widget.IMG, {
+          x: px(72), y: px(rowY + 8), w: px(52), h: px(52), src: image.src,
+          auto_scale: true, auto_scale_obj_fit: false,
+        });
+      }
+    }
+
     addWidget(widget.BUTTON, {
-      x: px(64),
-      y,
-      w: px(352),
+      x: px(showsImage ? 132 : 64),
+      y: px(rowY),
+      w: px(showsImage ? 284 : 352),
       h: px(68),
       radius: px(14),
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
       color: ssColor || (isCurrent ? THEME.primaryPale : THEME.textPrimary),
-      text: `${ssPrefix}${truncate(ex.name, 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
+      align_h: align.LEFT,
+      align_v: align.CENTER_V,
+      text: `${ssPrefix}${truncate(ex.name, showsImage ? 11 : 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
       text_size: font('caption'),
       click_func: () => {
         session.selectExercise(idx);
@@ -2277,7 +2352,7 @@ function renderOverviewScreen(view) {
         requestWorkoutRefresh();
       },
     });
-    y += px(74);
+    rowY += 74;
   });
 
   const actionY = px(324);
@@ -2571,37 +2646,22 @@ function renderActiveSetScreen(view) {
     text: formatSupersetProgress(supersetContext) || `${setLabel}   ${formatDots(setsDots)}`,
   });
 
-  let targetText;
-  if (set.isWarmup) {
-    if (set.targetWeight !== null) {
-      targetText = `Warmup Target: ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
-        set.targetWeightPercent ? ` (${set.targetWeightPercent}%)` : ''
-      }`;
-    } else {
-      targetText = `Warmup Target: ${formatTargetReps(set)} × ${
-        set.targetWeightPercent ? `${set.targetWeightPercent}%` : '-'
-      }`;
-    }
-  } else {
-    targetText = `Target ${formatTargetReps(set)} × ${formatWeight(set.targetWeight, view.unit)}${
-      set.targetRpe !== null ? ` @${set.targetRpe}` : ''
-    }`;
+  if (supersetContext) {
+    addWidget(widget.TEXT, {
+      x: px(headerX),
+      y: px(146),
+      w: px(showsPreparationImage ? 208 : 356),
+      h: px(22),
+      color: THEME.textSecondary,
+      text_size: font('micro'),
+      align_h: align.CENTER_H,
+      align_v: align.CENTER_V,
+      text_style: text_style.NONE,
+      text: supersetContext.nextExerciseName
+        ? `Next: ${truncate(supersetContext.nextExerciseName, 28)}`
+        : 'Last set',
+    });
   }
-
-  addWidget(widget.TEXT, {
-    x: px(headerX),
-    y: px(146),
-    w: px(showsPreparationImage ? 208 : 356),
-    h: px(22),
-    color: THEME.textSecondary,
-    text_size: font('micro'),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: supersetContext
-      ? (supersetContext.nextExerciseName ? `Next: ${truncate(supersetContext.nextExerciseName, 28)}` : 'Last set')
-      : targetText,
-  });
 
   // Weight stepper
   renderStepper({
@@ -3171,7 +3231,7 @@ function renderFinishedScreen(view) {
 }
 
 function renderLoadingScreen() {
-  renderTitle('Liftosaur');
+  renderTitle('Lifto Companion');
   addWidget(widget.TEXT, {
     x: px(62),
     y: px(210),
@@ -3188,10 +3248,15 @@ function renderLoadingScreen() {
 
 // ── Root render ──────────────────────────────────────────────────────────────
 
-function handleExerciseImageChange() {
+function handleExerciseImageChange(_imageUrl, status) {
+  if (isTearingDown) return;
   if (isNotesModalOpen) {
     updateNotesImage();
     redraw();
+    return;
+  }
+  if (status === 'ready' && (session.view().state === SESSION_STATES.READY || isOverviewOpen)) {
+    renderUI();
     return;
   }
   if (preparationImageUrl && exerciseImages?.get(preparationImageUrl)?.status === 'ready') {
@@ -3202,6 +3267,7 @@ function handleExerciseImageChange() {
 }
 
 function renderUI() {
+  if (isTearingDown) return;
   consumeControllerUiChange();
   preparationImageUrl = null;
   clearWidgets();
@@ -3286,6 +3352,7 @@ function updateClock() {
  * touches the screen when the displayed second actually changes.
  */
 function tick() {
+  if (isTearingDown) return;
   updateClock();
 
   if (screen !== SCREEN.SESSION) return;
@@ -3409,6 +3476,7 @@ function stopClock() {
 Page(
   BasePage({
     onInit() {
+      isTearingDown = false;
       exerciseImages = createWatchExerciseImages({ request: send, onChange: handleExerciseImageChange });
       pageInstance = this;
       console.log('[liftosaur] page init');
@@ -3456,22 +3524,28 @@ Page(
     },
 
     onReceivedFile(file) {
+      if (isTearingDown) return;
       exerciseImages?.receive(file);
     },
 
     onDestroy() {
-      exerciseImages?.dispose();
+      isTearingDown = true;
+      if (clockTimer) clearInterval(clockTimer);
+      clockTimer = null;
+      if (flashTimer) clearTimeout(flashTimer);
+      flashTimer = null;
+      if (vibrationTimer) clearTimeout(vibrationTimer);
+      vibrationTimer = null;
+      if (connectionRetryTimer) clearTimeout(connectionRetryTimer);
+      connectionRetryTimer = null;
+      exerciseImages?.abandon();
       exerciseImages = null;
-      stopClock();
-      offGesture();
-      try {
-        if (hrSensor && hrCallback) hrSensor.offCurrentChange(hrCallback);
-      } catch (err) {
-        console.log('[liftosaur] hr teardown:', err?.message || String(err));
-      }
-      resetDisplayHold();
-      clearWidgets();
-      destroyModalControls();
+      hrSensor = null;
+      hrCallback = null;
+      vibrator = null;
+      activeWidgets = [];
+      liveWidgets = {};
+      modalControls = null;
       pageInstance = null;
     },
   })

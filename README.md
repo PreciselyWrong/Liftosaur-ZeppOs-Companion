@@ -114,7 +114,7 @@ continued on either device via `GET /workout/current`.
 - **Repeat-safe synchronization**: set writes and workout finish are safe to repeat; duplicate requests return confirmed server state.
 - **Live heart rate**: Companion uses its own sensor; Workout displays native activity BPM without a scrolling time/calorie ticker.
 - **Readable exercise Info**: separate pages for recent sessions, exercise notes and program instructions.
-- **Optional exercise images**: enable Exercise images in phone settings for a dedicated picture page in Info. Off by default; physical-watch validation is pending.
+- **Optional exercise images**: enable Exercise images in phone settings for thumbnails in the workout list and pictures in Info and Prepare. Off by default; physical-watch validation is pending.
 - **Compact superset context**: current round and following exercise, with prepared sets retained when rest ends.
 - **Recording status**: the footer distinguishes sets recorded on the watch from sets acknowledged by Liftosaur.
 - **Rest timer & overtime**: absolute-time countdown with haptic vibration at zero and a negative overtime counter.

@@ -215,6 +215,18 @@ test('overview screen includes visible Sync action wired to requestRefresh and k
   assert.match(onResume, /requestRefresh\(\)/, 'onResume must maintain requestRefresh()');
 });
 
+test('Workout shares Companion connection wording and bounded automatic retry', () => {
+  const source = readWidgetSource();
+  const load = extractFunction(source, 'startInitialNetworkLoad');
+  const retry = extractFunction(source, 'scheduleConnectionRetry');
+  assert.match(source, /PHONE_CONNECTING_MESSAGE/);
+  assert.match(source, /PHONE_CONNECTION_TITLE/);
+  assert.match(source, /phoneConnectionMessage\(connectionRetryAttempt\)/);
+  assert.match(load, /isTemporaryPhoneError\(err\)[\s\S]*scheduleConnectionRetry\(\)/);
+  assert.match(retry, /nextPhoneRetryDelay\(connectionRetryAttempt\)/);
+  assert.doesNotMatch(source, /Open Zepp on your phone/);
+});
+
 function extractFunction(source, name) {
   const start = source.indexOf(`function ${name}(`);
   return source.slice(start, source.indexOf('\nfunction ', start + 1));

@@ -41,6 +41,27 @@ test('loadPrograms fetches settings and current workout before opening flow in C
   assert.match(loadPrograms, /workoutToDayPlan\(/);
 });
 
+test('Companion automatically retries a temporary startup bridge failure', () => {
+  const source = readWatchPage();
+  const loadPrograms = source.slice(source.indexOf('function loadPrograms()'), source.indexOf('function loadOutline('));
+  const retry = source.slice(source.indexOf('function scheduleConnectionRetry()'), source.indexOf('function loadPrograms()'));
+
+  assert.match(loadPrograms, /isTemporaryPhoneError\(err\)[\s\S]*scheduleConnectionRetry\(\)/);
+  assert.match(retry, /nextPhoneRetryDelay\(connectionRetryAttempt\)/);
+  assert.match(retry, /setTimeout\([\s\S]*loadPrograms\(\)/);
+  assert.match(retry, /if \(delay === null \|\| connectionRetryTimer\) return/);
+});
+
+test('Companion uses the shared connection wording and never tells simulator users to open Zepp', () => {
+  const source = readWatchPage();
+  assert.match(source, /PHONE_CONNECTING_MESSAGE/);
+  assert.match(source, /PHONE_CONNECTION_TITLE/);
+  assert.match(source, /phoneConnectionMessage\(connectionRetryAttempt\)/);
+  assert.match(source, /withRequestTimeout\(pageInstance\.request/);
+  assert.match(source, /timeoutMs:\s*PHONE_REQUEST_TIMEOUT_MS/);
+  assert.doesNotMatch(source, /Loading programs|Open Zepp on your phone/);
+});
+
 test('companion applies the local screen-on duration received with API settings', () => {
   const source = readWatchPage();
   assert.match(source, /accountSettings\?\.screenOnDuration/);

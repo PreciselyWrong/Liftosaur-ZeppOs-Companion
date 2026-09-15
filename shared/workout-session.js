@@ -900,6 +900,7 @@ export function createWorkoutSession({
           entryId: ex.entryId ?? null,
           exerciseId: ex.exerciseId ?? null,
           name: ex.name,
+          imageUrl: ex.imageUrl ?? null,
           supersetGroup: ex.supersetGroup,
           warmupSetsCount: ex.warmupSetsCount,
           workSetsCount: ex.workSetsCount,
