@@ -220,7 +220,7 @@ function extractFunction(source, name) {
   return source.slice(start, source.indexOf('\nfunction ', start + 1));
 }
 
-test('top bar renders native BPM without a live text ticker even during sync warnings', () => {
+test('top bar renders native BPM with a fixed heart even during sync warnings', () => {
   const source = readWidgetSource();
   for (const syncWarning of [null, 'Sync pending']) {
     const widgets = [];
@@ -235,9 +235,9 @@ test('top bar renders native BPM without a live text ticker even during sync war
       x => x, () => 20, {}, {}, {}, String, '\u2261', syncWarning);
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
-    const heart = widgets.find(w => w.type === 'text' && w.text === '\u2665');
+    const heart = widgets.find(w => w.key === 'heart' && w.text === '\u2665');
     assert.ok(hr, 'BPM must be a native sport widget');
-    assert.ok(heart, 'BPM must have a visible heart icon');
+    assert.ok(heart, 'BPM must have a fixed heart icon');
     assert.equal(hr.default_type, 123);
     assert.equal(hr.category, 456);
     assert.equal(hr.sub_text_visible, false);
@@ -245,6 +245,22 @@ test('top bar renders native BPM without a live text ticker even during sync war
     assert.ok(hr.x + hr.w <= 286 + 96);
     assert.ok(!widgets.some(w => w.key === 'sport-metric'));
   }
+});
+
+test('rest pause keeps its native button alive until the click callback returns', () => {
+  const source = readWidgetSource();
+  const restScreen = extractFunction(source, 'renderRestScreen');
+  const pauseStart = restScreen.indexOf("addLiveButton('restPause'");
+  const pauseEnd = restScreen.indexOf('addWidget(widget.BUTTON', pauseStart);
+  const pauseControl = restScreen.slice(pauseStart, pauseEnd);
+
+  assert.ok(pauseStart >= 0, 'Pause must use a persistent native button');
+  assert.match(pauseControl, /workoutController\.toggleRestPause\(\)/);
+  assert.doesNotMatch(
+    pauseControl,
+    /renderUI\(\)/,
+    'Pause must not delete its active native button synchronously',
+  );
 });
 
 test('exercise Info stays available with missing details and explains the empty state', () => {
@@ -279,6 +295,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
     let started = 0;
     const env = {
       ...watchLayout, renderTopBar() {}, addLiveLabel() {},
+      addLiveButton: (key, props) => buttons.push({ key, ...props }),
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
       restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,

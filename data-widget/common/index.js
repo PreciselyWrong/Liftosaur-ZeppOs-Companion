@@ -604,16 +604,18 @@ function renderTopBar(view, onBack) {
     text: formatSeconds(view.elapsedSeconds),
   });
 
-  addWidget(widget.TEXT, {
+  addLiveLabel('heart', {
     x: px(topBar.metric.x),
     y: px(topBar.y),
     w: px(metricIconWidth),
     h: px(topBar.height),
     color: THEME.textSecondary,
+    normal_color: THEME.bg,
+    press_color: THEME.bg,
+    radius: 0,
     text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
-    text_style: text_style.NONE,
     text: '\u2665',
   });
 
@@ -1728,7 +1730,7 @@ function renderRestScreen(view) {
     },
   });
 
-  addWidget(widget.BUTTON, {
+  addLiveButton('restPause', {
     x: px(164),
     y: px(190),
     w: px(152),
@@ -1740,9 +1742,8 @@ function renderRestScreen(view) {
     text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
     text_size: font('caption'),
     click_func: () => {
-      if (rest.isWorkoutPaused) return;
+      if (workoutController.view().rest?.isWorkoutPaused) return;
       workoutController.toggleRestPause();
-      renderUI();
     },
   });
 
