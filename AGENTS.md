@@ -17,6 +17,7 @@
 - Release plan: `.\publish.ps1 -Plan`.
 - Release from clean `main`: run `/public-release-audit`, then `.\publish.ps1 -Confirm -AuditedCommit <HEAD>`. The script tests, scans, builds, pushes and verifies `origin/main`.
 - Preview QR: Companion uses App ID `1123411`; Workout uses App ID `1125789`. Generate both tracked README QR assets before publishing either branch.
+- Pull requests: exactly one commit and one subject per PR; split independent changes into separate branches and PRs.
 
 ## Map
 
@@ -57,17 +58,11 @@
 
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
 - Do not bump the app version for optional exercise images - include them in 0.4.9.
-
 - Do not split the timed-set changes into a separate 0.4.10 release - they belong to the combined 0.4.9 release requested by the user.
-
 - Do not take desktop control for simulator checks unless explicitly requested - the user performs visual checks; launch through the terminal.
-
 - Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
-
 - ⛔ Keep Prepare beside Start set after the rest timer expires - replace both with one full-width Start set button on the timer screen.
-
 - ⛔ Prefix plate labels with "PER SIDE" or "LOAD" - show only the plate breakdown and unit to keep it readable.
-
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
 - ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
 - ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.
