@@ -49,13 +49,13 @@
 - Get Ready is a local Off/3/5/10-second preference. Explicit arming preserves existing rest and uses its final seconds; undocumented Liftoscript auto and timer modifiers are not inferred.
 - Exercise images use API imageUrl only and appear in Info when opted in through phone settings. ZML onReceivedFile owns reception. Phone storage has 32 immutable image slots; hardware display validation remains pending.
 - Current-workout reads use a 10-second action floor, two-minute passive checks and 60/120/300-second failure backoff.
-- Standalone and Workout Extension are separate packages and App IDs sharing domain modules, not renderers or credentials.
-- The public Zepp App IDs are `1123411` for Lifto Companion and `1125789` for Lifto Workout Extension.
+- Standalone (`1123411`) and Workout Extension (`1125789`) are separate public packages and App IDs sharing domain modules, not renderers or credentials.
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
 
-- ⛔ Let Companion and Workout Extension behavior diverge without a platform constraint - shared behavior should match by default.
+- ⛔ Let fewer than 90% of user-visible elements and interactions match between Companion and Workout without a documented platform constraint - shared behavior and visual language are the default.
+- ⛔ Use distorted QEMU screenshots to dismiss API 4.2 black screens - screenshots are not display evidence, and launch failures require isolation against a minimal Mini Program.
 - ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
 - Do not describe optional exercise images as new in 0.5.0 - they already shipped in 0.4.9.
