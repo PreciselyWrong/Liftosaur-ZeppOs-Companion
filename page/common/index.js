@@ -965,6 +965,9 @@ function abandonWorkout() {
 }
 
 function returnAfterDiscard() {
+  isBusy = false;
+  statusMessage = '';
+  errorMessage = '';
   workoutController.clear();
   dayPlan = null;
   directSync = defaultDirectSync('LEGACY');
