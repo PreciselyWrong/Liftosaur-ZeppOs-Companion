@@ -63,3 +63,10 @@ test('TODO stays a lightweight roadmap', () => {
   assert.ok(todo.split(/\r?\n/).length <= 30);
   assert.doesNotMatch(todo, /^\|/m);
 });
+
+test('AGENTS requires merged pull-request branches to be deleted', () => {
+  const agents = read('AGENTS.md');
+
+  assert.match(agents, /merged PR branches/i);
+  assert.match(agents, /delete both local and remote branches/i);
+});
