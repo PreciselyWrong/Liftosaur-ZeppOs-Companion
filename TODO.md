@@ -12,6 +12,7 @@
 
 - Added optional API exercise images in Info for both 0.4.9 apps.
 - Added durable timed sets, left/right holds and local Get Ready in both apps.
+- Restored the heart icon beside native Workout BPM.
 
 ## Metadata
 
