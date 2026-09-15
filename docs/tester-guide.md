@@ -13,15 +13,11 @@ You need:
   - **Round**: Active 2 (Round), Active 2 NFC (Round), Active 3 Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3, Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra, Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm), T-Rex 3 Pro (48mm), T-Rex Ultra, T-Rex Ultra 2.
   - **Square**: Active, Active 2 (Square), Active 2 NFC (Square), Bip 6, Bip Max, Cheetah (Square).
 - The **Zepp** app installed and signed in to your account with your watch paired.
-- The QR code below.
+- The current GitHub release.
 
-## The QR code
+## The QR codes
 
-<p align="center">
-  <img src="test-build-qr.png" width="220" alt="Test build QR code" />
-</p>
-
-This Companion code expires on **2026-09-18 at 10:09:28 UTC** (12:09:28 Central European Summer Time).
+Open the **[current GitHub release](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/releases)** and choose the QR code for Lifto Companion or Lifto Workout Extension.
 
 ## Step 1: enable Developer Mode
 
@@ -41,7 +37,7 @@ Official documentation: [docs.zepp.com/docs/guides/tools/zepp-app](https://docs.
 1. Make sure your watch is **connected** to the Zepp app (shows as connected on the home screen).
 2. In the Zepp app, go to **Profile** > your watch > **Developer Mode**.
 3. Tap **+** at the top right, then choose **Scan**.
-4. Scan the QR code above.
+4. Scan the QR code from the current GitHub release.
 
 The application downloads to your phone and transfers to the watch over Bluetooth. Allow up to a minute.
 
@@ -67,7 +63,7 @@ The settings save automatically on your phone.
 
 Under Workout Display, enable **Exercise images** to show the picture supplied by Liftosaur on a separate page in **Info**. This option is off by default and is configured separately for each app. Images need the phone connection to load; exercise notes remain available if a picture cannot load. Image transfer and display still need physical-watch validation.
 
-This experimental 0.4.9 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
+This experimental 0.5.0 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
 
 ### How Direct Sync works
 
@@ -86,12 +82,12 @@ Once configured, the watch connects directly to Liftosaur Cloud:
   - **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5) [TESTED (tester report) installation; not full compatibility certification]:
     **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
-Free Training support is included in 0.4.9 but remains UNKNOWN on physical hardware. Active 2 testers should look for Lifto under **Workout > Free Training > Settings > More > Data Page > Add Page** and report the exact result.
+Free Training support is included in 0.5.0 but remains UNKNOWN on physical hardware. Active 2 testers should look for Lifto under **Workout > Free Training > Settings > More > Data Page > Add Page** and report the exact result.
 
 ## Things to know
 
-- **The QR code expires after 7 days** (on 2026-09-18 at 10:09:28 UTC, or 12:09:28 Central European Summer Time, for this build). This is a server limit imposed by Zepp. When it expires, visit the repository [README](../README.md) for a fresh code.
-- **A new version means a new QR code.** Scanning a newer code automatically updates the app over the previous version without losing settings.
+- **Each QR code expires after about 7 days.** This is a server limit imposed by Zepp. When a code expires, return to the [GitHub releases](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/releases) for the refreshed code.
+- **A release refresh provides new QR codes.** Scanning a newer app version updates the existing installation without losing settings.
 - **To uninstall**: long press the Lifto Companion icon in the watch app list and tap delete, or remove it from the Zepp app under Developer Mode.
 
 ## Troubleshooting
@@ -99,7 +95,7 @@ Free Training support is included in 0.4.9 but remains UNKNOWN on physical hardw
 | Symptom | Likely cause & fix |
 |---|---|
 | Cannot find Developer Mode | Redo step 1 by tapping the version 7 times in Profile > Settings > About. |
-| "Download failed" | The QR code expired after 7 days, check the README for a fresh code. |
+| "Download failed" | The QR code expired, check the GitHub release for a fresh code. |
 | Install hangs or fails | The watch lost Bluetooth connection. Reconnect the watch in the Zepp app and retry. |
 | App does not appear on watch | The watch model is not running Zepp OS 3.6 or later. |
 | Workout data page missing | Follow the device-specific path above. On Active 2, check Settings > More > Data Page. On Active 3 Premium (TESTED tester report), check Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto. |

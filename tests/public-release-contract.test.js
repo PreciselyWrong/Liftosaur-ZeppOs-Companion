@@ -67,30 +67,26 @@ test('the README reports live CI status instead of a hard-coded test count', () 
   assert.doesNotMatch(readme, /badge\/tests-[0-9]+/);
 });
 
-test('published preview documentation carries the current Companion QR expiry', () => {
+test('public documentation sends testers to GitHub releases for fresh QR codes', () => {
   const readme = read('README.md');
   const testerGuide = read('docs/tester-guide.md');
 
   for (const document of [readme, testerGuide]) {
-    assert.match(document, /test-build-qr\.png/);
-    assert.match(document, /2026-09-18 at 10:09:28 UTC/);
-    assert.match(document, /12:09:28 (?:CEST|Central European Summer Time)/);
-    assert.match(document, /Round/);
-    assert.match(document, /Square/);
+    assert.match(document, /github\.com\/PreciselyWrong\/Liftosaur-ZeppOs-Companion\/releases/);
+    assert.doesNotMatch(document, /docs\/test-build-qr\.png|test-build-qr\.png/);
+    assert.doesNotMatch(document, /2026-09-18/);
   }
 });
 
-test('the two public apps have tracked preview QR assets in the README', () => {
+test('expiring preview QR assets are not committed to the repository', () => {
   const readme = read('README.md');
 
   for (const asset of ['docs/test-build-qr.png', 'docs/workout-extension-preview-qr.png']) {
-    assert.equal(fs.existsSync(path.join(root, asset)), true, `${asset} must be tracked with the release`);
-    assert.match(readme, new RegExp(asset.replace(/[./-]/g, '\\$&')));
+    assert.equal(fs.existsSync(path.join(root, asset)), false, `${asset} belongs in a GitHub release`);
+    assert.doesNotMatch(readme, new RegExp(asset.replace(/[./-]/g, '\\$&')));
   }
   assert.match(readme, /Lifto Companion/);
   assert.match(readme, /Lifto Workout/);
-  assert.match(readme, /2026-09-18 at 10:10:11 UTC/);
-  assert.match(readme, /12:10:11 CEST/);
 });
 
 test('published icon assets stay below the repository audit threshold', () => {

@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
+import path from 'node:path';
 import { pathToFileURL } from 'node:url';
 import zlib from 'node:zlib';
 
@@ -35,7 +36,7 @@ const DEVICES = [
   'Amazfit Bip Max',
 ];
 
-const DEFAULT_OUT_PATH = 'docs/test-build-qr.png';
+const DEFAULT_OUT_PATH = 'build/lifto-companion-qr.png';
 const DEFAULT_SCALE = 10;
 const QUIET = 4;
 
@@ -220,6 +221,7 @@ function writePng(matrix, scale, outPath) {
   ihdr.writeUInt32BE(pxH, 4);
   ihdr[8] = 8;
   ihdr[9] = 0;
+  fs.mkdirSync(path.dirname(outPath), { recursive: true });
   fs.writeFileSync(
     outPath,
     Buffer.concat([
