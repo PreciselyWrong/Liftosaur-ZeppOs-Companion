@@ -95,7 +95,7 @@
 - ⛔ Publish 1.0.0 before physical-watch validation clears the release gate - every `0.x` version is beta.
 - ⛔ Commit expiring preview QR codes or expiry dates - `publish.ps1` records both assets and their exact validity timestamps in the matching GitHub release.
 - ⛔ Preserve stale QR validity timestamps when refreshing release assets - replace only the marked QR metadata block because every generated code has its own expiry.
-- ⛔ Publish the next release as v0.5.0 - that version is already current; this release is v0.5.1.
+- ⛔ Publish this correction as v0.5.1 - that tag already points to the prior release; this release is v0.5.2.
 - ⛔ Put preview QR images back in README.md - expiring QR codes belong only to the matching GitHub release.
 - ⛔ Generate a public Workout preview with a synthetic App ID - only App ID `1125789` maps to the registered Lifto Workout Extension application.
 - ⛔ Infer a tested build, exact test date or root cause from report age or a generic sync screenshot - capture the build and error evidence separately.
@@ -114,6 +114,6 @@
 
 ## State
 
-- Version 0.5.1 beta: both apps run timed and unilateral sets and optional exercise images in the ready list, workout overview, Info and Prepare. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
+- Version 0.5.2 beta: both apps run timed and unilateral sets and optional exercise images in the ready list, workout overview, Info and Prepare. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
 - Current priorities and next steps live in Project #1; simulator images cannot prove native Workout integration.
