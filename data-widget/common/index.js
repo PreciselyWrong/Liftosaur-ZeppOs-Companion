@@ -586,7 +586,7 @@ function renderSubtitle(text, { isError = false } = {}) {
 
 function renderTopBar(view, onBack) {
   const topBar = EXTENSION_TOP_BAR_LAYOUT;
-  const metricIconWidth = 24;
+  const metricIconWidth = 32;
   addWidget(widget.BUTTON, {
     x: px(topBar.menu.x),
     y: px(topBar.y),
@@ -630,6 +630,7 @@ function renderTopBar(view, onBack) {
     text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
+    text_style: text_style.NONE,
     text: '\u2665',
   });
 

@@ -4,7 +4,13 @@ import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from './exercise-
 const MAX_CACHED_IMAGES = 4;
 let requestSequence = 0;
 
-export function createExerciseImageClient({ inbox, request, removeFile, onChange = () => {} }) {
+export function createExerciseImageClient({
+  inbox,
+  request,
+  removeFile,
+  fileSize = () => null,
+  onChange = () => {},
+}) {
   let enabled = false;
   let disposed = false;
   let active = null;
@@ -24,6 +30,16 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
       if (entry.src === path) return true;
     }
     return false;
+  }
+
+  function transferredFileSize(file) {
+    if (Number.isFinite(file.fileSize) && file.fileSize > 0) return file.fileSize;
+    try {
+      const size = fileSize(file.filePath);
+      return Number.isFinite(size) ? size : 0;
+    } catch {
+      return 0;
+    }
   }
 
   function clearTransfer() {
@@ -152,9 +168,10 @@ export function createExerciseImageClient({ inbox, request, removeFile, onChange
         if (state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
         return;
       }
+      const size = state === 'transferred' ? transferredFileSize(file) : 0;
       const valid = state === 'transferred'
-        && file.fileSize > 0
-        && file.fileSize <= MAX_EXERCISE_IMAGE_BYTES
+        && size > 0
+        && size <= MAX_EXERCISE_IMAGE_BYTES
         && typeof file.filePath === 'string'
         && file.filePath.startsWith('data://');
       if (!valid && state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);

@@ -4,7 +4,7 @@ import { createExerciseImageClient } from '../shared/exercise-image-client.js';
 
 const url = '/externalimages/exercises/single/small/squat.png';
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness(response = 'queued') {
+function harness(response = 'queued', { receivedFileSize = 0 } = {}) {
   let receive;
   let incoming;
   let consumed = 0;
@@ -14,10 +14,24 @@ function harness(response = 'queued') {
     inbox: { on(_, handler) { receive = handler; }, getNextFile() { consumed++; return incoming; } },
     request: async (_, payload) => { requests.push(payload); return { payload: { status: response } }; },
     removeFile(path) { removed.push(path); },
+    fileSize: () => receivedFileSize,
   });
   client.setEnabled(true);
   return { client, requests, removed, receive: file => { incoming = file; receive(); }, consumed: () => consumed };
 }
+
+test('accepts a transferred watch file when native transfer metadata stays at zero', async () => {
+  const h = harness('queued', { receivedFileSize: 100 });
+  h.client.load(url);
+  await flush();
+
+  h.receive({ params: { type: 'exercise-image', ...h.requests[0] }, fileSize: 0,
+    filePath: 'data://download/squat.png', readyState: 'transferred', on() {}, cancel() {} });
+
+  assert.equal(h.client.get(url).status, 'ready');
+  assert.equal(h.client.get(url).src, 'data://download/squat.png');
+  h.client.dispose();
+});
 
 test('disable before the deferred request prevents all transport work', async () => {
   const h = harness();
