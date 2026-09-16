@@ -245,7 +245,7 @@ test('top bar renders native BPM with a fixed heart even during sync warnings', 
       (key, props) => widgets.push({ key, ...props }),
       { BUTTON: 'button', SPORT_DATA: 'sport', TEXT: 'text' }, { HR: 123 }, { SPORTS: 456 },
       { y: 48, height: 40, menu: { x: 100, width: 82 }, elapsed: { x: 186, width: 96 }, metric: { x: 286, width: 96 } },
-      x => x, () => 20, {}, {}, {}, String, '\u2261', syncWarning, () => {});
+      x => x, () => 20, {}, {}, { NONE: 789 }, String, '\u2261', syncWarning, () => {});
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
     const heart = widgets.find(w => w.key === 'heart' && w.text === '\u2665');
@@ -254,6 +254,8 @@ test('top bar renders native BPM with a fixed heart even during sync warnings', 
     assert.equal(hr.default_type, 123);
     assert.equal(hr.category, 456);
     assert.equal(hr.sub_text_visible, false);
+    assert.equal(heart.text_style, 789);
+    assert.ok(heart.w >= 32, 'Heart glyph needs enough fixed width to avoid clipping');
     assert.ok(hr.x > heart.x);
     assert.ok(hr.x + hr.w <= 286 + 96);
     assert.ok(!widgets.some(w => w.key === 'sport-metric'));

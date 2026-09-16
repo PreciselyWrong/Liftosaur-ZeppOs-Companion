@@ -56,7 +56,7 @@
 ## Forbidden
 - ⛔ Let fewer than 90% of user-visible elements and interactions match between Companion and Workout without a documented platform constraint - shared behavior and visual language are the default.
 - ⛔ Use distorted QEMU screenshots to dismiss API 4.2 black screens - screenshots are not display evidence, and launch failures require isolation against a minimal Mini Program.
-- ⛔ Leave merged PR branches behind - delete both local and remote branches immediately after confirming the merge.
+- ⛔ Create `codex/*` branches or leave merged PR branches behind - use a change-specific prefix such as `fix/`, `feat/`, `docs/` or `chore/`, then delete both local and remote branches after confirming the merge.
 - ⛔ Restore `TODO.md` as a backlog - GitHub Issues and Project #1 are the single source of truth.
 - ⛔ Treat "Workout Display" feedback as watch UI feedback, let settings controls share a row or rely on newline characters for layout - it names the phone Settings App section and uses full-width controls plus separate text elements unless the user says otherwise.
 - Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
