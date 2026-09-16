@@ -9,6 +9,23 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
+test('release surfaces agree on version 0.5.2 and code 38', () => {
+  const manifest = JSON.parse(read('package.json'));
+  const app = JSON.parse(read('app.json'));
+  const publicDocs = [
+    read('README.md'),
+    read('docs/active-2-workout-integration-test.md'),
+    read('docs/store-listing.md'),
+    read('docs/tester-guide.md'),
+    read('docs/workout-extension-hardware-test-plan.md'),
+  ];
+
+  assert.equal(manifest.version, '0.5.2');
+  assert.equal(app.app.version.name, manifest.version);
+  assert.equal(app.app.version.code, 38);
+  for (const document of publicDocs) assert.match(document, /0\.5\.2/);
+});
+
 test('runtime logs contain no workout names or completed-set counts', () => {
   const sideSource = read('app-side/index.js');
   const watchSource = read('page/common/index.js');
