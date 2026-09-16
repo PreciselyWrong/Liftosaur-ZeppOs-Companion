@@ -3,7 +3,7 @@
 Physical-watch test matrix for Lifto Workout in Strength Training and Free Training.
 Target devices must be on Zepp's documented Workout Extension support list (e.g. Amazfit T-Rex 3, Cheetah Pro, Cheetah Round, Cheetah Square, T-Rex Ultra, Falcon) running Zepp OS 3.6+.
 
-An Amazfit Active 2 running firmware 7.23.0.1 and API level 400 has loaded the extension in Strength Training. Free Training support and the 0.5.1 integration changes still require physical validation through [the Active 2 checklist](active-2-workout-integration-test.md); this observation does not claim compatibility for other firmware builds.
+An Amazfit Active 2 running firmware 7.23.0.1 and API level 400 has loaded the extension in Strength Training. Free Training support and the 0.5.2 integration changes still require physical validation through [the Active 2 checklist](active-2-workout-integration-test.md); this observation does not claim compatibility for other firmware builds.
 
 Every test row records:
 - `Model`: specific watch model name

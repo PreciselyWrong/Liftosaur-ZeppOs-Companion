@@ -44,7 +44,7 @@ Installing Lifto Workout does not automatically add its data page to a workout. 
 - **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5):
   **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
-The 0.5.1 extension also targets Free Training. Its Active 2 menu path and runtime behaviour remain UNKNOWN until the physical validation described in the hardware test plan. Strength Training installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
+The 0.5.2 extension also targets Free Training. Its Active 2 menu path and runtime behaviour remain UNKNOWN until the physical validation described in the hardware test plan. Strength Training installation on Active 3 Premium is TESTED (tester report), not a full compatibility certification.
 
 After Liftosaur confirms the save, swipe from left to right to open the native Workout controls and finish the Zepp activity. The animated chevrons on the finish screen remind you of this final step.
 
@@ -79,9 +79,9 @@ is TESTED (tester report), not a full compatibility certification. The remaining
 require physical validation. See Zepp's
 [Workout Extension documentation](https://docs.zepp.com/docs/guides/workout-extension/intro/).
 
-**Version:** Lifto Companion 0.5.1 beta.
+**Version:** Lifto Companion 0.5.2 beta.
 
-**Workout version:** Lifto Workout 0.5.1 beta.
+**Workout version:** Lifto Workout 0.5.2 beta.
 
 Developer Mode must be enabled in the Zepp app. Demo mode needs no Liftosaur
 account. Cloud synchronization requires a Liftosaur account with at least one
