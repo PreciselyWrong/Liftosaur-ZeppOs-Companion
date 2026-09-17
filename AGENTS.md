@@ -54,7 +54,6 @@
 ## Forbidden
 - ⛔ Let fewer than 90% of user-visible elements and interactions match between Companion and Workout without a documented platform constraint - shared behavior and visual language are the default.
 - ⛔ Use distorted QEMU screenshots to dismiss API 4.2 black screens - screenshots are not display evidence, and launch failures require isolation against a minimal Mini Program.
-- ⛔ Create `codex/*` branches or leave merged PR branches behind - use a change-specific prefix such as `fix/`, `feat/`, `docs/` or `chore/`, then delete both local and remote branches after confirming the merge.
 - ⛔ Restore `TODO.md` as a backlog - GitHub Issues and Project #1 are the single source of truth.
 - ⛔ Create GitHub Issues for publishing, refreshing or announcing a release - releases use GitHub Releases directly and never enter the product backlog.
 - ⛔ Treat "Workout Display" feedback as watch UI feedback, let settings controls share a row or rely on newline characters for layout - it names the phone Settings App section and uses full-width controls plus separate text elements unless the user says otherwise.
