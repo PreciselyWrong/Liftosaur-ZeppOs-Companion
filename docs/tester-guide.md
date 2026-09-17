@@ -108,3 +108,5 @@ Please include:
 - The **exact model** of your watch and its Zepp OS version.
 - What you were doing when the issue occurred.
 - A photo of the screen if something is displayed incorrectly.
+
+To capture a Lifto Workout crash, first enable **Record Workout diagnostics** in **Zepp > Profile > your watch > Developer Mode > Lifto Workout > Settings**, then open the Lifto Workout data page once while connected. If it closes unexpectedly, reopen that page, return to the same phone settings, and send a screenshot of **Workout diagnostics**. The opt-in report keeps the last 12 watch steps and, on supported firmware, app memory and remaining system memory. Its final step is a clue, not a crash stack or confirmed cause. Switching recording off clears the report after reconnection.

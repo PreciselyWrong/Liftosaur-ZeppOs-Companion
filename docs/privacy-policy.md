@@ -1,6 +1,6 @@
 # Privacy Policy - Lifto Companion and Lifto Workout
 
-Last updated: 11 September 2026.
+Last updated: 17 September 2026.
 
 Lifto Companion and Lifto Workout are unofficial, open-source clients for the public
 Liftosaur Cloud API on Amazfit smartwatches with Zepp OS. Companion is a standalone app.
@@ -24,6 +24,7 @@ communicating directly with Liftosaur's official servers.
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
 | Optional exercise images | Downloaded and converted on the phone, then stored locally on the watch | Download requests go to Liftosaur; image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
+| Optional Lifto Workout diagnostics (last 12 timestamps, action codes and available memory measurements) | Workout local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify the last steps and memory pressure before a crash when system logs cannot be exported |
 
 ## What the application never does
 
@@ -31,6 +32,8 @@ communicating directly with Liftosaur's official servers.
 - Companion heart rate and Workout's native duration and calories are never sent to Liftosaur, logged, or stored between Lifto sessions.
 - No data is sent to any server other than `https://www.liftosaur.com`.
 - No advertising, tracking, third-party analytics, or remote crash reporters are included.
+- Workout diagnostics contain no API key, workout name, exercise name, weight, repetition count, heart-rate value, or details about other applications.
+- Workout diagnostics are off by default. Enable them in Lifto Workout phone settings; switching them off stops collection after the watch reconnects and clears the stored report.
 
 ## Third party
 

@@ -7,8 +7,9 @@
  */
 
 import { MESSAGE_TYPES, ERROR_CODES, validateEnvelope, createPong, createError, createReply } from '../shared/protocol.js';
+import { createWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTICS_ENABLED_KEY } from '../shared/workout-diagnostics.js';
 
-export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null, exerciseImageService = null } = {}) {
+export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null, exerciseImageService = null, diagnosticsStorage = null } = {}) {
   function notConfigured(message) {
     return createError(message, ERROR_CODES.NOT_CONFIGURED, 'No Liftosaur API key configured on the phone');
   }
@@ -170,8 +171,18 @@ export function createSideRouter({ programService = null, workoutService = null,
         case MESSAGE_TYPES.GET_SETTINGS:
           if (!workoutService) return notConfigured(rawMessage);
           try {
+            let diagnosticsEnabled = false;
+            try {
+              diagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(diagnosticsStorage?.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY));
+            } catch {}
+            if (diagnosticsEnabled && rawMessage.payload?.diagnostics && diagnosticsStorage) {
+              createWorkoutDiagnostics(diagnosticsStorage).replace(rawMessage.payload.diagnostics);
+            }
             const result = await workoutService.getSettings();
-            return createReply(rawMessage, MESSAGE_TYPES.SETTINGS_DATA, result);
+            return createReply(rawMessage, MESSAGE_TYPES.SETTINGS_DATA, {
+              ...result,
+              workoutDiagnosticsEnabled: diagnosticsEnabled,
+            });
           } catch (err) {
             return apiFailure(rawMessage, err);
           }

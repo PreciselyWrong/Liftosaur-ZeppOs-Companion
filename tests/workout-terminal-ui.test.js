@@ -34,6 +34,12 @@ test('terminal UI ignores responses belonging to a replaced session in both prod
         beginRequest: () => calls.push('begin'),
         failRequest: () => calls.push('fail'),
         returnAfterDiscard: () => calls.push('clear'),
+        workoutDiagnostics: { record: () => {} },
+        WORKOUT_DIAGNOSTIC_CODES: {
+          FINISH_TAP: 'FINISH_TAP',
+          FINISH_SAVED: 'FINISH_SAVED',
+          FINISH_FAILED: 'FINISH_FAILED',
+        },
       };
       const source = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
       const run = new Function('env', `with (env) { ${extractFunction(source, action)}; return ${action}; }`)(env);

@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createSideRouter } from '../app-side/router.js';
 import { MESSAGE_TYPES, ERROR_CODES, createMessage } from '../shared/protocol.js';
+import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
 
 function fakeService(overrides = {}) {
   return {
@@ -27,6 +28,53 @@ test('answers a ping without needing an API key', async () => {
   const res = await router.handle(createMessage({ type: MESSAGE_TYPES.PING }));
 
   assert.equal(res.type, MESSAGE_TYPES.PONG);
+});
+
+test('GET_SETTINGS keeps only sanitized watch diagnostics on the phone', async () => {
+  const values = new Map([[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'true']]);
+  const diagnosticsStorage = {
+    getItem: (key) => values.get(key),
+    setItem: (key, value) => values.set(key, value),
+  };
+  const router = createSideRouter({
+    workoutService: { getSettings: async () => ({ units: 'kg' }) },
+    diagnosticsStorage,
+  });
+  const response = await router.handle(createMessage({
+    type: MESSAGE_TYPES.GET_SETTINGS,
+    payload: { diagnostics: {
+      version: 1,
+      events: [
+        { at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP, apiKey: 'secret' },
+        { at: 1_001, code: 'Private workout' },
+      ],
+    } },
+  }));
+  assert.equal(response.type, MESSAGE_TYPES.SETTINGS_DATA);
+  assert.equal(response.payload.units, 'kg');
+  assert.equal(response.payload.workoutDiagnosticsEnabled, true);
+  assert.deepEqual(JSON.parse(values.get(WORKOUT_DIAGNOSTICS_KEY)), {
+    version: 1,
+    events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
+  });
+  assert.doesNotMatch(values.get(WORKOUT_DIAGNOSTICS_KEY), /secret|Private/);
+});
+
+test('GET_SETTINGS does not keep diagnostics without phone consent', async () => {
+  const values = new Map();
+  const router = createSideRouter({
+    workoutService: { getSettings: async () => ({ workoutDiagnosticsEnabled: false }) },
+    diagnosticsStorage: {
+      getItem: (key) => values.get(key),
+      setItem: (key, value) => values.set(key, value),
+    },
+  });
+  const response = await router.handle(createMessage({
+    type: MESSAGE_TYPES.GET_SETTINGS,
+    payload: { diagnostics: { version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] } },
+  }));
+  assert.equal(response.payload.workoutDiagnosticsEnabled, false);
+  assert.equal(values.has(WORKOUT_DIAGNOSTICS_KEY), false);
 });
 
 test('says so plainly when no API key is configured', async () => {
