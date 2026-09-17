@@ -127,6 +127,15 @@ export function formatDots(dots = []) {
     .join(' ');
 }
 
+export function formatOverviewExerciseLines(exercise) {
+  const prefix = exercise.supersetGroup ? `[SS ${exercise.supersetGroup}] ` : '';
+  const dots = formatDots(exercise.setsDots);
+  return {
+    title: `${prefix}${exercise.name}${dots ? `  ${dots}` : ''}`,
+    prescription: exercise.prescriptionSummary || '',
+  };
+}
+
 export function checkRequiredPhoneInput(set) {
   if (!set) return null;
   if (Array.isArray(set.promptedVars) && set.promptedVars.length > 0) {

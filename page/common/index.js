@@ -47,6 +47,7 @@ import {
   MENU_LABEL,
   checkRequiredPhoneInput,
   formatDots,
+  formatOverviewExerciseLines,
   formatEditableSetValue,
   formatSupersetProgress,
 } from '../../shared/workout-extension-nav.js';
@@ -2121,7 +2122,7 @@ function renderReadyScreen(view) {
       align_h: align.LEFT,
       align_v: align.TOP,
       text_style: text_style.NONE,
-      text: truncate(exercise.name, showsImage ? 17 : 20),
+      text: exercise.name,
     });
 
     addWidget(widget.TEXT, {
@@ -2343,7 +2344,7 @@ function renderOverviewScreen(view) {
     const isCurrent = idx === view.currentExerciseIndex;
     let showsImage = imagesEnabled && Boolean(ex.imageUrl);
     let image = null;
-    const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
+    const lines = formatOverviewExerciseLines(ex);
     const ssColor = ex.supersetGroup ? supersetColor(ex.supersetGroup) : null;
 
     if (showsImage) {
@@ -2364,19 +2365,17 @@ function renderOverviewScreen(view) {
       }
     }
 
+    const buttonX = showsImage ? 132 : 64;
+    const buttonW = showsImage ? 284 : 352;
     addWidget(widget.BUTTON, {
-      x: px(showsImage ? 132 : 64),
+      x: px(buttonX),
       y: px(rowY),
-      w: px(showsImage ? 284 : 352),
+      w: px(buttonW),
       h: px(68),
       radius: px(14),
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
-      color: ssColor || (isCurrent ? THEME.primaryPale : THEME.textPrimary),
-      align_h: align.LEFT,
-      align_v: align.CENTER_V,
-      text: `${ssPrefix}${truncate(ex.name, showsImage ? 11 : 16)}  ${formatDots(ex.setsDots)}\n${ex.prescriptionSummary}`,
-      text_size: font('caption'),
+      text: '',
       click_func: () => {
         session.selectExercise(idx);
         isOverviewOpen = false;
@@ -2384,6 +2383,17 @@ function renderOverviewScreen(view) {
         requestWorkoutRefresh();
       },
     });
+    for (const [text, offset, color] of [
+      [lines.title, 3, ssColor || (isCurrent ? THEME.primaryPale : THEME.textPrimary)],
+      [lines.prescription, 35, THEME.textSecondary],
+    ]) {
+      const label = addWidget(widget.TEXT, {
+        x: px(buttonX + 12), y: px(rowY + offset), w: px(buttonW - 24), h: px(29),
+        color, text_size: font('caption'), align_h: align.LEFT, align_v: align.CENTER_V,
+        text_style: text_style.NONE, text,
+      });
+      label.setEnable(false);
+    }
     rowY += 74;
   });
 

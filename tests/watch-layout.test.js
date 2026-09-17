@@ -159,7 +159,7 @@ test('the ready preview shows three readable rows above fixed actions', () => {
 
   assert.match(ready, /exercises\.forEach/);
   assert.match(ready, /const rowY = 108 \+ index \* 58/);
-  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: truncate\(exercise\.name, showsImage \? 17 : 20\)/);
+  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: exercise\.name/);
   assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY \+ 28\)[\s\S]*?h: px\(26\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
   assert.doesNotMatch(ready, /`\$\{truncate\(exercise\.name, 20\)\}\\n\$\{exercise\.prescriptionSummary\}`/);
   assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
@@ -191,6 +191,20 @@ test('modal pages stay short enough to clear their controls', () => {
   assert.ok(INFO_TEXT_LAYOUT.bodyY + INFO_TEXT_LAYOUT.bodyH < 348);
   assert.ok(INFO_TEXT_LAYOUT.imageBodyY + INFO_TEXT_LAYOUT.imageBodyH < 348);
 });
+
+for (const product of ['page', 'data-widget']) {
+  test(`${product} scrolls complete overview lines while retaining the row button`, () => {
+    const source = fs.readFileSync(path.join(root, product, 'common', 'index.js'), 'utf8');
+    const overview = source.slice(source.indexOf('function renderOverviewScreen('), source.indexOf('\nfunction ', source.indexOf('function renderOverviewScreen(') + 1));
+    assert.match(overview, /formatOverviewExerciseLines\(ex\)/);
+    assert.match(overview, /\[lines\.title, 3,/);
+    assert.match(overview, /\[lines\.prescription, 35,/);
+    assert.match(overview, /text_style: text_style\.NONE, text/);
+    assert.match(overview, /\.setEnable\(false\)/);
+    assert.doesNotMatch(overview, /truncate\(ex\.name/);
+    assert.match(overview, /click_func:/);
+  });
+}
 
 test('modal actions use large central touch targets and ASCII labels', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
