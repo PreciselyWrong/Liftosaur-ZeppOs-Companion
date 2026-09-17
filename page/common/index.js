@@ -3,6 +3,7 @@ import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-u
 import { TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
+import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
@@ -361,9 +362,9 @@ function ensureModalControls(totalPages) {
       previous: createWidget(
         widget.BUTTON,
         LAYOUT.fit({
-          x: px(48),
+          x: px(INFO_NAV.previous.x),
           y: px(348),
-          w: px(80),
+          w: px(INFO_NAV.previous.w),
           h: px(54),
           radius: px(27),
           normal_color: THEME.cardActive,
@@ -378,9 +379,9 @@ function ensureModalControls(totalPages) {
       next: createWidget(
         widget.BUTTON,
         LAYOUT.fit({
-          x: px(166),
+          x: px(INFO_NAV.next.x),
           y: px(348),
-          w: px(80),
+          w: px(INFO_NAV.next.w),
           h: px(54),
           radius: px(27),
           normal_color: THEME.cardActive,
@@ -395,9 +396,9 @@ function ensureModalControls(totalPages) {
       close: createWidget(
         widget.BUTTON,
         LAYOUT.fit({
-          x: px(250),
+          x: px(INFO_NAV.close.x),
           y: px(348),
-          w: px(160),
+          w: px(INFO_NAV.close.w),
           h: px(54),
           radius: px(27),
           normal_color: THEME.primary,
@@ -416,9 +417,9 @@ function ensureModalControls(totalPages) {
   setModalControl(
     modalControls.previous,
     {
-      x: px(48),
+      x: px(INFO_NAV.previous.x),
       y: px(348),
-      w: px(80),
+      w: px(INFO_NAV.previous.w),
       h: px(54),
       radius: px(27),
       normal_color: THEME.cardActive,
@@ -431,9 +432,9 @@ function ensureModalControls(totalPages) {
   setModalControl(
     modalControls.next,
     {
-      x: px(166),
+      x: px(INFO_NAV.next.x),
       y: px(348),
-      w: px(80),
+      w: px(INFO_NAV.next.w),
       h: px(54),
       radius: px(27),
       normal_color: THEME.cardActive,
@@ -446,9 +447,9 @@ function ensureModalControls(totalPages) {
   setModalControl(
     modalControls.close,
     {
-      x: hasPaging ? px(250) : px(140),
+      x: px(hasPaging ? INFO_NAV.close.x : INFO_NAV.singleClose.x),
       y: px(348),
-      w: hasPaging ? px(160) : px(200),
+      w: px(hasPaging ? INFO_NAV.close.w : INFO_NAV.singleClose.w),
       h: hasPaging ? px(54) : px(56),
       radius: hasPaging ? px(27) : px(28),
       normal_color: THEME.primary,
@@ -1120,11 +1121,17 @@ function closeTextModal() {
   renderUI();
 }
 
+function currentNotesPages() {
+  return exerciseInfoPages(activeNotesContent, normalizeExerciseImages(accountSettings?.exerciseImages),
+    activeNotesImageUrl, exerciseImages?.get(activeNotesImageUrl)?.status);
+}
+
 function moveNotesPage(delta) {
-  const pages = exerciseInfoPages(activeNotesContent, normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
+  const pages = currentNotesPages();
   const totalPages = pages.length;
   notesPage = (notesPage + delta + totalPages) % totalPages;
-  updateLiveWidget('modal-content', { text: pages[notesPage] || '' });
+  updateLiveWidget('modal-subtitle', { text: pages[notesPage]?.subtitle || '' });
+  updateLiveWidget('modal-content', { text: pages[notesPage]?.body || '' });
   updateLiveWidget('modal-page', { text: `${notesPage + 1}/${totalPages}` });
   updateNotesImage();
   redraw();
@@ -1133,23 +1140,31 @@ function moveNotesPage(delta) {
 function updateNotesImage() {
   if (!isNotesModalOpen) return;
   const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
-  const pages = exerciseInfoPages(activeNotesContent, enabled, activeNotesImageUrl);
   const image = exerciseImages?.get(activeNotesImageUrl);
+  const pages = exerciseInfoPages(activeNotesContent, enabled, activeNotesImageUrl, image?.status);
   const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
   notesImageWidget?.setProperty(prop.VISIBLE, false);
+  updateLiveWidget('modal-subtitle', {
+    y: px(imagePage ? INFO_TEXT_LAYOUT.imageSubtitleY : INFO_TEXT_LAYOUT.subtitleY),
+    text: pages[notesPage]?.subtitle || '',
+  });
   updateLiveWidget('modal-content', {
-    y: px(imagePage ? 214 : 88),
-    h: px(imagePage ? 120 : 246),
-    text: pages[notesPage] || '',
+    y: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyY : INFO_TEXT_LAYOUT.bodyY),
+    h: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyH : INFO_TEXT_LAYOUT.bodyH),
+    text: pages[notesPage]?.body || '',
   });
   if (!imagePage) return;
-  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, { x: px(140), y: px(88), w: px(200), h: px(112), src: image.src, auto_scale: true, auto_scale_obj_fit: false });
+  if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, {
+    x: px(INFO_TEXT_LAYOUT.image.x), y: px(INFO_TEXT_LAYOUT.image.y),
+    w: px(INFO_TEXT_LAYOUT.image.w), h: px(INFO_TEXT_LAYOUT.image.h),
+    src: image.src, auto_scale: true, auto_scale_obj_fit: false,
+  });
   notesImageWidget.setProperty(prop.VISIBLE, true);
 }
 
 function renderNotesModal() {
   notesImageWidget = null;
-  const pages = exerciseInfoPages(activeNotesContent, normalizeExerciseImages(accountSettings?.exerciseImages), activeNotesImageUrl);
+  const pages = currentNotesPages();
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -1176,27 +1191,40 @@ function renderNotesModal() {
     text: truncate(activeNotesTitle, 24),
   });
 
+  addLiveLabel('modal-subtitle', {
+    x: px(66),
+    y: px(INFO_TEXT_LAYOUT.subtitleY),
+    w: px(348),
+    h: px(INFO_TEXT_LAYOUT.subtitleH),
+    color: THEME.textPrimary,
+    text_size: font('body'),
+    align_h: align.CENTER_H,
+    align_v: align.TOP,
+    text_style: text_style.NONE,
+    text: pages[notesPage]?.subtitle || '',
+  });
+
   addLiveLabel('modal-content', {
-    x: px(56),
-    y: px(88),
-    w: px(368),
-    h: px(246),
+    x: px(66),
+    y: px(INFO_TEXT_LAYOUT.bodyY),
+    w: px(348),
+    h: px(INFO_TEXT_LAYOUT.bodyH),
     radius: px(1),
     normal_color: THEME.card,
     press_color: THEME.card,
     color: THEME.textSecondary,
-    text_size: font('body'),
+    text_size: font('caption'),
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: pages[notesPage] || '',
+    text: pages[notesPage]?.body || '',
   });
 
   if (totalPages > 1) {
     addLiveLabel('modal-page', {
-      x: px(128),
+      x: px(INFO_NAV.page.x),
       y: px(348),
-      w: px(38),
+      w: px(INFO_NAV.page.w),
       h: px(54),
       radius: px(1),
       normal_color: THEME.card,
@@ -1557,7 +1585,7 @@ function openTextModal(title, content, imageUrl = null) {
   isNotesModalOpen = true;
   activeNotesTitle = title;
   activeNotesContent = content;
-  activeNotesImageUrl = exerciseDisplayImageUrl(content, imageUrl);
+  activeNotesImageUrl = exerciseDisplayImageUrl(imageUrl);
   notesImageWidget = null;
   exerciseImages?.load(activeNotesImageUrl, { retry: true });
   renderUI();
@@ -2051,12 +2079,13 @@ function renderReadyScreen(view) {
 
   exercises.forEach((exercise, index) => {
     const rowY = 108 + index * 58;
-    const showsImage = imagesEnabled && Boolean(exercise.imageUrl);
+    let showsImage = imagesEnabled && Boolean(exercise.imageUrl);
     let image = null;
 
     if (showsImage) {
       exerciseImages?.load(exercise.imageUrl);
       image = exerciseImages?.get(exercise.imageUrl);
+      if (image?.status === 'unavailable') showsImage = false;
     }
 
     if (exercise.supersetGroup) {
@@ -2312,7 +2341,7 @@ function renderOverviewScreen(view) {
   all.slice(start, start + OVERVIEW_PAGE_SIZE).forEach((ex, i) => {
     const idx = start + i;
     const isCurrent = idx === view.currentExerciseIndex;
-    const showsImage = imagesEnabled && Boolean(ex.imageUrl);
+    let showsImage = imagesEnabled && Boolean(ex.imageUrl);
     let image = null;
     const ssPrefix = ex.supersetGroup ? `[SS ${ex.supersetGroup}] ` : '';
     const ssColor = ex.supersetGroup ? supersetColor(ex.supersetGroup) : null;
@@ -2320,6 +2349,9 @@ function renderOverviewScreen(view) {
     if (showsImage) {
       exerciseImages?.load(ex.imageUrl);
       image = exerciseImages?.get(ex.imageUrl);
+      if (image?.status === 'unavailable') showsImage = false;
+    }
+    if (showsImage) {
       addWidget(widget.FILL_RECT, {
         x: px(64), y: px(rowY), w: px(352), h: px(68), radius: px(14),
         color: isCurrent ? THEME.primaryDark : THEME.card,
@@ -2590,10 +2622,7 @@ function renderActiveSetScreen(view) {
     });
   }
 
-  const showsPreparationImage = isResting && renderPreparationImage(
-    exerciseDetails,
-    pending?.exerciseImageUrl,
-  );
+  const showsPreparationImage = isResting && renderPreparationImage(pending?.exerciseImageUrl);
   const headerX = showsPreparationImage ? 134 : 62;
   const headerWidth = showsPreparationImage ? 208 : 306;
 
@@ -3009,13 +3038,14 @@ function renderRestScreen(view) {
   });
 }
 
-function renderPreparationImage(details, apiImageUrl) {
+function renderPreparationImage(apiImageUrl) {
   if (!normalizeExerciseImages(accountSettings?.exerciseImages)) return false;
-  const imageUrl = exerciseDisplayImageUrl(details, apiImageUrl);
+  const imageUrl = exerciseDisplayImageUrl(apiImageUrl);
   if (!imageUrl) return false;
   preparationImageUrl = imageUrl;
   exerciseImages?.load(imageUrl);
   const image = exerciseImages?.get(imageUrl);
+  if (image?.status === 'unavailable') return false;
   addWidget(widget.FILL_RECT, {
     x: px(62), y: px(88), w: px(64), h: px(64), radius: px(12), color: THEME.card,
   });
@@ -3251,15 +3281,16 @@ function renderLoadingScreen() {
 function handleExerciseImageChange(_imageUrl, status) {
   if (isTearingDown) return;
   if (isNotesModalOpen) {
+    if (status === 'unavailable') { renderUI(); return; }
     updateNotesImage();
     redraw();
     return;
   }
-  if (status === 'ready' && (session.view().state === SESSION_STATES.READY || isOverviewOpen)) {
+  if ((status === 'ready' || status === 'unavailable') && (session.view().state === SESSION_STATES.READY || isOverviewOpen)) {
     renderUI();
     return;
   }
-  if (preparationImageUrl && exerciseImages?.get(preparationImageUrl)?.status === 'ready') {
+  if (preparationImageUrl === _imageUrl && (status === 'ready' || status === 'unavailable')) {
     renderUI();
     return;
   }
@@ -3270,6 +3301,7 @@ function renderUI() {
   if (isTearingDown) return;
   consumeControllerUiChange();
   preparationImageUrl = null;
+  if (isNotesModalOpen) destroyModalControls();
   clearWidgets();
   if (!isNotesModalOpen) hideModalControls();
   // The backdrop is the one widget already in screen pixels: it must cover the

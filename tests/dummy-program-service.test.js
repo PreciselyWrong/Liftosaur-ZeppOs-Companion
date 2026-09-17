@@ -2,9 +2,6 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createDummyProgramService } from '../app-side/dummy-program-service.js';
-import { exerciseDisplayImageUrl } from '../shared/exercise-notes.js';
-
-const demoDescriptionImage = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
 
 test('dummy program service lists sample programs', async () => {
   const service = createDummyProgramService();
@@ -48,7 +45,7 @@ test('dummy program service returns rich day plan with warmups and supersets', a
   assert.equal(triceps.supersetTag, 'A2');
 });
 
-test('every demo exercise includes a description and its latest session note', async () => {
+test('every demo exercise separates its instructions from the latest session note', async () => {
   const service = createDummyProgramService();
   const plans = [
     await service.getDayPlan('dummy-gzclp', 1, 1),
@@ -56,19 +53,19 @@ test('every demo exercise includes a description and its latest session note', a
   ];
 
   for (const exercise of plans.flatMap((plan) => plan.exercises)) {
-    assert.match(exercise.notes, /^Description\n.+/s, exercise.name);
-    assert.match(exercise.notes, /\n\nPast sessions\n• \d{4}-\d{2}-\d{2}: .+$/s, exercise.name);
+    assert.match(exercise.exerciseNotes, /\S/, `${exercise.name} instructions`);
+    assert.match(exercise.historyNotes, /^Past sessions\n• \d{4}-\d{2}-\d{2}: .+$/s, `${exercise.name} session comment`);
+    assert.equal(exercise.notes, undefined, `${exercise.name} does not mix detail sources`);
   }
 });
 
-test('demo descriptions include a renderable Markdown image', async () => {
+test('demo row uses its compact PNG image in API data only', async () => {
   const service = createDummyProgramService();
   const plan = await service.getDayPlan('dummy-gzclp', 1, 2);
   const exercise = plan.exercises.find(item => item.name === 'Dumbbell Row');
 
-  assert.equal(exerciseDisplayImageUrl(exercise.notes), demoDescriptionImage);
-  assert.equal(exercise.imageUrl, demoDescriptionImage);
-  assert.match(exercise.notes, new RegExp(`!\\[\\]\\(${demoDescriptionImage.replaceAll('.', '\\.') }\\)`));
+  assert.equal(exercise.imageUrl, 'https://www.liftosaur.com/externalimages/exercises/ogimages/dumbbell-bent-over-one-arm-row.png');
+  assert.doesNotMatch(exercise.exerciseNotes, /!\[\]\(/);
 });
 
 test('dummy program service finishes workout cleanly', async () => {
