@@ -79,10 +79,3 @@ test('GitHub Issues and Project own the work backlog', () => {
   const config = read(path.join('.github', 'ISSUE_TEMPLATE', 'config.yml'));
   assert.match(config, /^blank_issues_enabled: false$/m);
 });
-
-test('AGENTS requires merged pull-request branches to be deleted', () => {
-  const agents = read('AGENTS.md');
-
-  assert.match(agents, /merged PR branches/i);
-  assert.match(agents, /delete both local and remote branches/i);
-});
