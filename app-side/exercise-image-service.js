@@ -1,38 +1,43 @@
 import { exerciseImageFileExtension, MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/exercise-images.js';
 
-export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV1';
+export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV3';
 export const MAX_EXERCISE_IMAGE_FILES = 32;
+let serviceSequence = 0;
 const unavailable = (reason) => ({ status: 'unavailable', reason });
 const safeDetail = (value) => typeof value === 'string'
   ? value.replace(/(?:https?:\/\/|data:\/\/|[a-zA-Z]:[\\/])\S+/g, '[path]').slice(0, 120)
   : null;
 
-export function createExerciseImageService({ download, convert, sendFile, isEnabled, storage, onFailure }) {
+export function createExerciseImageService({ download, convert, sendFile, isEnabled, storage, onFailure, generation = `${Date.now()}-${++serviceSequence}` }) {
   let operation = null;
+  let queuePromise = Promise.resolve();
+
   function records() {
     try {
       const value = JSON.parse(storage.getItem(EXERCISE_IMAGE_STORAGE_KEY) || '[]');
-      return Array.isArray(value) && value.length <= MAX_EXERCISE_IMAGE_FILES ? value : null;
+      return Array.isArray(value) && value.length <= MAX_EXERCISE_IMAGE_FILES
+        ? value.filter((entry) => entry.generation === generation) : null;
     } catch { return null; }
   }
-  function save(value) { storage.setItem(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(value)); }
+  function save(value) {
+    storage.setItem(EXERCISE_IMAGE_STORAGE_KEY,
+      JSON.stringify(value.map((entry) => ({ ...entry, generation }))));
+  }
   function cancel() {
     if (!operation) return;
     operation.canceled = true;
     try { operation.task?.cancel(); } catch {}
     if (operation.reject) operation.reject(new Error('Image download stopped'));
   }
-  return {
-    cancel,
-    async load({ imageUrl, requestId } = {}) {
-      if (!isEnabled()) return { status: 'disabled' };
-      const url = normalizeExerciseImageUrl(imageUrl);
-      if (!url) return unavailable('INVALID_URL');
-      if (operation) return unavailable('BUSY');
-      if (!download || !convert || !sendFile || !storage) return unavailable('SERVICE_UNAVAILABLE');
-      const active = operation = { canceled: false };
-      const allowed = () => !active.canceled && isEnabled();
-      let stage = 'download';
+
+  async function performLoad({ imageUrl, requestId } = {}) {
+    if (!isEnabled()) return { status: 'disabled' };
+    const url = normalizeExerciseImageUrl(imageUrl);
+    if (!url) return unavailable('INVALID_URL');
+    if (!download || !convert || !sendFile || !storage) return unavailable('SERVICE_UNAVAILABLE');
+    const active = operation = { canceled: false };
+    const allowed = () => !active.canceled && isEnabled();
+    let stage = 'download';
       try {
         const files = records();
         if (!files) return unavailable('STORAGE_INVALID');
@@ -48,7 +53,7 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           files.push({ url, ready: false });
           save(files);
         }
-        const source = `data://download/lifto-exercise-${index}-source.${exerciseImageFileExtension(url)}`;
+        const source = `data://download/lifto-exercise-${generation}-${index}-source.${exerciseImageFileExtension(url)}`;
         const target = `${source}_converted`;
         // Ready slots are immutable because transfers can survive Side Service teardown.
         if (!files[index].ready || !files[index].targetPath) {
@@ -68,15 +73,8 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
               eventPresent: event !== undefined,
             });
           });
-          let inputPath = source;
-          try {
-            await downloadFile({ headers: {}, timeout: 20000, filePath: source });
-          } catch (error) {
-            if (error?.code !== 'NATIVE_FAILURE' || !allowed()
-              || /downloadFile is not supported in simulator/i.test(error.nativeMessage || '')) throw error;
-            const retry = await downloadFile({ headers: {}, timeout: 20000 });
-            inputPath = retry.tempFilePath || retry.filePath;
-          }
+          const downloaded = await downloadFile({ headers: {}, timeout: 20000 });
+          const inputPath = downloaded.tempFilePath || downloaded.filePath;
           active.task = null;
           active.reject = null;
           if (!allowed()) return { status: 'disabled' };
@@ -134,6 +132,24 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
       } finally {
         if (operation === active) operation = null;
       }
+    }
+
+  return {
+    cancel,
+    generation,
+    load(params = {}) {
+      if (!isEnabled()) return Promise.resolve({ status: 'disabled' });
+      if (!operation) {
+        const currentPromise = performLoad(params);
+        queuePromise = currentPromise.catch(() => {});
+        return currentPromise;
+      }
+      const run = () => performLoad(params);
+      const nextPromise = queuePromise.then(run, run);
+      queuePromise = nextPromise.catch(() => {});
+      return nextPromise;
     },
   };
 }
+
+

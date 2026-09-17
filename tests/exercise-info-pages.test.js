@@ -75,7 +75,7 @@ test('both variants leave room for a double-digit page label and reachable actio
   }
 });
 
-test('Info keeps three text lines visible beneath the first-page image', () => {
+test('Info image takes the full first page when ready and collapses text widgets', () => {
   assert.ok(INFO_TEXT_LAYOUT.imageBodyH >= 3 * 23);
   assert.ok(INFO_TEXT_LAYOUT.bodyH >= 6 * 23);
   assert.ok(INFO_TEXT_LAYOUT.imageBodyY + INFO_TEXT_LAYOUT.imageBodyH < 348);
@@ -84,7 +84,7 @@ test('Info keeps three text lines visible beneath the first-page image', () => {
     const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
     const start = source.indexOf('function updateNotesImage()');
     const image = source.slice(start, source.indexOf('\nfunction ', start + 1));
-    assert.match(image, /h: px\(imagePage \? INFO_TEXT_LAYOUT\.imageBodyH : INFO_TEXT_LAYOUT\.bodyH\)/, product);
+    assert.match(image, /h: px\(imagePage \? 0 : INFO_TEXT_LAYOUT\.bodyH\)/, product);
   }
 });
 

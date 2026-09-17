@@ -38,7 +38,7 @@ export const WORKOUT_TIMER_MODAL_LAYOUT = Object.freeze({
   closeHeight: 52,
 });
 export const OVERVIEW_PAGE_SIZE = 3;
-export const READY_PREVIEW_SIZE = 3;
+export const READY_PREVIEW_SIZE = 2;
 
 export function readyExercisePage(exercises = [], requestedPage = 0) {
   const totalPages = Math.max(1, Math.ceil(exercises.length / READY_PREVIEW_SIZE));
