@@ -6,6 +6,7 @@ import {
   MENU_LABEL,
   checkRequiredPhoneInput,
   formatDots,
+  formatOverviewExerciseLines,
   formatSeconds,
   formatSupersetProgress,
   formatEditableSetValue,
@@ -88,6 +89,18 @@ test('checkRequiredPhoneInput allows timed sets but detects required phone input
 test('shared workout navigation uses the Companion menu and progress markers', () => {
   assert.equal(MENU_LABEL, '\u2261');
   assert.equal(formatDots(['completed', 'active', 'pending']), '\u25cf \u25cf \u25cb');
+});
+
+test('overview preserves the whole exercise name, every dot, and the prescription', () => {
+  const dots = ['completed', ...Array(8).fill('pending')];
+  const lines = formatOverviewExerciseLines({
+    name: 'Overhead Press With Dumbbells',
+    setsDots: dots,
+    prescriptionSummary: '2W + 5 x 5 - 45kg',
+    supersetGroup: 'A',
+  });
+  assert.equal(lines.title, `[SS A] Overhead Press With Dumbbells  ${formatDots(dots)}`);
+  assert.equal(lines.prescription, '2W + 5 x 5 - 45kg');
 });
 
 test('formatting helpers format seconds and weight cleanly', () => {
