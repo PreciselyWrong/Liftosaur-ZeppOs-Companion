@@ -1,5 +1,6 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
+import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 function isDemoApiKey(value) {
   const key = String(value || '').trim().toLowerCase();
@@ -129,6 +130,7 @@ AppSettingsPage({
     screenOnDuration: 120,
     getReadySeconds: 5,
     exerciseImages: false,
+    workoutDiagnosticsEnabled: false,
   },
 
   build(props) {
@@ -142,6 +144,8 @@ AppSettingsPage({
     const getReadyValue = String(this.state.getReadySeconds);
     const exerciseImagesValue = String(this.state.exerciseImages);
     const screenOnValue = String(this.state.screenOnDuration);
+    const diagnosticText = formatWorkoutDiagnostics(props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_KEY));
+    const diagnosticLines = diagnosticText === 'No watch diagnostics yet' ? [] : diagnosticText.split('\n');
 
     return View(
       {
@@ -301,6 +305,24 @@ AppSettingsPage({
                 props.settingsStorage.setItem('screenOnDuration', String(duration));
               },
             }),
+            Toggle({
+              label: 'Record Workout diagnostics',
+              value: this.state.workoutDiagnosticsEnabled,
+              onChange: (value) => {
+                const enabled = normalizeWorkoutDiagnosticsEnabled(value);
+                this.state.workoutDiagnosticsEnabled = enabled;
+                props.settingsStorage.setItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY, String(enabled));
+                if (!enabled) props.settingsStorage.removeItem(WORKOUT_DIAGNOSTICS_KEY);
+              },
+            }),
+            Text(
+              {
+                paragraph: true,
+                align: 'center',
+                style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' },
+              },
+              'Optional. Open the Lifto Workout page after changing this setting.'
+            ),
             View(
               {
                 style: {
@@ -354,12 +376,42 @@ AppSettingsPage({
             ),
           ]
         ),
-      ]
+        this.state.workoutDiagnosticsEnabled
+          ? View(
+              { style: CARD_STYLE },
+              [
+                settingsHeading(
+                  'Workout diagnostics',
+                  'Recent watch steps after reconnection. The last step does not prove the crash cause.'
+                ),
+                ...(diagnosticLines.length > 0 ? diagnosticLines : ['No watch diagnostics yet']).map((line) => Text(
+                  {
+                    paragraph: true,
+                    align: 'left',
+                    style: {
+                      display: 'block',
+                      width: '100%',
+                      marginBottom: '4px',
+                      color: '#374151',
+                      fontSize: '15px',
+                      lineHeight: '18px',
+                      textAlign: 'left',
+                    },
+                  },
+                  line
+                )),
+              ]
+            )
+          : null,
+      ].filter(Boolean)
     );
   },
 
   getStorage(props) {
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
+    this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(
+      props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY)
+    );
     const raw = props.settingsStorage.getItem('apiKey');
     if (typeof raw === 'string') {
       try {

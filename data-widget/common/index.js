@@ -16,6 +16,7 @@ import {
   VIBRATOR_SCENE_STRONG_REMINDER,
 } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
+import * as appApi from '@zos/app';
 import { getSportData } from '@zos/app-access';
 import {
   setPageBrightTime,
@@ -32,6 +33,7 @@ import { createMessage, MESSAGE_TYPES } from '../../shared/protocol.js';
 import { SESSION_STATES } from '../../shared/workout-session.js';
 import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
 import { createFallbackStorageAdapter, createSessionStore } from '../../shared/session-storage.js';
+import { createWorkoutDiagnostics, readWorkoutMemory, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import {
@@ -147,6 +149,14 @@ const localStoreAdapter = createFallbackStorageAdapter(
   () => console.log('[lifto-ext] storage fallback to memory')
 );
 const sessionStore = createSessionStore(localStoreAdapter);
+const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (code) => {
+  if (code !== WORKOUT_DIAGNOSTIC_CODES.BUILD &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.SET_TAP &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SAVED &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP) return null;
+  return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
+});
 
 let timeSensor = null;
 try {
@@ -310,6 +320,7 @@ function beginRequest(message) {
 }
 
 function failRequest(err) {
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED);
   isBusy = false;
   statusMessage = '';
   errorMessage = err?.message || 'Request failed';
@@ -1437,8 +1448,20 @@ function renderTimedSetScreen(view) {
     if (current.isWorkoutPaused || current.isPaused) return;
     if (current.phase === 'GET_READY') workoutController.startTimedSet();
     else {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
       workoutController.stopTimedSide();
-      workoutController.syncSets().catch(() => { controllerUiDirty = true; });
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
+      workoutController.syncSets().then(
+        (synced) => {
+          workoutDiagnostics.record(synced
+            ? WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED
+            : WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
+        },
+        () => {
+          workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
+          controllerUiDirty = true;
+        },
+      );
       if (workoutController.view().state === SESSION_STATES.FINISHED) submitWorkout();
     }
   });
@@ -1680,12 +1703,22 @@ function renderActiveSetScreen(view) {
       }
 
       phoneRequiredReason = null;
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
       workoutController.completeSet({
         repsLeft: set?.isUnilateral ? set.reps : null,
       });
-      workoutController.syncSets().catch(() => {
-        controllerUiDirty = true;
-      });
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
+      workoutController.syncSets().then(
+        (synced) => {
+          workoutDiagnostics.record(synced
+            ? WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED
+            : WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
+        },
+        () => {
+          workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
+          controllerUiDirty = true;
+        },
+      );
       if (workoutController.view().state === SESSION_STATES.FINISHED) {
         submitWorkout();
       }
@@ -2768,7 +2801,13 @@ function retryConnection() {
 }
 
 function loadDisplaySettings() {
-  return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+  const diagnosticsPayload = workoutDiagnostics.isEnabled() ? { diagnostics: workoutDiagnostics.read() } : {};
+  return send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsPayload).then((settingsRes) => {
+    const diagnosticsWereEnabled = workoutDiagnostics.isEnabled();
+    workoutDiagnostics.setEnabled(normalizeWorkoutDiagnosticsEnabled(settingsRes.payload?.workoutDiagnosticsEnabled));
+    if (!diagnosticsWereEnabled && workoutDiagnostics.isEnabled()) {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.DIAGNOSTICS_ON);
+    }
     const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
     accountSettings = settingsRes.payload || {};
     exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
@@ -2845,6 +2884,7 @@ function loadDayPlan(week, day) {
 function submitWorkout() {
   if (finishState?.status === 'SENDING') return;
 
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP);
   finishState = { status: 'SENDING', message: 'Saving to Liftosaur...' };
   controllerUiDirty = true;
 
@@ -2853,6 +2893,7 @@ function submitWorkout() {
     .then((result) => {
       if (result.reason === 'SESSION_REPLACED') return;
       if (!result.success) throw new Error(result.reason || 'Save failed');
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.FINISH_SAVED);
       finishState = {
         status: 'SAVED',
         message: 'Saved to Liftosaur',
@@ -2860,6 +2901,7 @@ function submitWorkout() {
       renderUI();
     })
     .catch((err) => {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.FINISH_FAILED);
       finishState = {
         status: 'FAILED',
         message: err?.message || 'Save failed - retry',
@@ -3013,6 +3055,7 @@ function stopClock() {
 DataWidget(
   BasePage({
     onInit() {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
       exerciseImages = createWatchExerciseImages({ request: send, onChange: handleExerciseImageChange });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');
@@ -3031,6 +3074,7 @@ DataWidget(
 
       const restored = workoutController.restore();
       if (restored.success) {
+        workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RESTORED);
         restoredDisplaySettingsPending = true;
         dayPlan = workoutController.plan();
         const sync = workoutController.sync();
@@ -3050,6 +3094,7 @@ DataWidget(
     },
 
     build() {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BUILD);
       console.log('[lifto-ext] data-widget build');
       hasBuilt = true;
       isTearingDown = false;
@@ -3078,6 +3123,9 @@ DataWidget(
     onResume() {
       console.log('[lifto-ext] data-widget onResume');
       if (!hasBuilt) return;
+      loadDisplaySettings().catch((err) => {
+        logRecoverableError('[lifto-ext] display settings unavailable', err);
+      });
       applyDisplayHold();
       refreshSportMetrics();
       startClock();

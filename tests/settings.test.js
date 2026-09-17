@@ -4,6 +4,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
+import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTIC_CODES, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
 const appSideSource = fs.readFileSync(path.join(process.cwd(), 'app-side', 'index.js'), 'utf8');
@@ -13,21 +14,31 @@ new Function(
   'AppSettingsPage',
   'normalizeGetReadySeconds',
   'normalizeExerciseImages',
+  'WORKOUT_DIAGNOSTICS_KEY',
+  'WORKOUT_DIAGNOSTICS_ENABLED_KEY',
+  'formatWorkoutDiagnostics',
+  'normalizeWorkoutDiagnosticsEnabled',
   'View',
   'Text',
   'TextInput',
   'Button',
   'Select',
+  'Toggle',
   source.replace(/^import .*;\r?\n/gm, ''),
 )(
   (definition) => { settingsPage = definition; },
   normalizeGetReadySeconds,
   normalizeExerciseImages,
+  WORKOUT_DIAGNOSTICS_KEY,
+  WORKOUT_DIAGNOSTICS_ENABLED_KEY,
+  formatWorkoutDiagnostics,
+  normalizeWorkoutDiagnosticsEnabled,
   component('View'),
   component('Text'),
   component('TextInput'),
   component('Button'),
   component('Select'),
+  component('Toggle'),
 );
 
 function loadSettings(initial = {}) {
@@ -71,13 +82,13 @@ function renderSettings(initial = {}) {
     visit(node.children);
   };
   visit(tree);
-  return { tree, selects, writes };
+  return { tree, selects, writes, values };
 }
 
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
-  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false });
+  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, workoutDiagnosticsEnabled: false });
   assert.deepEqual(writes, []);
 });
 
@@ -122,6 +133,55 @@ test('the settings page is three coherent cards with centered headings and compa
   assert.doesNotMatch(source, /title:\s*'Get ready countdown'/);
   assert.doesNotMatch(source, /Exercise images \(List \+ Info \+ Prepare\)/);
   assert.doesNotMatch(source, /'REST TIMERS'|'WORKOUT DISPLAY'|'API KEY'/);
+});
+
+test('phone settings show watch diagnostic steps only after a sanitized report arrives', () => {
+  const report = JSON.stringify({
+    version: 1,
+    events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
+  });
+  const { tree } = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true', [WORKOUT_DIAGNOSTICS_KEY]: report });
+  const text = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'Text') text.push(...node.children.filter((value) => typeof value === 'string'));
+    visit(node.children);
+  };
+  visit(tree);
+  assert.equal(tree.children[0].length, 4);
+  assert.ok(text.includes('Workout diagnostics'));
+  assert.ok(text.includes('1970-01-01T00:00:01.000Z SET_TAP'));
+});
+
+test('Workout diagnostics require an explicit phone toggle and clear the report when disabled', () => {
+  assert.equal(loadSettings().state.workoutDiagnosticsEnabled, false);
+  const initial = renderSettings();
+  const toggles = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'Toggle') toggles.push(node);
+    visit(node.children);
+  };
+  visit(initial.tree);
+  assert.equal(toggles.length, 1);
+  assert.equal(toggles[0].props.value, false);
+  toggles[0].props.onChange(true);
+  assert.deepEqual(initial.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'true']]);
+  const enabled = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true', [WORKOUT_DIAGNOSTICS_KEY]: 'saved' });
+  const enabledToggles = [];
+  const collect = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(collect);
+    if (node.type === 'Toggle') enabledToggles.push(node);
+    collect(node.children);
+  };
+  collect(enabled.tree);
+  assert.equal(enabledToggles[0].props.value, true);
+  enabledToggles[0].props.onChange(false);
+  assert.deepEqual(enabled.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'false']]);
+  assert.equal(enabled.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
 });
 
 test('account status uses separate centered lines instead of ignored newline characters', () => {
