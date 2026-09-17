@@ -9,27 +9,64 @@ test('createRestAlertTracker initializes in idle state', () => {
   assert.equal(res.reason, null);
 });
 
-test('does not alert before rest timer expires', () => {
+test('does not alert before warning threshold', () => {
   const tracker = createRestAlertTracker();
-  const rest = { endsAt: 10000, duration: 60, isPaused: false };
+  const rest = { endsAt: 60000, duration: 60, isPaused: false };
 
-  const res1 = tracker.checkTick({ rest, now: 5000 });
+  const res1 = tracker.checkTick({ rest, now: 30000 });
   assert.equal(res1.shouldAlert, false);
 
-  const res2 = tracker.checkTick({ rest, now: 9000 });
+  const res2 = tracker.checkTick({ rest, now: 50000 });
   assert.equal(res2.shouldAlert, false);
 });
 
-test('does not alert when rest is paused', () => {
+test('alerts once with WARNING when rest arrives at 8 seconds remaining', () => {
   const tracker = createRestAlertTracker();
-  const rest = { endsAt: 10000, duration: 60, isPaused: true };
+  const rest = { endsAt: 60000, duration: 60, isPaused: false };
 
-  const res = tracker.checkTick({ rest, now: 11000 });
+  // 10s remaining (now = 50000) -> no alert
+  assert.equal(tracker.checkTick({ rest, now: 50000 }).shouldAlert, false);
+
+  // Exactly 8s remaining (now = 52000) -> WARNING
+  const warnRes = tracker.checkTick({ rest, now: 52000 });
+  assert.equal(warnRes.shouldAlert, true);
+  assert.equal(warnRes.reason, 'WARNING');
+  assert.equal(warnRes.step, 0);
+
+  // 7s remaining (now = 53000) -> deduplicated, no alert
+  const nextRes = tracker.checkTick({ rest, now: 53000 });
+  assert.equal(nextRes.shouldAlert, false);
+  assert.equal(nextRes.reason, null);
+
+  // 0s remaining (now = 60000) -> ZERO_REACHED
+  const zeroRes = tracker.checkTick({ rest, now: 60000 });
+  assert.equal(zeroRes.shouldAlert, true);
+  assert.equal(zeroRes.reason, 'ZERO_REACHED');
+});
+
+test('does not alert WARNING when rest is paused', () => {
+  const tracker = createRestAlertTracker();
+  const rest = { endsAt: 60000, duration: 60, isPaused: true };
+
+  const res = tracker.checkTick({ rest, now: 52000 });
   assert.equal(res.shouldAlert, false);
 });
 
-test('alerts once when rest reaches zero in foreground', () => {
+test('does not alert WARNING if total rest duration is <= warningSeconds', () => {
   const tracker = createRestAlertTracker();
+  const rest = { endsAt: 5000, duration: 5, isPaused: false };
+
+  // 4s remaining on a 5s rest -> no warning alert
+  assert.equal(tracker.checkTick({ rest, now: 1000 }).shouldAlert, false);
+
+  // Reaches zero -> zero alert fires normally
+  const zeroRes = tracker.checkTick({ rest, now: 5000 });
+  assert.equal(zeroRes.shouldAlert, true);
+  assert.equal(zeroRes.reason, 'ZERO_REACHED');
+});
+
+test('alerts once when rest reaches zero in foreground', () => {
+  const tracker = createRestAlertTracker({ warningSeconds: 0 });
   const rest = { endsAt: 10000, duration: 60, isPaused: false };
 
   // Before zero
@@ -72,6 +109,24 @@ test('alerts on overtime steps in foreground', () => {
   assert.equal(step2.step, 2);
 });
 
+test('checkResume alerts WARNING if resumed within warning window before zero', () => {
+  const tracker = createRestAlertTracker();
+  const rest = { endsAt: 60000, duration: 60, isPaused: false };
+
+  // Unfocused at 40000, resumed at 55000 (5s remaining)
+  const resumeRes = tracker.checkResume({ rest, now: 55000 });
+  assert.equal(resumeRes.shouldAlert, true);
+  assert.equal(resumeRes.reason, 'WARNING');
+
+  // Subsequent tick before zero does not re-alert warning
+  assert.equal(tracker.checkTick({ rest, now: 56000 }).shouldAlert, false);
+
+  // Hits zero
+  const zeroRes = tracker.checkTick({ rest, now: 60000 });
+  assert.equal(zeroRes.shouldAlert, true);
+  assert.equal(zeroRes.reason, 'ZERO_REACHED');
+});
+
 test('checkResume alerts once if rest expired while unfocused / screen-off', () => {
   const tracker = createRestAlertTracker();
   const rest = { endsAt: 10000, duration: 60, isPaused: false };
@@ -82,7 +137,7 @@ test('checkResume alerts once if rest expired while unfocused / screen-off', () 
   assert.equal(resumeRes.shouldAlert, true);
   assert.equal(resumeRes.reason, 'RESUME_EXPIRED');
 
-  // Subsequent ticks do not re-alert for zero
+  // Subsequent ticks do not re-alert for zero or warning
   assert.equal(tracker.checkTick({ rest, now: 16000 }).shouldAlert, false);
 });
 
@@ -100,29 +155,59 @@ test('checkResume does not alert if rest was already alerted before pause', () =
 
 test('reset clears alert state for new rest periods', () => {
   const tracker = createRestAlertTracker();
-  const rest1 = { endsAt: 10000, duration: 60, isPaused: false };
+  const rest1 = { endsAt: 60000, duration: 60, isPaused: false };
 
-  tracker.checkTick({ rest: rest1, now: 10000 });
+  tracker.checkTick({ rest: rest1, now: 52000 }); // WARNING
+  tracker.checkTick({ rest: rest1, now: 60000 }); // ZERO_REACHED
   tracker.reset();
 
-  const rest2 = { endsAt: 20000, duration: 60, isPaused: false };
-  assert.equal(tracker.checkTick({ rest: rest2, now: 15000 }).shouldAlert, false);
+  const rest2 = { endsAt: 120000, duration: 60, isPaused: false };
+  assert.equal(tracker.checkTick({ rest: rest2, now: 100000 }).shouldAlert, false);
 
-  const res = tracker.checkTick({ rest: rest2, now: 20000 });
-  assert.equal(res.shouldAlert, true);
-  assert.equal(res.reason, 'ZERO_REACHED');
+  const warnRes = tracker.checkTick({ rest: rest2, now: 112000 });
+  assert.equal(warnRes.shouldAlert, true);
+  assert.equal(warnRes.reason, 'WARNING');
+
+  const zeroRes = tracker.checkTick({ rest: rest2, now: 120000 });
+  assert.equal(zeroRes.shouldAlert, true);
+  assert.equal(zeroRes.reason, 'ZERO_REACHED');
 });
 
 test('handles new rest period automatically when endsAt changes', () => {
   const tracker = createRestAlertTracker();
-  const rest1 = { endsAt: 10000, duration: 60, isPaused: false };
-  tracker.checkTick({ rest: rest1, now: 10000 });
+  const rest1 = { endsAt: 60000, duration: 60, isPaused: false };
+  tracker.checkTick({ rest: rest1, now: 52000 }); // WARNING
+  tracker.checkTick({ rest: rest1, now: 60000 }); // ZERO_REACHED
 
-  // New set completed, new rest starts with endsAt=30000
-  const rest2 = { endsAt: 30000, duration: 60, isPaused: false };
-  assert.equal(tracker.checkTick({ rest: rest2, now: 25000 }).shouldAlert, false);
+  // New set completed, new rest starts with endsAt=120000
+  const rest2 = { endsAt: 120000, duration: 60, isPaused: false };
+  assert.equal(tracker.checkTick({ rest: rest2, now: 100000 }).shouldAlert, false);
 
-  const res = tracker.checkTick({ rest: rest2, now: 30000 });
+  const warnRes = tracker.checkTick({ rest: rest2, now: 112000 });
+  assert.equal(warnRes.shouldAlert, true);
+  assert.equal(warnRes.reason, 'WARNING');
+
+  const res = tracker.checkTick({ rest: rest2, now: 120000 });
   assert.equal(res.shouldAlert, true);
   assert.equal(res.reason, 'ZERO_REACHED');
+});
+
+test('extending rest timer allows warning to fire again at new deadline', () => {
+  const tracker = createRestAlertTracker();
+  const rest = { endsAt: 60000, duration: 60, isPaused: false };
+
+  // Warning fires at 8s
+  assert.equal(tracker.checkTick({ rest, now: 52000 }).reason, 'WARNING');
+
+  // User adds 30s rest: endsAt is now 90000
+  rest.endsAt = 90000;
+  rest.duration = 90;
+
+  // Now = 53000 (37s left) -> no alert
+  assert.equal(tracker.checkTick({ rest, now: 53000 }).shouldAlert, false);
+
+  // Hits 8s again at 82000 -> warning fires again for the new deadline
+  const warnRes = tracker.checkTick({ rest, now: 82000 });
+  assert.equal(warnRes.shouldAlert, true);
+  assert.equal(warnRes.reason, 'WARNING');
 });
