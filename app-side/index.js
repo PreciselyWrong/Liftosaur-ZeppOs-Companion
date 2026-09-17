@@ -204,6 +204,7 @@ AppSideService(
         exerciseImageService,
         programService,
         workoutService,
+        diagnosticsStorage: getEffectiveStorage(),
         workoutAbandoner: async () => {
           console.log('[liftosaur-side] workout abandoned');
           return { status: 'abandoned' };
