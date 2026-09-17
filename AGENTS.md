@@ -1,5 +1,3 @@
-# AGENTS.md
-
 ## What
 
 - Lifto Companion is an unofficial Liftosaur Cloud client for Amazfit watches on Zepp OS 3.6+.
@@ -59,15 +57,15 @@
 - ⛔ Create `codex/*` branches or leave merged PR branches behind - use a change-specific prefix such as `fix/`, `feat/`, `docs/` or `chore/`, then delete both local and remote branches after confirming the merge.
 - ⛔ Restore `TODO.md` as a backlog - GitHub Issues and Project #1 are the single source of truth.
 - ⛔ Treat "Workout Display" feedback as watch UI feedback, let settings controls share a row or rely on newline characters for layout - it names the phone Settings App section and uses full-width controls plus separate text elements unless the user says otherwise.
-- Do not derive exercise images from description Markdown - use the Workout API imageUrl field requested by the user.
+- ⛔ Reserve image space when Exercise images is Off - full-width text must return; source images only from Workout API imageUrl, never description Markdown.
 - Do not describe optional exercise images or timed sets as new in 0.5.0 - they already shipped in 0.4.9.
-- Do not take desktop control for simulator checks unless explicitly requested - the user performs visual checks; launch through the terminal.
+- ⛔ Do not take desktop control for simulator checks - the user wants to perform visual checks personally; launch through the terminal and ask what they see.
 - Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
 - ⛔ Keep Prepare beside Start set after the rest timer expires - replace both with one full-width Start set button on the timer screen.
 - ⛔ Prefix plate labels with "PER SIDE" or "LOAD" - show only the plate breakdown and unit to keep it readable.
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
 - ⛔ Hide exercise Info when notes and description are empty - keep the button visible and explain unavailable details.
-- ⛔ Treat running-workout fields as the only exercise details - also load exercise-level notes and recent session comments, preserving each source across synchronization.
+- ⛔ Flatten exercise descriptions, this-session notes and recent-session comments into one Info paragraph - load each source through synchronization and show its own subtitle and readable body.
 - ⛔ Show a duration/calorie ticker or replace visible native BPM when only its heart glyph scrolls - keep native workout BPM and fix the icon independently.
 - ⛔ Copy, fork or scrape Liftosaur code - its AGPL code is outside this MIT repository's license boundary.
 - ⛔ Reimplement Liftoscript - Liftosaur and Playground own its calculations; only the documented plate-loading exception is local.
@@ -110,10 +108,11 @@
 - Visible buttons are inert -> callback was deferred or deleted itself -> run native callbacks, retain modal controls and redraw once.
 - Finish duplicates legacy history after timeout -> commit result was ambiguous -> search for the expected record before retry.
 - Workout Extension is absent from simulator Workout -> simulator images omit the system app -> validate in Developer Mode on hardware.
+- Simulator image download reports `downloadFile is not supported in simulator` -> the Side Service cannot create an image file there -> validate dynamic images on hardware.
+- Phone connection fails after a Zeus simulator refresh -> Side Service can remain unstarted with phone port 0 -> reopen the app's Side Service before retrying; this is a simulator startup failure, not an account error.
 - `zeus dev` replaces `.gitignore` -> Zeus writes its template -> restore the repository file and recheck secret exclusions before push.
 
 ## State
 
 - Version 0.5.2 beta: both apps run timed and unilateral sets and optional exercise images in the ready list, workout overview, Info and Prepare. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
-- Current priorities and next steps live in Project #1; simulator images cannot prove native Workout integration.

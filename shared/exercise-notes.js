@@ -2,20 +2,17 @@ import { normalizeExerciseImageUrl } from './exercise-images.js';
 
 const clean = (value) => typeof value === 'string' ? value.replace(/\r\n?/g, '\n').trim() : '';
 
-const MARKDOWN_IMAGE = /!\[[^\]]*\]\(\s*(https:\/\/[^\s)]+)\s*\)/i;
-
-export function exerciseDisplayImageUrl(details, apiImageUrl = null) {
-  const markdownUrl = MARKDOWN_IMAGE.exec(clean(details))?.[1] || null;
-  return normalizeExerciseImageUrl(markdownUrl) || normalizeExerciseImageUrl(apiImageUrl);
+export function exerciseDisplayImageUrl(apiImageUrl) {
+  return normalizeExerciseImageUrl(apiImageUrl);
 }
 
 export function formatExerciseDetails(exercise) {
   if (!exercise) return null;
   const exerciseNotes = clean(exercise.exerciseNotes);
   const sources = [
-    ['Recent sessions', clean(exercise.historyNotes).replace(/^Past sessions(?:\n|$)/, '').trim()],
+    ['Description', exerciseNotes],
     ['This session', clean(exercise.notes) === exerciseNotes ? '' : clean(exercise.notes)],
-    ['Exercise', exerciseNotes],
+    ['Recent sessions', clean(exercise.historyNotes).replace(/^Past sessions(?:\n|$)/, '').trim()],
     ['Program', clean(exercise.description)],
   ];
   const seen = new Set();
@@ -27,11 +24,14 @@ export function formatExerciseDetails(exercise) {
 }
 
 function plain(text) {
-  return text.replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
+  return text.replace(/^```[^\n]*\n?/gm, '')
+    .replace(/\[!\[[^\]]*\]\([^)]*\)\]\([^)]*\)/g, '')
     .replace(/!\[[^\]]*\]\([^)]*\)/g, '')
     .replace(/\[(.*?)\]\(.*?\)/g, '$1')
     .replace(/^#{1,6}\s+/gm, '')
-    .replace(/\*\*|__|`/g, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/\*\*|__|~~|`/g, '')
+    .replace(/(^|[^\w])_([^_\n]+)_(?=[^\w]|$)/g, '$1$2')
     .replace(/\*([^*]+)\*/g, '$1');
 }
 
@@ -49,7 +49,7 @@ function wrap(text, width) {
   });
 }
 
-export function paginateNotes(text, maxCharsPerPage = 90, maxLinesPerPage = 6, maxCharsPerLine = 23) {
+export function paginateNotes(text, maxCharsPerPage = 90, maxLinesPerPage = 6, maxCharsPerLine = 23, firstPage = null) {
   const content = clean(text);
   if (!content) return ['No notes for this exercise.'];
   const sections = [];
@@ -62,21 +62,24 @@ export function paginateNotes(text, maxCharsPerPage = 90, maxLinesPerPage = 6, m
     }
   }
   const pages = [];
+  const limits = () => pages.length === 0 && firstPage
+    ? { chars: firstPage.chars, lines: firstPage.lines }
+    : { chars: maxCharsPerPage, lines: maxLinesPerPage };
   for (const section of sections) {
     let body = plain(section.lines.join('\n')).trim();
     let title = section.title ? wrap(section.title, maxCharsPerLine) : [];
     let prefixLength = title.length ? title.join('\n').length + 1 : 0;
-    if (title.length >= maxLinesPerPage || prefixLength >= maxCharsPerPage) {
+    if (title.length >= limits().lines || prefixLength >= limits().chars) {
       // Authored headings may exceed a page; flow them once as ordinary content.
       body = `${section.title}\n${body}`;
       title = [];
       prefixLength = 0;
     }
     if (!body) continue;
-    const lines = wrap(body, Math.min(maxCharsPerLine, maxCharsPerPage - prefixLength));
+    const lines = wrap(body, Math.min(maxCharsPerLine, limits().chars - prefixLength));
     let page = [...title];
     for (const line of lines) {
-      if (page.length > title.length && (page.length >= maxLinesPerPage || [...page, line].join('\n').length > maxCharsPerPage)) {
+      if (page.length > title.length && (page.length >= limits().lines || [...page, line].join('\n').length > limits().chars)) {
         pages.push(page.join('\n'));
         page = [...title];
       }

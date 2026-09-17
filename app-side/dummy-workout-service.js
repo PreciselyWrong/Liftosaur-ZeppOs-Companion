@@ -52,7 +52,10 @@ function planToWorkout(plan, { startTime = null } = {}) {
         equipment: exercise.equipment ?? null,
         superset: exercise.supersetGroup ?? exercise.supersetTag ?? null,
         notes: exercise.notes ?? null,
+        exerciseNotes: exercise.exerciseNotes ?? null,
+        historyNotes: exercise.historyNotes ?? null,
         description: exercise.description ?? null,
+        imageUrl: exercise.imageUrl ?? null,
         warmupSets: exercise.warmupSets.map((set, index) =>
           mapSet(set, entryId, 'warmup', index, plan.unit)
         ),

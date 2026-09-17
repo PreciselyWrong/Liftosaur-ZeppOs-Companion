@@ -33,6 +33,10 @@ test('dummy workout service exposes the direct Workout contract from shared demo
   assert.ok(plan.exercises[0].entryId);
   assert.ok(plan.exercises[0].sets[0].setId);
   assert.equal(plan.exercises[0].warmupSets[0].isWarmup, true);
+  const row = plan.exercises.find((exercise) => exercise.name === 'Dumbbell Row');
+  assert.match(row.exerciseNotes, /Keep your torso still/);
+  assert.match(row.historyNotes, /Use the adjustable bench/);
+  assert.match(row.imageUrl, /dumbbell-bent-over-one-arm-row\.png$/);
 });
 
 test('dummy workout settings include the local display preference', async () => {
@@ -67,6 +71,8 @@ test('dummy workout service keeps direct start, set sync, finish and discard loc
 
   assert.equal(started.workout.startTime, startTime);
   assert.equal((await service.getCurrentWorkout()).workout.startTime, startTime);
+  assert.match(entry.exerciseNotes, /Brace before pulling|Brace your trunk|whole foot planted/);
+  assert.match(entry.historyNotes, /Past sessions/);
 
   const synced = await service.syncWorkoutSets([
     {
