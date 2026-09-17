@@ -33,6 +33,30 @@ test('accepts a transferred watch file when native transfer metadata stays at ze
   h.client.dispose();
 });
 
+test('accepts the file supplied by the page callback without a second inbox', async () => {
+  const requests = [];
+  const client = createExerciseImageClient({
+    request: async (_, payload) => {
+      requests.push(payload);
+      return { payload: { status: 'queued' } };
+    },
+    removeFile() {},
+  });
+  client.setEnabled(true);
+  client.load(url);
+  await flush();
+  assert.equal(requests.length, 1);
+  client.receive({
+    params: { type: 'exercise-image', ...requests[0] },
+    fileSize: 100,
+    filePath: 'data://download/squat.png_converted',
+    readyState: 'transferred',
+    on() {},
+  });
+  assert.equal(client.get(url).status, 'ready');
+  client.dispose();
+});
+
 test('disable before the deferred request prevents all transport work', async () => {
   const h = harness();
   h.client.load(url);
@@ -163,3 +187,64 @@ test('stale transfer completion cannot delete the newer image sharing its bounde
   assert.deepEqual(h.removed, []);
   h.client.dispose();
 });
+
+test('queue accepts more than four exercises before completion while preserving disk cache bound', async () => {
+  const h = harness();
+  const urls = Array.from({ length: 6 }, (_, index) =>
+    `/externalimages/exercises/single/small/exercise-${index}.png`);
+
+  for (const item of urls) {
+    h.client.load(item);
+  }
+  await flush();
+
+  for (const item of urls) {
+    assert.equal(h.client.get(item).status, 'loading', `expected ${item} to be loading`);
+  }
+  h.client.dispose();
+});
+
+test('persists completed images to storage and restores them on next launch without re-requesting', async () => {
+  const map = new Map();
+  const storage = {
+    getItem: (key) => map.get(key) || null,
+    setItem: (key, value) => map.set(key, value),
+  };
+  const requests = [];
+  const client = createExerciseImageClient({
+    request: async (_, payload) => { requests.push(payload); return { payload: { status: 'queued' } }; },
+    removeFile() {},
+    fileSize: () => 100,
+    storage,
+  });
+  client.setEnabled(true);
+  client.load(url);
+  await flush();
+  assert.equal(requests.length, 1);
+  client.receive({
+    params: { type: 'exercise-image', ...requests[0] },
+    fileSize: 100,
+    filePath: 'data://download/cached-squat.png',
+    readyState: 'transferred',
+    on() {},
+  });
+  assert.equal(client.get(url).status, 'ready');
+  assert.equal(client.get(url).src, 'data://download/cached-squat.png');
+  client.dispose();
+
+  const newRequests = [];
+  const restoredClient = createExerciseImageClient({
+    request: async (_, payload) => { newRequests.push(payload); return { payload: { status: 'queued' } }; },
+    removeFile() {},
+    fileSize: () => 100,
+    storage,
+  });
+  restoredClient.setEnabled(true);
+  assert.equal(restoredClient.get(url).status, 'ready');
+  assert.equal(restoredClient.get(url).src, 'data://download/cached-squat.png');
+  restoredClient.load(url);
+  await flush();
+  assert.equal(newRequests.length, 0);
+  restoredClient.dispose();
+});
+

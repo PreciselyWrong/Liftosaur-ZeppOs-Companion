@@ -12,7 +12,12 @@ function demoDetails(exerciseNotes, latestNote, latestDate = '2026-08-18') {
   };
 }
 
-const DEMO_ROW_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/dumbbell-bent-over-one-arm-row.png';
+const DEMO_SQUAT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/squat_barbell_single_small.png';
+const DEMO_BENCH_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/benchpress_barbell_single_small.png';
+const DEMO_LAT_PULLDOWN_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/latpulldown_cable_single_small.png';
+const DEMO_OHP_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/overheadpress_barbell_single_small.png';
+const DEMO_DEADLIFT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/deadlift_barbell_single_small.png';
+const DEMO_ROW_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/bentoveronearmrow_dumbbell_single_small.png';
 
 const DEMO_LOADING_EQUIPMENT = {
   barbell: {
@@ -139,6 +144,7 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Barbell Squat',
+          imageUrl: DEMO_SQUAT_IMAGE_URL,
           ...demoDetails(
             'Keep your whole foot planted, brace before descending, and drive straight up.',
             'Depth felt consistent. Keep the same stance next time.',
@@ -163,6 +169,7 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Bench Press',
+          imageUrl: DEMO_BENCH_IMAGE_URL,
           ...demoDetails(
             'Set your shoulder blades, keep your feet planted, and touch the lower chest.',
             'Bench at rack height 6. Left shoulder felt good.',
@@ -184,6 +191,7 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Lat Pulldown',
+          imageUrl: DEMO_LAT_PULLDOWN_IMAGE_URL,
           ...demoDetails(
             'Pull your elbows toward your ribs without leaning back or shrugging.',
             'Use the medium neutral handle again.',
@@ -250,6 +258,7 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Overhead Press',
+          imageUrl: DEMO_OHP_IMAGE_URL,
           ...demoDetails(
             'Brace your trunk, keep the bar close, and finish with your head through.',
             'Grip one finger narrower. Bar path was cleaner.',
@@ -273,6 +282,7 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Deadlift',
+          imageUrl: DEMO_DEADLIFT_IMAGE_URL,
           ...demoDetails(
             'Brace before pulling, keep the bar against your legs, and push the floor away.',
             'Use the flat platform. Mixed grip was secure.',

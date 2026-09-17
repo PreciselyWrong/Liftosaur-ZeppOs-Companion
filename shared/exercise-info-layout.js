@@ -8,11 +8,11 @@ export const INFO_NAV = {
 
 export const INFO_TEXT_LAYOUT = {
   subtitleY: 96,
-  subtitleH: 30,
-  bodyY: 132,
-  bodyH: 196,
+  subtitleH: 26,
+  bodyY: 124,
+  bodyH: 220,
   imageSubtitleY: 194,
   imageBodyY: 228,
   imageBodyH: 100,
-  image: { x: 150, y: 96, w: 180, h: 90 },
+  image: { x: 157, y: 92, w: 166, h: 248 },
 };

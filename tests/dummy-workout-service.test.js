@@ -36,7 +36,7 @@ test('dummy workout service exposes the direct Workout contract from shared demo
   const row = plan.exercises.find((exercise) => exercise.name === 'Dumbbell Row');
   assert.match(row.exerciseNotes, /Keep your torso still/);
   assert.match(row.historyNotes, /Use the adjustable bench/);
-  assert.match(row.imageUrl, /dumbbell-bent-over-one-arm-row\.png$/);
+  assert.match(row.imageUrl, /bentoveronearmrow_dumbbell_single_small\.png$/);
 });
 
 test('dummy workout settings include the local display preference', async () => {

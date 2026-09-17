@@ -15,6 +15,7 @@ import {
   TIME_HOUR_FORMAT_12,
   Vibrator,
   VIBRATOR_SCENE_STRONG_REMINDER,
+  VIBRATOR_SCENE_SHORT_LIGHT,
 } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import * as appApi from '@zos/app';
@@ -108,7 +109,7 @@ const THEME = {
 };
 
 const DEFAULT_SCREEN_ON_SECONDS = 120;
-const ALWAYS_SCREEN_ON_MS = 2147483000;
+const ALWAYS_SCREEN_ON_MS = 1800000;
 const PENDING_SYNC_RETRY_MS = 15000;
 
 const deviceInfo = getDeviceInfo();
@@ -196,13 +197,27 @@ function setRestVibrationMode() {
   }
 }
 
+function setLightVibrationMode() {
+  try {
+    vibrator.setMode(VIBRATOR_SCENE_SHORT_LIGHT);
+    return;
+  } catch (e) {
+    // Firmware versions disagree with the SDK typings on the accepted signature.
+  }
+  try {
+    vibrator.setMode({ mode: VIBRATOR_SCENE_SHORT_LIGHT });
+  } catch (err) {
+    console.log('[lifto-ext] vibrator light mode error:', err?.message || String(err));
+  }
+}
+
 function triggerRestVibration() {
   try {
     stopVibration();
     if (!vibrator) {
       vibrator = new Vibrator();
-      setRestVibrationMode();
     }
+    setRestVibrationMode();
     vibrator.start();
     vibrationTimer = setTimeout(() => {
       vibrationTimer = null;
@@ -210,6 +225,23 @@ function triggerRestVibration() {
     }, 1400);
   } catch (err) {
     console.log('[lifto-ext] vibrator error:', err?.message || String(err));
+  }
+}
+
+function triggerLightVibration() {
+  try {
+    stopVibration();
+    if (!vibrator) {
+      vibrator = new Vibrator();
+    }
+    setLightVibrationMode();
+    vibrator.start();
+    vibrationTimer = setTimeout(() => {
+      vibrationTimer = null;
+      stopVibration();
+    }, 300);
+  } catch (err) {
+    console.log('[lifto-ext] vibrator light error:', err?.message || String(err));
   }
 }
 
@@ -270,11 +302,12 @@ let lastRenderedClock = null;
 let activeWidgets = [];
 let liveWidgets = {};
 
-function send(type, payload = {}) {
+function send(type, payload = {}, options = {}) {
   if (!widgetInstance || typeof widgetInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
-  return withRequestTimeout(widgetInstance.request(createMessage({ type, payload })), {
+  const timeoutMs = options.timeoutMs;
+  return withRequestTimeout(widgetInstance.request(createMessage({ type, payload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
     if (res && res.type === MESSAGE_TYPES.ERROR) {
@@ -285,6 +318,7 @@ function send(type, payload = {}) {
     return res;
   });
 }
+
 
 function updateSyncWarning() {
   if (!workoutController) return;
@@ -302,8 +336,21 @@ function updateSyncWarning() {
   }
 }
 
+let isDispatchingClick = false;
+let renderScheduled = false;
+
 function markControllerUiDirty() {
   controllerUiDirty = true;
+}
+
+function scheduleRenderUI() {
+  controllerUiDirty = true;
+  if (renderScheduled) return;
+  renderScheduled = true;
+  setTimeout(() => {
+    renderScheduled = false;
+    renderUI();
+  }, 0);
 }
 
 function consumeControllerUiChange() {
@@ -350,11 +397,16 @@ function applyNativePauseActions(actions) {
       workoutController.resumeWorkout({ timestamp: action.timestamp, source: 'native' });
     }
   }
-  renderUI();
+  scheduleRenderUI();
 }
+
+const SPORT_METRICS_INTERVAL_MS = 3000;
+let lastSportMetricsSampleAt = 0;
 
 function refreshSportMetrics() {
   const requestedAt = Date.now();
+  if (requestedAt - lastSportMetricsSampleAt < SPORT_METRICS_INTERVAL_MS) return;
+  lastSportMetricsSampleAt = requestedAt;
   try {
     getSportData({ type: 'duration' }, (result) => {
       if (isTearingDown) return;
@@ -442,9 +494,20 @@ function addRawWidget(type, props) {
 }
 
 function addActionWidget(props) {
+  const handler = props.click_func;
   return addRawWidget(widget.BUTTON, {
     ...props,
-    click_func: props.click_func,
+    click_func: typeof handler === 'function' ? (w) => {
+      isDispatchingClick = true;
+      try {
+        handler(w);
+      } finally {
+        isDispatchingClick = false;
+      }
+      if (controllerUiDirty) {
+        scheduleRenderUI();
+      }
+    } : undefined,
   });
 }
 
@@ -536,9 +599,9 @@ function openNotes(title, content, imageUrl = null) {
   activeNotesContent = content;
   activeNotesImageUrl = exerciseDisplayImageUrl(imageUrl);
   notesImageWidget = null;
-  exerciseImages?.load(activeNotesImageUrl, { retry: true });
+  exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
   isNotesModalOpen = true;
-  renderUI();
+  scheduleRenderUI();
 }
 
 function renderExerciseInfo(exerciseName, details, y, height, imageUrl) {
@@ -564,7 +627,7 @@ function closeNotes() {
   activeNotesTitle = '';
   activeNotesContent = '';
   notesPage = 0;
-  renderUI();
+  scheduleRenderUI();
 }
 
 function renderTitle(text, color = THEME.primaryLight) {
@@ -742,7 +805,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       text_size: font('button'),
       click_func: () => {
         listPage = (listPage - 1 + totalPages) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
 
@@ -771,7 +834,7 @@ function renderList({ items, onSelect, onBack, featured = null }) {
       text_size: font('button'),
       click_func: () => {
         listPage = (listPage + 1) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
   }
@@ -998,7 +1061,7 @@ function renderHomeScreen() {
     click_func: () => {
       listPage = 0;
       screen = EXTENSION_SCREENS.WEEKS;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 
@@ -1016,8 +1079,22 @@ function renderHomeScreen() {
     click_func: () => {
       listPage = 0;
       screen = EXTENSION_SCREENS.PROGRAMS;
-      renderUI();
+      scheduleRenderUI();
     },
+  });
+
+  const last = outline?.lastWorkout;
+  addWidget(widget.TEXT, {
+    x: px(74),
+    y: px(394),
+    w: px(332),
+    h: px(28),
+    color: THEME.textSecondary,
+    text_size: font('micro'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: last && last.dayName ? `Last: ${last.dayName}` : 'No workout recorded yet',
   });
 }
 
@@ -1046,7 +1123,7 @@ function renderProgramsScreen() {
       ? () => {
           listPage = 0;
           screen = EXTENSION_SCREENS.HOME;
-          renderUI();
+          scheduleRenderUI();
         }
       : null,
   });
@@ -1068,7 +1145,7 @@ function renderWeeksScreen() {
     selectedWeek = week;
     listPage = 0;
     screen = EXTENSION_SCREENS.DAYS;
-    renderUI();
+    scheduleRenderUI();
   };
 
   const weekLabel = (week) => truncate(week.name || `Week ${week.number}`, 22);
@@ -1092,7 +1169,7 @@ function renderWeeksScreen() {
     onBack: () => {
       listPage = 0;
       screen = EXTENSION_SCREENS.PROGRAMS;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 }
@@ -1118,7 +1195,7 @@ function renderDaysScreen() {
     onBack: () => {
       listPage = 0;
       screen = EXTENSION_SCREENS.WEEKS;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 }
@@ -1157,7 +1234,7 @@ function renderReadyScreen(view) {
   }
 
   exercises.forEach((exercise, index) => {
-    const rowY = 108 + index * 58;
+    const rowY = 112 + index * 84;
     let showsImage = imagesEnabled && Boolean(exercise.imageUrl);
     let image = null;
 
@@ -1170,9 +1247,9 @@ function renderReadyScreen(view) {
     if (exercise.supersetGroup) {
       addWidget(widget.FILL_RECT, {
         x: px(68),
-        y: px(rowY + 3),
+        y: px(rowY + 6),
         w: px(5),
-        h: px(48),
+        h: px(64),
         radius: px(3),
         color: supersetColor(exercise.supersetGroup),
       });
@@ -1180,10 +1257,10 @@ function renderReadyScreen(view) {
 
     if (image?.status === 'ready') {
       addWidget(widget.IMG, {
-        x: px(78),
+        x: px(76),
         y: px(rowY + 4),
-        w: px(46),
-        h: px(46),
+        w: px(70),
+        h: px(70),
         src: image.src,
         auto_scale: true,
         auto_scale_obj_fit: false,
@@ -1191,10 +1268,10 @@ function renderReadyScreen(view) {
     }
 
     addWidget(widget.TEXT, {
-      x: px(showsImage ? 132 : 78),
-      y: px(rowY),
-      w: px(showsImage ? 270 : 324),
-      h: px(28),
+      x: px(showsImage ? 154 : 78),
+      y: px(rowY + 6),
+      w: px(showsImage ? 248 : 324),
+      h: px(32),
       color: THEME.textPrimary,
       text_size: font('caption'),
       align_h: align.LEFT,
@@ -1204,10 +1281,10 @@ function renderReadyScreen(view) {
     });
 
     addWidget(widget.TEXT, {
-      x: px(showsImage ? 132 : 78),
-      y: px(rowY + 28),
-      w: px(showsImage ? 270 : 324),
-      h: px(26),
+      x: px(showsImage ? 154 : 78),
+      y: px(rowY + 40),
+      w: px(showsImage ? 248 : 324),
+      h: px(28),
       color: THEME.textSecondary,
       text_size: font('micro'),
       align_h: align.LEFT,
@@ -1231,7 +1308,7 @@ function renderReadyScreen(view) {
       text_size: font('button'),
       click_func: () => {
         readyPage = (readyPage - 1 + totalPages) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
 
@@ -1248,7 +1325,7 @@ function renderReadyScreen(view) {
       text_size: font('button'),
       click_func: () => {
         readyPage = (readyPage + 1) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
   }
@@ -1282,7 +1359,7 @@ function renderReadyScreen(view) {
     click_func: () => {
       listPage = 0;
       screen = EXTENSION_SCREENS.DAYS;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 
@@ -1300,7 +1377,7 @@ function renderReadyScreen(view) {
       if (view.totalExercises === 0) return;
       nativePauseReconciler.reset();
       workoutController.startWorkout();
-      renderUI();
+      scheduleRenderUI();
     },
   });
 }
@@ -1527,7 +1604,7 @@ function renderActiveSetScreen(view) {
       text_size: font('button'),
       click_func: () => {
         isOverviewOpen = true;
-        renderUI();
+        scheduleRenderUI();
       },
     });
 
@@ -1544,13 +1621,13 @@ function renderActiveSetScreen(view) {
       text: `Rest ${formatSeconds(view.rest.remaining)}`,
       click_func: () => {
         isRestMinimized = false;
-        renderUI();
+        scheduleRenderUI();
       },
     });
   } else {
     renderTopBar(view, () => {
       isOverviewOpen = true;
-      renderUI();
+      scheduleRenderUI();
     });
   }
 
@@ -1730,7 +1807,7 @@ function renderRestScreen(view) {
   const rest = view.rest;
   renderTopBar(view, () => {
     isOverviewOpen = true;
-    renderUI();
+    scheduleRenderUI();
   });
 
   const restColor = rest.isOvertime
@@ -1786,7 +1863,7 @@ function renderRestScreen(view) {
     text_size: font('caption'),
     click_func: () => {
       workoutController.adjustRest(-10);
-      renderUI();
+      scheduleRenderUI();
     },
   });
 
@@ -1819,7 +1896,7 @@ function renderRestScreen(view) {
     text_size: font('caption'),
     click_func: () => {
       workoutController.adjustRest(10);
-      renderUI();
+      scheduleRenderUI();
     },
   });
 
@@ -1918,7 +1995,7 @@ function renderRestScreen(view) {
       text_size: font('button'),
       click_func: () => {
         isRestMinimized = true;
-        renderUI();
+        scheduleRenderUI();
       },
     });
   }
@@ -1941,7 +2018,7 @@ function renderRestScreen(view) {
       isRestMinimized = false;
       if (view.timedSet) workoutController.startTimedSet();
       else workoutController.nextSet();
-      renderUI();
+      scheduleRenderUI();
     },
   });
 }
@@ -1954,9 +2031,6 @@ function renderPreparationImage(apiImageUrl) {
   exerciseImages?.load(imageUrl);
   const image = exerciseImages?.get(imageUrl);
   if (image?.status === 'unavailable') return false;
-  addWidget(widget.FILL_RECT, {
-    x: px(62), y: px(88), w: px(64), h: px(64), radius: px(12), color: THEME.card,
-  });
   if (image?.status === 'ready') {
     addWidget(widget.IMG, {
       x: px(62), y: px(88), w: px(64), h: px(64), src: image.src,
@@ -1969,11 +2043,13 @@ function renderPreparationImage(apiImageUrl) {
 function openWorkoutTimerControls() {
   isWorkoutTimerControlsOpen = true;
   controllerUiDirty = true;
+  scheduleRenderUI();
 }
 
 function closeWorkoutTimerControls() {
   isWorkoutTimerControlsOpen = false;
   controllerUiDirty = true;
+  scheduleRenderUI();
 }
 
 function renderWorkoutTimerControlsModal(view) {
@@ -2065,7 +2141,7 @@ function renderWorkoutTimerControlsModal(view) {
 function renderOverviewScreen(view) {
   renderTopBar(view, () => {
     isOverviewOpen = false;
-    renderUI();
+    scheduleRenderUI();
   });
 
   const all = view.overviewExercises || [];
@@ -2097,7 +2173,7 @@ function renderOverviewScreen(view) {
       });
       if (image?.status === 'ready') {
         addWidget(widget.IMG, {
-          x: px(72), y: px(rowY + 8), w: px(52), h: px(52), src: image.src,
+          x: px(70), y: px(rowY + 6), w: px(56), h: px(56), src: image.src,
           auto_scale: true, auto_scale_obj_fit: false,
         });
       }
@@ -2117,7 +2193,7 @@ function renderOverviewScreen(view) {
       click_func: () => {
         workoutController.selectExercise(idx);
         isOverviewOpen = false;
-        renderUI();
+        scheduleRenderUI();
       },
     });
     for (const [text, offset, color] of [
@@ -2152,7 +2228,7 @@ function renderOverviewScreen(view) {
         .requestRefresh()
         .then((changed) => {
           updateSyncWarning();
-          if (changed || previousWarning !== syncWarning) renderUI();
+          if (changed || previousWarning !== syncWarning) scheduleRenderUI();
         })
         .catch(handlePollFailure);
     },
@@ -2205,7 +2281,7 @@ function renderOverviewScreen(view) {
       text_size: font('button'),
       click_func: () => {
         overviewPage = (overviewPage - 1 + totalPages) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
 
@@ -2234,7 +2310,7 @@ function renderOverviewScreen(view) {
       text_size: font('button'),
       click_func: () => {
         overviewPage = (overviewPage + 1) % totalPages;
-        renderUI();
+        scheduleRenderUI();
       },
     });
   }
@@ -2248,13 +2324,14 @@ function updateNotesImage() {
   const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
   notesImageWidget?.setProperty(prop.VISIBLE, false);
   updateLiveWidget('modal-subtitle', {
-    y: px(imagePage ? INFO_TEXT_LAYOUT.imageSubtitleY : INFO_TEXT_LAYOUT.subtitleY),
-    text: pages[notesPage]?.subtitle || '',
+    y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.subtitleY),
+    h: px(imagePage ? 0 : INFO_TEXT_LAYOUT.subtitleH),
+    text: pages[notesPage]?.subtitle && !imagePage ? pages[notesPage].subtitle : '',
   });
   updateLiveWidget('modal-content', {
-    y: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyY : INFO_TEXT_LAYOUT.bodyY),
-    h: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyH : INFO_TEXT_LAYOUT.bodyH),
-    text: pages[notesPage]?.body || '',
+    y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.bodyY),
+    h: px(imagePage ? 0 : INFO_TEXT_LAYOUT.bodyH),
+    text: pages[notesPage]?.body && !imagePage ? pages[notesPage].body : '',
   });
   if (!imagePage) return;
   if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, {
@@ -2303,6 +2380,8 @@ function renderNotesScreen() {
     y: px(INFO_TEXT_LAYOUT.subtitleY),
     w: px(348),
     h: px(INFO_TEXT_LAYOUT.subtitleH),
+    normal_color: THEME.card,
+    press_color: THEME.card,
     color: THEME.textPrimary,
     text_size: font('body'),
     align_h: align.CENTER_H,
@@ -2316,6 +2395,8 @@ function renderNotesScreen() {
     y: px(INFO_TEXT_LAYOUT.bodyY),
     w: px(348),
     h: px(INFO_TEXT_LAYOUT.bodyH),
+    normal_color: THEME.card,
+    press_color: THEME.card,
     color: THEME.textSecondary,
     text_size: font('caption'),
     align_h: align.CENTER_H,
@@ -2430,7 +2511,7 @@ function renderPhoneRequiredModal() {
     text_size: font('button'),
     click_func: () => {
       phoneRequiredReason = null;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 }
@@ -2451,7 +2532,7 @@ function renderDiscardConfirmation() {
     text_size: font('button'),
     click_func: () => {
       discardConfirmationRequested = false;
-      renderUI();
+      scheduleRenderUI();
     },
   });
 
@@ -2613,7 +2694,7 @@ function renderConflictScreen() {
     click_func: sync.remoteMissing
       ? () => {
           discardConfirmationRequested = true;
-          renderUI();
+          scheduleRenderUI();
         }
       : adoptCurrentWorkout,
   });
@@ -2632,8 +2713,8 @@ function renderConflictScreen() {
       workoutController.updateSync({ conflict: false });
       syncWarning = null;
       workoutController.ensureStarted().then(
-        () => renderUI(),
-        () => renderUI(),
+        () => scheduleRenderUI(),
+        () => scheduleRenderUI(),
       );
     },
   });
@@ -2658,6 +2739,10 @@ function handleExerciseImageChange(_imageUrl, status) {
 }
 
 function renderUI() {
+  if (isDispatchingClick) {
+    scheduleRenderUI();
+    return;
+  }
   if (!hasBuilt) return;
   consumeControllerUiChange();
   preparationImageUrl = null;
@@ -2854,7 +2939,7 @@ function loadDisplaySettings() {
     exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
     if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
       notesPage = 0;
-      exerciseImages?.load(activeNotesImageUrl, { retry: true });
+      exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
       renderUI();
     }
     workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
@@ -3030,7 +3115,11 @@ function tick() {
   if (view.state === SESSION_STATES.REST && view.rest) {
     const alertResult = restAlertTracker.checkTick({ rest: view.rest, now: Date.now() });
     if (alertResult.shouldAlert) {
-      triggerRestVibration();
+      if (alertResult.reason === 'WARNING') {
+        triggerLightVibration();
+      } else {
+        triggerRestVibration();
+      }
     }
     if (shouldAutoStartPreparedSet(isRestMinimized, view.rest)) {
       isRestMinimized = false;
@@ -3097,7 +3186,12 @@ DataWidget(
   BasePage({
     onInit() {
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
-      exerciseImages = createWatchExerciseImages({ request: send, onChange: handleExerciseImageChange });
+      exerciseImages = createWatchExerciseImages({
+        request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
+        onChange: handleExerciseImageChange,
+        storage: deviceStorage,
+        maxCachedImages: 2,
+      });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');
 
@@ -3178,7 +3272,11 @@ DataWidget(
         if (view.state === SESSION_STATES.REST && view.rest) {
           const resumeAlert = restAlertTracker.checkResume({ rest: view.rest, now: Date.now() });
           if (resumeAlert.shouldAlert) {
-            triggerRestVibration();
+            if (resumeAlert.reason === 'WARNING') {
+              triggerLightVibration();
+            } else {
+              triggerRestVibration();
+            }
           }
         }
         workoutController

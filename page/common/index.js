@@ -10,7 +10,14 @@ import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import { createWidget, deleteWidget, redraw, widget, align, text_style, prop } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
-import { HeartRate, Time, TIME_HOUR_FORMAT_12, Vibrator, VIBRATOR_SCENE_DURATION } from '@zos/sensor';
+import {
+  HeartRate,
+  Time,
+  TIME_HOUR_FORMAT_12,
+  Vibrator,
+  VIBRATOR_SCENE_DURATION,
+  VIBRATOR_SCENE_SHORT_LIGHT,
+} from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import {
   onGesture,
@@ -31,6 +38,7 @@ import {
 import { BasePage } from '@zeppos/zml/base-page';
 
 import { SESSION_STATES } from '../../shared/workout-session.js';
+import { createRestAlertTracker } from '../../shared/rest-alert.js';
 import {
   createWorkoutController,
   defaultDirectSync,
@@ -102,7 +110,7 @@ const THEME = {
 };
 
 const DEFAULT_SCREEN_ON_SECONDS = 120;
-const ALWAYS_SCREEN_ON_MS = 2147483000;
+const ALWAYS_SCREEN_ON_MS = 1800000;
 
 /**
  * Screens are drawn in the round 480x480 design space; `LAYOUT.fit()` is the
@@ -232,7 +240,7 @@ let liveHr = 'N/A';
 let hrSensor = null;
 let hrCallback = null;
 let vibrator = null;
-let lastVibratedOvertimeStep = -1;
+let restAlertTracker = createRestAlertTracker();
 let flashWidget = null;
 let flashTimer = null;
 let vibrationTimer = null;
@@ -290,7 +298,7 @@ function adoptAccountSettings(payload) {
   exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
   if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
     notesPage = 0;
-    exerciseImages?.load(activeNotesImageUrl, { retry: true });
+    exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
     renderUI();
   }
   workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
@@ -520,11 +528,12 @@ function updateLiveWidget(key, changes) {
 
 // ── Side Service calls ───────────────────────────────────────────────────────
 
-function send(type, payload = {}) {
+function send(type, payload = {}, options = {}) {
   if (!pageInstance || typeof pageInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
-  return withRequestTimeout(pageInstance.request(createMessage({ type, payload })), {
+  const timeoutMs = options.timeoutMs;
+  return withRequestTimeout(pageInstance.request(createMessage({ type, payload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
     if (res && res.type === MESSAGE_TYPES.ERROR) {
@@ -535,6 +544,7 @@ function send(type, payload = {}) {
     return res;
   });
 }
+
 
 function beginRequest(message) {
   isBusy = true;
@@ -1146,13 +1156,14 @@ function updateNotesImage() {
   const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
   notesImageWidget?.setProperty(prop.VISIBLE, false);
   updateLiveWidget('modal-subtitle', {
-    y: px(imagePage ? INFO_TEXT_LAYOUT.imageSubtitleY : INFO_TEXT_LAYOUT.subtitleY),
-    text: pages[notesPage]?.subtitle || '',
+    y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.subtitleY),
+    h: px(imagePage ? 0 : INFO_TEXT_LAYOUT.subtitleH),
+    text: pages[notesPage]?.subtitle && !imagePage ? pages[notesPage].subtitle : '',
   });
   updateLiveWidget('modal-content', {
-    y: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyY : INFO_TEXT_LAYOUT.bodyY),
-    h: px(imagePage ? INFO_TEXT_LAYOUT.imageBodyH : INFO_TEXT_LAYOUT.bodyH),
-    text: pages[notesPage]?.body || '',
+    y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.bodyY),
+    h: px(imagePage ? 0 : INFO_TEXT_LAYOUT.bodyH),
+    text: pages[notesPage]?.body && !imagePage ? pages[notesPage].body : '',
   });
   if (!imagePage) return;
   if (!notesImageWidget) notesImageWidget = addWidget(widget.IMG, {
@@ -1197,6 +1208,8 @@ function renderNotesModal() {
     y: px(INFO_TEXT_LAYOUT.subtitleY),
     w: px(348),
     h: px(INFO_TEXT_LAYOUT.subtitleH),
+    normal_color: THEME.card,
+    press_color: THEME.card,
     color: THEME.textPrimary,
     text_size: font('body'),
     align_h: align.CENTER_H,
@@ -1451,14 +1464,28 @@ function setVibrationDurationMode() {
   }
 }
 
+function setLightVibrationMode() {
+  try {
+    vibrator.setMode(VIBRATOR_SCENE_SHORT_LIGHT);
+    return;
+  } catch (e) {
+    // Older/newer signature, try the object form below.
+  }
+  try {
+    vibrator.setMode({ mode: VIBRATOR_SCENE_SHORT_LIGHT });
+  } catch (err) {
+    console.log('[liftosaur] vibrator light mode error:', err?.message || String(err));
+  }
+}
+
 function triggerVibration(index = 0) {
   const duration = vibrationDuration(index);
   try {
     stopVibration();
     if (!vibrator) {
       vibrator = new Vibrator();
-      setVibrationDurationMode();
     }
+    setVibrationDurationMode();
     vibrator.start();
     vibrationTimer = setTimeout(() => {
       vibrationTimer = null;
@@ -1468,6 +1495,23 @@ function triggerVibration(index = 0) {
     console.log('[liftosaur] vibrator error:', err?.message || String(err));
   }
   flashScreenEdge();
+}
+
+function triggerLightVibration() {
+  try {
+    stopVibration();
+    if (!vibrator) {
+      vibrator = new Vibrator();
+    }
+    setLightVibrationMode();
+    vibrator.start();
+    vibrationTimer = setTimeout(() => {
+      vibrationTimer = null;
+      stopVibration();
+    }, 300);
+  } catch (err) {
+    console.log('[liftosaur] light vibrator error:', err?.message || String(err));
+  }
 }
 
 // ── Shared chrome ────────────────────────────────────────────────────────────
@@ -1588,7 +1632,7 @@ function openTextModal(title, content, imageUrl = null) {
   activeNotesContent = content;
   activeNotesImageUrl = exerciseDisplayImageUrl(imageUrl);
   notesImageWidget = null;
-  exerciseImages?.load(activeNotesImageUrl, { retry: true });
+  exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
   renderUI();
 }
 
@@ -1931,15 +1975,15 @@ function renderHomeScreen() {
   const last = outline.lastWorkout;
   addWidget(widget.TEXT, {
     x: px(74),
-    y: px(388),
+    y: px(394),
     w: px(332),
-    h: px(40),
+    h: px(28),
     color: THEME.textSecondary,
     text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
-    text_style: text_style.WRAP,
-    text: last && last.dayName ? `Last: ${truncate(last.dayName, 30)}` : 'No workout recorded yet',
+    text_style: text_style.NONE,
+    text: last && last.dayName ? `Last: ${last.dayName}` : 'No workout recorded yet',
   });
 }
 
@@ -2079,7 +2123,7 @@ function renderReadyScreen(view) {
   }
 
   exercises.forEach((exercise, index) => {
-    const rowY = 108 + index * 58;
+    const rowY = 112 + index * 84;
     let showsImage = imagesEnabled && Boolean(exercise.imageUrl);
     let image = null;
 
@@ -2092,9 +2136,9 @@ function renderReadyScreen(view) {
     if (exercise.supersetGroup) {
       addWidget(widget.FILL_RECT, {
         x: px(68),
-        y: px(rowY + 3),
+        y: px(rowY + 6),
         w: px(5),
-        h: px(48),
+        h: px(64),
         radius: px(3),
         color: supersetColor(exercise.supersetGroup),
       });
@@ -2102,10 +2146,10 @@ function renderReadyScreen(view) {
 
     if (image?.status === 'ready') {
       addWidget(widget.IMG, {
-        x: px(78),
+        x: px(76),
         y: px(rowY + 4),
-        w: px(46),
-        h: px(46),
+        w: px(70),
+        h: px(70),
         src: image.src,
         auto_scale: true,
         auto_scale_obj_fit: false,
@@ -2113,10 +2157,10 @@ function renderReadyScreen(view) {
     }
 
     addWidget(widget.TEXT, {
-      x: px(showsImage ? 132 : 78),
-      y: px(rowY),
-      w: px(showsImage ? 270 : 324),
-      h: px(28),
+      x: px(showsImage ? 154 : 78),
+      y: px(rowY + 6),
+      w: px(showsImage ? 248 : 324),
+      h: px(32),
       color: THEME.textPrimary,
       text_size: font('caption'),
       align_h: align.LEFT,
@@ -2126,10 +2170,10 @@ function renderReadyScreen(view) {
     });
 
     addWidget(widget.TEXT, {
-      x: px(showsImage ? 132 : 78),
-      y: px(rowY + 28),
-      w: px(showsImage ? 270 : 324),
-      h: px(26),
+      x: px(showsImage ? 154 : 78),
+      y: px(rowY + 40),
+      w: px(showsImage ? 248 : 324),
+      h: px(28),
       color: THEME.textSecondary,
       text_size: font('micro'),
       align_h: align.LEFT,
@@ -2359,7 +2403,7 @@ function renderOverviewScreen(view) {
       });
       if (image?.status === 'ready') {
         addWidget(widget.IMG, {
-          x: px(72), y: px(rowY + 8), w: px(52), h: px(52), src: image.src,
+          x: px(70), y: px(rowY + 6), w: px(56), h: px(56), src: image.src,
           auto_scale: true, auto_scale_obj_fit: false,
         });
       }
@@ -2754,7 +2798,7 @@ function renderActiveSetScreen(view) {
         controllerUiDirty = true;
         return;
       }
-      lastVibratedOvertimeStep = -1;
+      restAlertTracker.reset();
       if (isResting) {
         isRestMinimized = false;
         persistAndRender(handleNextSet);
@@ -3041,7 +3085,7 @@ function renderRestScreen(view) {
     text: view.timedSet?.phase === 'REST' ? 'Armed' : 'Start set',
     text_size: font('button'),
     click_func: () => {
-      lastVibratedOvertimeStep = -1;
+      restAlertTracker.reset();
       isRestMinimized = false;
       persistAndRender(handleNextSet);
     },
@@ -3056,9 +3100,6 @@ function renderPreparationImage(apiImageUrl) {
   exerciseImages?.load(imageUrl);
   const image = exerciseImages?.get(imageUrl);
   if (image?.status === 'unavailable') return false;
-  addWidget(widget.FILL_RECT, {
-    x: px(62), y: px(88), w: px(64), h: px(64), radius: px(12), color: THEME.card,
-  });
   if (image?.status === 'ready') {
     addWidget(widget.IMG, {
       x: px(62), y: px(88), w: px(64), h: px(64), src: image.src,
@@ -3414,22 +3455,14 @@ function tick() {
   }
   if (view.state !== SESSION_STATES.ACTIVE_SET && view.state !== SESSION_STATES.REST) return;
 
-  if (view.rest && !view.rest.isPaused && view.rest.remaining <= 0) {
-    const overtime = -view.rest.remaining;
-    // The index is the rank of the reminder within this rest period, which is
-    // what makes each buzz longer than the one before it.
-    if (overtime >= 0 && lastVibratedOvertimeStep < 0) {
-      lastVibratedOvertimeStep = 0;
-      triggerVibration(0);
-    } else if (overtime >= 30 && lastVibratedOvertimeStep < 30) {
-      lastVibratedOvertimeStep = 30;
-      triggerVibration(1);
-    } else if (overtime >= 60 && lastVibratedOvertimeStep < 60) {
-      lastVibratedOvertimeStep = 60;
-      triggerVibration(2);
-    } else if (overtime >= 120 && overtime >= lastVibratedOvertimeStep + 60) {
-      lastVibratedOvertimeStep = Math.floor(overtime / 60) * 60;
-      triggerVibration(2 + lastVibratedOvertimeStep / 60 - 1);
+  if (view.rest && !view.rest.isPaused) {
+    const alertResult = restAlertTracker.checkTick({ rest: view.rest, now: Date.now() });
+    if (alertResult.shouldAlert) {
+      if (alertResult.reason === 'WARNING') {
+        triggerLightVibration();
+      } else {
+        triggerVibration(alertResult.step);
+      }
     }
   }
 
@@ -3519,7 +3552,12 @@ Page(
   BasePage({
     onInit() {
       isTearingDown = false;
-      exerciseImages = createWatchExerciseImages({ request: send, onChange: handleExerciseImageChange });
+      exerciseImages = createWatchExerciseImages({
+        request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
+        onChange: handleExerciseImageChange,
+        storage: deviceStorage,
+        maxCachedImages: 4,
+      });
       pageInstance = this;
       console.log('[liftosaur] page init');
     },

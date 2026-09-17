@@ -2,6 +2,8 @@ import { MESSAGE_TYPES } from './protocol.js';
 import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from './exercise-images.js';
 
 const MAX_CACHED_IMAGES = 4;
+const MAX_QUEUE_SIZE = 16;
+export const EXERCISE_IMAGE_WATCH_STORAGE_KEY = 'watchExerciseImagesV3';
 let requestSequence = 0;
 
 export function createExerciseImageClient({
@@ -10,6 +12,8 @@ export function createExerciseImageClient({
   removeFile,
   fileSize = () => null,
   onChange = () => {},
+  storage = null,
+  maxCachedImages = storage ? 32 : 4,
 }) {
   let enabled = false;
   let disposed = false;
@@ -19,6 +23,36 @@ export function createExerciseImageClient({
   let scheduled = false;
   const entries = new Map();
   const queue = [];
+
+  if (storage && typeof storage.getItem === 'function') {
+    try {
+      const raw = storage.getItem(EXERCISE_IMAGE_WATCH_STORAGE_KEY);
+      const saved = typeof raw === 'string' ? JSON.parse(raw) : raw;
+      if (Array.isArray(saved)) {
+        for (const item of saved) {
+          if (item?.url && item?.src) {
+            const size = fileSize(item.src);
+            if (size === null || size > 0) {
+              entries.set(item.url, { url: item.url, status: 'ready', src: item.src });
+            }
+          }
+        }
+      }
+    } catch {}
+  }
+
+  function saveStorage() {
+    if (!storage || typeof storage.setItem !== 'function') return;
+    try {
+      const list = [];
+      for (const entry of entries.values()) {
+        if (entry.status === 'ready' && entry.src) {
+          list.push({ url: entry.url, src: entry.src });
+        }
+      }
+      storage.setItem(EXERCISE_IMAGE_WATCH_STORAGE_KEY, JSON.stringify(list));
+    } catch {}
+  }
 
   function remove(path) {
     if (!path) return;
@@ -56,14 +90,16 @@ export function createExerciseImageClient({
     transfer = null;
     active = null;
     queue.length = 0;
-    const removed = new Set();
-    for (const entry of entries.values()) {
-      if (entry.src && !removed.has(entry.src)) {
-        removed.add(entry.src);
-        remove(entry.src);
+    if (!storage) {
+      const removed = new Set();
+      for (const entry of entries.values()) {
+        if (entry.src && !removed.has(entry.src)) {
+          removed.add(entry.src);
+          remove(entry.src);
+        }
       }
+      entries.clear();
     }
-    entries.clear();
   }
   function abandon() {
     disposed = true;
@@ -86,7 +122,7 @@ export function createExerciseImageClient({
     for (const entry of entries.values()) {
       if (entry.status === 'ready') readyCount++;
     }
-    while (readyCount > MAX_CACHED_IMAGES) {
+    while (readyCount > maxCachedImages) {
       for (const [url, entry] of entries) {
         if (entry.status !== 'ready') continue;
         entries.delete(url);
@@ -95,6 +131,7 @@ export function createExerciseImageClient({
         break;
       }
     }
+    saveStorage();
   }
 
   function scheduleNext() {
@@ -151,9 +188,9 @@ export function createExerciseImageClient({
       .catch(fail);
   }
 
-  function receive() {
+  function receive(file) {
     if (disposed) return;
-    const file = inbox.getNextFile();
+    if (file === undefined) file = inbox?.getNextFile();
     if (!file || file.params?.type !== 'exercise-image') return;
     const url = normalizeExerciseImageUrl(file.params.imageUrl);
     const expected = active;
@@ -190,7 +227,9 @@ export function createExerciseImageClient({
     accept();
   }
 
-  try { inbox?.on('NEWFILE', receive); } catch { inbox = null; }
+  try {
+    if (inbox && typeof inbox.on === 'function') inbox.on('NEWFILE', () => receive());
+  } catch { inbox = null; }
 
   return {
     setEnabled(value) {
@@ -204,16 +243,33 @@ export function createExerciseImageClient({
       if (entry.status === 'ready') touch(entry);
       return { status: entry.status, src: entry.src };
     },
-    load(imageUrl, { retry = false } = {}) {
+    load(imageUrl, { retry = false, priority = false } = {}) {
       const url = normalizeExerciseImageUrl(imageUrl);
-      if (!enabled || disposed || !url || !inbox) return;
+      if (!enabled || disposed || !url) return;
       const existing = entries.get(url);
-      if (existing && (existing.status !== 'unavailable' || !retry)) return;
-      if (!existing && queue.length >= MAX_CACHED_IMAGES) return;
-      if (existing) entries.delete(url);
+      if (existing && (existing.status !== 'unavailable' || !retry)) {
+        if (priority && existing.status === 'loading') {
+          const idx = queue.indexOf(existing);
+          if (idx > 0) {
+            queue.splice(idx, 1);
+            queue.unshift(existing);
+          }
+        }
+        return;
+      }
+      if (!existing && queue.length >= MAX_QUEUE_SIZE) return;
+      if (existing) {
+        const idx = queue.indexOf(existing);
+        if (idx >= 0) queue.splice(idx, 1);
+        entries.delete(url);
+      }
       const entry = { url, requestId: null, status: 'loading', src: null };
       entries.set(url, entry);
-      queue.push(entry);
+      if (priority) {
+        queue.unshift(entry);
+      } else {
+        queue.push(entry);
+      }
       scheduleNext();
     },
     dispose() {
@@ -222,5 +278,6 @@ export function createExerciseImageClient({
       cleanup();
     },
     abandon,
+    receive,
   };
 }
