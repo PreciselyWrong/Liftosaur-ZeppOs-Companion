@@ -60,7 +60,7 @@
 - ⛔ Reserve image space when Exercise images is Off - full-width text must return; source images only from Workout API imageUrl, never description Markdown.
 - Do not describe optional exercise images or timed sets as new in 0.5.0 - they already shipped in 0.4.9.
 - ⛔ Do not take desktop control for simulator checks - the user wants to perform visual checks personally; launch through the terminal and ask what they see.
-- Never add rows to the small workout screen for secondary details - reuse existing summary rows and paginate notes.
+- ⛔ Truncate exercise names or progress dots to fit, or add rows for secondary details - scroll complete text horizontally inside existing summary rows and paginate notes.
 - ⛔ Keep Prepare beside Start set after the rest timer expires - replace both with one full-width Start set button on the timer screen.
 - ⛔ Prefix plate labels with "PER SIDE" or "LOAD" - show only the plate breakdown and unit to keep it readable.
 - ⛔ Replace the prepared superset exercise when rest ends - retain its entry and set identity across same-workout updates while it remains unfinished.
