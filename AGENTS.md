@@ -114,5 +114,5 @@
 
 ## State
 
-- Version 0.5.3 beta: both apps run timed and unilateral sets and optional exercise images in the ready list, workout overview, Info and Prepare. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
+- Version 0.5.4 beta: both apps run timed and unilateral sets, rest countdown warning alerts, and exercise images in the ready list, workout overview, Info and Prepare. Lifto Workout targets Strength Training and Free Training with App ID 1125789. Timed native lifecycle, alerts and image display require physical validation.
 - Active 3 Premium, Zepp OS 6, firmware 6.3.13.5: installation TESTED by a tester; normal use of 0.4.6 and 0.4.8 exposed rapid-input and missing-weight edge cases addressed in 0.4.9.
