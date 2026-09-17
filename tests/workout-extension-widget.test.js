@@ -125,6 +125,12 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     /VIBRATOR_SCENE_STRONG_REMINDER/,
     'Rest completion must use the four-pulse strong reminder vibration',
   );
+  assert.match(
+    source,
+    /VIBRATOR_SCENE_SHORT_LIGHT/,
+    'Impending rest warning must use the light vibration pattern',
+  );
+  assert.match(source, /triggerLightVibration\(\)/, 'Impending rest warning must trigger light vibration');
   const vibrationMode = source.slice(
     source.indexOf('function setRestVibrationMode()'),
     source.indexOf('function triggerRestVibration()'),
@@ -137,6 +143,18 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
 
   assert.match(source, /withRequestTimeout/, 'Phone bridge requests must have a bounded timeout');
   assert.match(source, /shouldAutoStartPreparedSet/, 'Prepare must auto-start when rest expires');
+
+  // Display hold duration must be safely bounded to prevent 32-bit tick arithmetic overflow
+  const alwaysMsMatch = source.match(/ALWAYS_SCREEN_ON_MS\s*=\s*(\d+)/);
+  assert.ok(alwaysMsMatch, 'ALWAYS_SCREEN_ON_MS must be defined');
+  const alwaysMs = Number(alwaysMsMatch[1]);
+  assert.ok(alwaysMs > 0 && alwaysMs <= 1800000, `ALWAYS_SCREEN_ON_MS must be <= 1800000 ms to avoid RTOS timer overflow (got ${alwaysMs})`);
+
+  // Button click callbacks must never call renderUI synchronously to prevent deleting widgets inside native touch dispatchers
+  const clickCallbacks = source.match(/click_func:\s*(?:\(\)\s*=>|function\s*\([^)]*\))\s*\{[^}]*\}/g) || [];
+  for (const cb of clickCallbacks) {
+    assert.doesNotMatch(cb, /\brenderUI\s*\(\s*\)/, `click_func must defer renderUI to avoid use-after-free in C++ touch dispatcher: ${cb}`);
+  }
 
   const discardConfirmation = source.slice(
     source.indexOf('function renderDiscardConfirmation()'),
@@ -331,7 +349,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
       restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
-      workoutController: { nextSet: () => { started++; } }, renderUI() {}, openWorkoutTimerControls() {},
+      workoutController: { nextSet: () => { started++; } }, renderUI() {}, scheduleRenderUI() {}, openWorkoutTimerControls() {},
     };
     const render = new Function('env', `with (env) { ${extractFunction(source, 'renderRestScreen')}; return renderRestScreen; }`)(env);
     render({ rest: { remaining, isPaused: false } });

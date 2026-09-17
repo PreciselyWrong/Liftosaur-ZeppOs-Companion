@@ -71,24 +71,24 @@ test('demo mode is explicit in settings and on every watch screen', () => {
 test('dense screens show fewer readable rows instead of shrinking text', () => {
   assert.equal(LIST_PAGE_SIZE, 3);
   assert.equal(OVERVIEW_PAGE_SIZE, 3);
-  assert.equal(READY_PREVIEW_SIZE, 3);
+  assert.equal(READY_PREVIEW_SIZE, 2);
 });
 
 test('ready exercise pages preserve order and wrap in both directions', () => {
   const exercises = ['Squat', 'Bench', 'Deadlift', 'Row', 'Curl', 'Press', 'Carry'];
 
   assert.deepEqual(readyExercisePage(exercises, 0), {
-    exercises: ['Squat', 'Bench', 'Deadlift'],
+    exercises: ['Squat', 'Bench'],
     page: 0,
-    totalPages: 3,
+    totalPages: 4,
   });
   assert.deepEqual(readyExercisePage(exercises, 1), {
-    exercises: ['Row', 'Curl', 'Press'],
+    exercises: ['Deadlift', 'Row'],
     page: 1,
-    totalPages: 3,
+    totalPages: 4,
   });
-  assert.equal(readyExercisePage(exercises, 3).page, 0);
-  assert.equal(readyExercisePage(exercises, -1).page, 2);
+  assert.equal(readyExercisePage(exercises, 4).page, 0);
+  assert.equal(readyExercisePage(exercises, -1).page, 3);
 });
 
 test('an empty ready exercise page remains stable without controls', () => {
@@ -153,14 +153,14 @@ test('the workout preview pages its exercise list without opening a modal', () =
   assert.doesNotMatch(ready, /more/);
 });
 
-test('the ready preview shows three readable rows above fixed actions', () => {
+test('the ready preview shows two readable rows above fixed actions', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const ready = source.slice(source.indexOf('function renderReadyScreen'), source.indexOf('function renderTopBar'));
 
   assert.match(ready, /exercises\.forEach/);
-  assert.match(ready, /const rowY = 108 \+ index \* 58/);
-  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY\)[\s\S]*?h: px\(28\)[\s\S]*?text: exercise\.name/);
-  assert.match(ready, /x: px\(showsImage \? 132 : 78\)[\s\S]*?y: px\(rowY \+ 28\)[\s\S]*?h: px\(26\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
+  assert.match(ready, /const rowY = 112 \+ index \* 84/);
+  assert.match(ready, /x: px\(showsImage \? 154 : 78\)[\s\S]*?y: px\(rowY \+ 6\)[\s\S]*?h: px\(32\)[\s\S]*?text: exercise\.name/);
+  assert.match(ready, /x: px\(showsImage \? 154 : 78\)[\s\S]*?y: px\(rowY \+ 40\)[\s\S]*?h: px\(28\)[\s\S]*?color: THEME\.textSecondary[\s\S]*?text_size: font\('micro'\)[\s\S]*?text: exercise\.prescriptionSummary/);
   assert.doesNotMatch(ready, /`\$\{truncate\(exercise\.name, 20\)\}\\n\$\{exercise\.prescriptionSummary\}`/);
   assert.equal((ready.match(/y: px\(338\)/g) || []).length, 2);
 });
@@ -171,7 +171,7 @@ test('the ready preview marks supersets with their existing group colour', () =>
 
   assert.match(ready, /if \(exercise\.supersetGroup\)/);
   assert.match(ready, /color: supersetColor\(exercise\.supersetGroup\)/);
-  assert.match(ready, /x: px\(68\)[\s\S]*?w: px\(5\)[\s\S]*?h: px\(48\)/);
+  assert.match(ready, /x: px\(68\)[\s\S]*?w: px\(5\)[\s\S]*?h: px\(64\)/);
 });
 
 test('ready-screen swipes mirror its paging buttons', () => {

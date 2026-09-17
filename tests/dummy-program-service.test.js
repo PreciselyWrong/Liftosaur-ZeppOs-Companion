@@ -64,7 +64,7 @@ test('demo row uses its compact PNG image in API data only', async () => {
   const plan = await service.getDayPlan('dummy-gzclp', 1, 2);
   const exercise = plan.exercises.find(item => item.name === 'Dumbbell Row');
 
-  assert.equal(exercise.imageUrl, 'https://www.liftosaur.com/externalimages/exercises/ogimages/dumbbell-bent-over-one-arm-row.png');
+  assert.equal(exercise.imageUrl, 'https://www.liftosaur.com/externalimages/exercises/single/small/bentoveronearmrow_dumbbell_single_small.png');
   assert.doesNotMatch(exercise.exerciseNotes, /!\[\]\(/);
 });
 

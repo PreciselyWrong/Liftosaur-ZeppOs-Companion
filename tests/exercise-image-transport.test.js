@@ -67,85 +67,87 @@ function serviceHarness(enabled = true) {
     setConvert: (value) => { convertImpl = value; },
   };
 }
+function completeDownload(h) {
+  h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.png' });
+}
 test('disabled image service performs no download', async () => {
   const h = serviceHarness(false);
   assert.equal((await h.service.load({ imageUrl })).status, 'disabled');
   assert.equal(h.options(), undefined);
 });
-test('image service downloads with empty headers, converts and transfers bounded local files', async () => {
+test('image service converts the temporary path returned by Zepp', async () => {
   const h = serviceHarness();
   const result = h.service.load({ imageUrl });
   assert.deepEqual(h.options().headers, {});
-  h.task.onSuccess({ statusCode: 200, filePath: h.options().filePath });
+  assert.equal(h.options().filePath, undefined);
+  h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.png' });
   assert.equal((await result).status, 'queued');
+  assert.equal(h.convertOptions().filePath, 'data://download/native-temp.png');
   assert.equal(h.transfers[0].params.imageUrl, `https://www.liftosaur.com${imageUrl}`);
 });
-test('native file-path failure retries once using Zepp temporary download path', async () => {
+test('download without a returned file path never reaches conversion', async () => {
   const h = serviceHarness();
-  const first = {};
-  const second = {};
-  const calls = [];
-  h.setDownload((url, options) => { calls.push(options); return calls.length === 1 ? first : second; });
   const result = h.service.load({ imageUrl });
-  first.onFail({ message: 'File path unavailable' });
-  await Promise.resolve();
-  assert.equal(calls.length, 2);
-  assert.equal(calls[1].filePath, undefined);
-  second.onSuccess({ statusCode: 200, tempFilePath: 'data://download/temporary.png' });
-  assert.equal((await result).status, 'queued');
-  assert.equal(h.convertOptions().filePath, 'data://download/temporary.png');
+  h.task.onSuccess({ statusCode: 200 });
+  assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_PATH_INVALID' });
+  assert.equal(h.convertOptions(), undefined);
 });
-test('image service transfers the converter output path and reuses that exact path', async () => {
+test('image service transfers the converter output path but rebuilds it after a Side Service restart', async () => {
   const h = serviceHarness();
   h.setConvert(async () => ({ targetFilePath: 'data://download/native-image', options: { size: 100 } }));
   const first = h.service.load({ imageUrl });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   assert.equal((await first).status, 'queued');
   assert.equal(h.transfers[0].path, 'data://download/native-image');
+  h.setConvert(async (value) => ({ targetFilePath: value.targetFilePath, options: { size: 100 } }));
   const restarted = createExerciseImageService(h.dependencies);
-  assert.equal((await restarted.load({ imageUrl })).status, 'queued');
-  assert.equal(h.transfers[1].path, 'data://download/native-image');
+  const second = restarted.load({ imageUrl });
+  assert.ok(h.options(), 'a new service must not trust a path from the previous service');
+  completeDownload(h);
+  assert.equal((await second).status, 'queued');
+  assert.notEqual(h.transfers[1].path, 'data://download/native-image');
 });
 test('a legacy ready image without its converter path is rebuilt at a new path', async () => {
   const h = serviceHarness();
   h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify([{ url: `https://www.liftosaur.com${imageUrl}`, ready: true }]));
   const result = h.service.load({ imageUrl });
   assert.ok(h.options(), 'the old ambiguous file must be downloaded again');
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   assert.equal((await result).status, 'queued');
   assert.notEqual(h.transfers[0].path, 'data://download/lifto-exercise-0.png');
 });
-test('a stuck conversion retries in a fresh immutable slot', async () => {
+test('a stuck conversion from a prior service does not block the new service', async () => {
   const h = serviceHarness();
   h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify([{
     url: `https://www.liftosaur.com${imageUrl}`, converting: true, ready: false,
   }]));
   const result = h.service.load({ imageUrl });
-  assert.match(h.options().filePath, /lifto-exercise-1-source\.png$/);
-  h.task.onSuccess({ statusCode: 200 });
+  // Must re-download, not return CONVERSION_IN_PROGRESS from the stale slot.
+  assert.equal(h.options().filePath, undefined);
+  h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.png' });
   assert.equal((await result).status, 'queued');
-  assert.equal(JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY)).length, 2);
+  // Path carries the current generation, confirming stale slot was not reused.
+  assert.match(h.convertOptions().targetFilePath, /lifto-exercise-[^-]+-\d+-0-source\.png_converted$/);
 });
 test('invalid converted image reports a bounded reason in the image reply', async () => {
   const h = serviceHarness();
   h.setConvert(async () => ({ targetFilePath: 'data://download/image', options: { size: 0 } }));
   const result = h.service.load({ imageUrl });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   assert.deepEqual(await result, { status: 'unavailable', reason: 'CONVERSION_OUTPUT_INVALID' });
 });
-test('image service preserves a Markdown GIF extension for the experimental native conversion', async () => {
+test('image service passes a downloaded GIF to the experimental native conversion', async () => {
   const gif = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
   const h = serviceHarness();
   const result = h.service.load({ imageUrl: gif });
-  assert.match(h.options().filePath, /-source\.gif$/);
-  h.task.onSuccess({ statusCode: 200, filePath: h.options().filePath });
+  assert.match(h.options().url, /\.gif$/);
+  h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.gif' });
   assert.equal((await result).status, 'queued');
+  assert.equal(h.convertOptions().filePath, 'data://download/native-temp.gif');
 });
 test('download failure is optional and never queues a file', async () => {
   const h = serviceHarness();
   const result = h.service.load({ imageUrl });
-  h.task.onFail({ code: 7, message: 'Cannot write data://download/private.png' });
-  await Promise.resolve();
   h.task.onFail({ code: 7, message: 'Cannot write data://download/private.png' });
   assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_NATIVE_FAILURE', nativeCode: 7, detail: 'Cannot write [path]' });
   assert.equal(h.transfers.length, 0);
@@ -154,8 +156,6 @@ test('download failure is optional and never queues a file', async () => {
 test('native failures without an event stay identifiable in replies', async () => {
   const h = serviceHarness();
   const result = h.service.load({ imageUrl });
-  h.task.onFail();
-  await Promise.resolve();
   h.task.onFail();
   assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_NATIVE_FAILURE', detail: 'NO_EVENT' });
 });
@@ -179,15 +179,16 @@ test('non-200 image downloads report the HTTP status without leaking the URL', a
   assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_HTTP_STATUS' });
   assert.deepEqual(h.failures, [{ stage: 'download', code: 'HTTP_STATUS', statusCode: 403 }]);
 });
-test('immutable converted images are reused after Side Service restart without overwriting transfers', async () => {
+test('a Side Service restart redownloads into a distinct immutable path', async () => {
   const h = serviceHarness();
   const first = h.service.load({ imageUrl, requestId: 'first' });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   await first;
-  h.setDownload(() => { throw new Error('Must reuse'); });
   const restarted = createExerciseImageService(h.dependencies);
-  assert.equal((await restarted.load({ imageUrl, requestId: 'second' })).status, 'queued');
-  assert.equal(h.transfers[0].path, h.transfers[1].path);
+  const second = restarted.load({ imageUrl, requestId: 'second' });
+  completeDownload(h);
+  assert.equal((await second).status, 'queued');
+  assert.notEqual(h.transfers[0].path, h.transfers[1].path);
   assert.equal(h.transfers[1].params.requestId, 'second');
   assert.equal(JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY))[0].ready, true);
 });
@@ -200,7 +201,7 @@ test('failed downloads retry their reserved slot and oversize downloads never tr
   assert.equal((await first).status, 'unavailable');
   assert.equal(canceled, true);
   const second = h.service.load({ imageUrl });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   assert.equal((await second).status, 'queued');
   assert.equal(JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY)).length, 1);
 });
@@ -209,7 +210,7 @@ test('disabling during conversion suppresses transfer even when enabled again', 
   let convertDone;
   h.setConvert(() => new Promise((resolve) => { convertDone = resolve; }));
   const result = h.service.load({ imageUrl });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   await Promise.resolve();
   h.service.cancel();
   convertDone({ options: { size: 100 } });
@@ -218,7 +219,7 @@ test('disabling during conversion suppresses transfer even when enabled again', 
 });
 test('full immutable slots refuse new URLs without network activity', async () => {
   const h = serviceHarness();
-  h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(Array.from({ length: 32 }, (_, i) => ({ url: `${imageUrl}${i}`, ready: true }))));
+  h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(Array.from({ length: 32 }, (_, i) => ({ url: `${imageUrl}${i}`, ready: true, generation: h.service.generation }))));
   assert.equal((await h.service.load({ imageUrl })).status, 'unavailable');
   assert.equal(h.options(), undefined);
 });
@@ -227,14 +228,14 @@ test('conversion timeout protects unfinished output and retries at a fresh path'
   const h = serviceHarness();
   h.setConvert(() => new Promise(() => {}));
   const result = h.service.load({ imageUrl });
-  h.task.onSuccess({ statusCode: 200 });
+  completeDownload(h);
   await Promise.resolve();
   t.mock.timers.tick(20000);
   assert.deepEqual(await result, { status: 'unavailable', reason: 'CONVERSION_TIMEOUT' });
   h.setConvert(async (value) => ({ targetFilePath: value.targetFilePath, options: { size: 100 } }));
   const retry = h.service.load({ imageUrl });
-  assert.match(h.options().filePath, /lifto-exercise-1-source\.png$/);
-  h.task.onSuccess({ statusCode: 200 });
+  assert.equal(h.options().filePath, undefined);
+  h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.png' });
   assert.equal((await retry).status, 'queued');
   assert.equal(JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY))[0].converting, true);
   assert.equal(h.transfers.length, 1);
@@ -264,3 +265,31 @@ test('watch accepts completion only for requested images and ignores late comple
   assert.equal(client.get(imageUrl).status, 'disabled');
   client.dispose();
 });
+
+test('serializes concurrent image requests without rejecting with BUSY', async () => {
+  const h = serviceHarness();
+  const secondUrl = '/externalimages/exercises/single/small/deadlift.png';
+  const firstPromise = h.service.load({ imageUrl });
+  const secondPromise = h.service.load({ imageUrl: secondUrl });
+
+  completeDownload(h);
+  const firstResult = await firstPromise;
+  assert.equal(firstResult.status, 'queued');
+
+  await Promise.resolve();
+  completeDownload(h);
+  const secondResult = await secondPromise;
+  assert.equal(secondResult.status, 'queued');
+  assert.equal(h.transfers.length, 2);
+  assert.equal(h.transfers[1].params.imageUrl, `https://www.liftosaur.com${secondUrl}`);
+});
+
+test('watch exercise images accepts both native inbox shapes and the ZML file callback', () => {
+  const source = fs.readFileSync('shared/watch-exercise-images.js', 'utf8');
+  assert.match(source, /transfer\.getInbox\(\)/);
+  assert.match(source, /transfer\.inbox/);
+  assert.match(source, /client\.receive\(file\)/);
+  assert.doesNotMatch(source, /\?\.\(/);
+});
+
+

@@ -249,3 +249,12 @@ test('session restore recovers direct sync and retries requested terminal writes
   assert.match(source, /directSync\.finishRequestedAt/);
   assert.match(source, /directSync\.discardRequestedAt/);
 });
+
+test('Companion uses shared restAlertTracker and triggers light vibration for impending rest warning', () => {
+  const source = readWatchPage();
+  assert.match(source, /createRestAlertTracker/);
+  assert.match(source, /VIBRATOR_SCENE_SHORT_LIGHT/);
+  assert.match(source, /triggerLightVibration\(\)/);
+  assert.match(source, /restAlertTracker\.checkTick\(/);
+});
+
