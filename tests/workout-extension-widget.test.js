@@ -413,3 +413,29 @@ test('saved extension finish shows a rightward hint instead of a misleading Done
   update(4000);
   assert.equal(positions.length, 4);
 });
+
+test('completing active set and initiating terminal submission do not synchronously call renderUI', () => {
+  const source = readWidgetSource();
+  const activeSet = extractFunction(source, 'renderActiveSetScreen');
+  const actionButton = activeSet.slice(activeSet.lastIndexOf('addWidget(widget.BUTTON'));
+  const submitWorkout = extractFunction(source, 'submitWorkout');
+
+  assert.match(actionButton, /workoutController\.completeSet\(/);
+  assert.doesNotMatch(
+    actionButton,
+    /renderUI\(\)/,
+    'Active set action button must not synchronously redraw and delete itself during click callback',
+  );
+
+  const initialSubmit = submitWorkout.slice(0, submitWorkout.indexOf('finishWorkoutRemote'));
+  assert.doesNotMatch(
+    initialSubmit,
+    /renderUI\(\)/,
+    'Initiating terminal submission must not synchronously call renderUI',
+  );
+  assert.match(
+    initialSubmit,
+    /controllerUiDirty\s*=\s*true/,
+    'Initiating terminal submission must defer redraw via controllerUiDirty',
+  );
+});

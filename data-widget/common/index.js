@@ -1668,14 +1668,14 @@ function renderActiveSetScreen(view) {
         isRestMinimized = false;
         if (view.timedSet) workoutController.startTimedSet();
         else workoutController.nextSet();
-        renderUI();
+        controllerUiDirty = true;
         return;
       }
 
       const phoneReason = checkRequiredPhoneInput(set);
       if (phoneReason) {
         phoneRequiredReason = phoneReason;
-        renderUI();
+        controllerUiDirty = true;
         return;
       }
 
@@ -1683,14 +1683,11 @@ function renderActiveSetScreen(view) {
       workoutController.completeSet({
         repsLeft: set?.isUnilateral ? set.reps : null,
       });
-      workoutController.syncSets().then(
-        () => renderUI(),
-        () => renderUI(),
-      );
+      workoutController.syncSets().catch(() => {
+        controllerUiDirty = true;
+      });
       if (workoutController.view().state === SESSION_STATES.FINISHED) {
         submitWorkout();
-      } else {
-        renderUI();
       }
     },
   });
@@ -2849,7 +2846,7 @@ function submitWorkout() {
   if (finishState?.status === 'SENDING') return;
 
   finishState = { status: 'SENDING', message: 'Saving to Liftosaur...' };
-  renderUI();
+  controllerUiDirty = true;
 
   workoutController
     .finishWorkoutRemote()

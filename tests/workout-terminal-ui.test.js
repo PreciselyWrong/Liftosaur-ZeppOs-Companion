@@ -17,12 +17,18 @@ test('terminal UI ignores responses belonging to a replaced session in both prod
       let resolve;
       const pending = new Promise((done) => { resolve = done; });
       const calls = [];
+      let operationStarted = 0;
       const env = {
         finishState: null,
         dayPlan: { id: 'old' },
         session: { view: () => ({}) },
         directSync: { mode: 'DIRECT' },
-        workoutController: { [method]: () => pending },
+        workoutController: {
+          [method]: () => {
+            operationStarted += 1;
+            return pending;
+          },
+        },
         renderUI: () => calls.push('render'),
         updateControllerStatus: () => calls.push('status'),
         beginRequest: () => calls.push('begin'),
@@ -32,7 +38,7 @@ test('terminal UI ignores responses belonging to a replaced session in both prod
       const source = readFileSync(new URL(`../${path}`, import.meta.url), 'utf8');
       const run = new Function('env', `with (env) { ${extractFunction(source, action)}; return ${action}; }`)(env);
       run();
-      assert.equal(calls.length, 1, 'the original operation starts before replacement');
+      assert.equal(operationStarted, 1, 'the original operation starts before replacement');
 
       const newerPlan = { id: 'new' };
       const newerFinishState = { status: 'READY', message: 'New workout' };
