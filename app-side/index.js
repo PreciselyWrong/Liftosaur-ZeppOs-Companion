@@ -182,6 +182,7 @@ AppSideService(
         sendFile: (path, params) => this.sendFile(path, params),
         isEnabled: () => getEffectiveSettings().exerciseImages,
         storage: getEffectiveStorage(),
+        onFailure: (details) => console.log('[liftosaur-side] exercise image failed', details),
       });
     },
 

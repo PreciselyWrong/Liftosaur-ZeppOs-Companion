@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { exerciseInfoPages } from '../shared/exercise-info-pages.js';
+import { INFO_TEXT_LAYOUT } from '../shared/exercise-info-layout.js';
 
 import {
   TYPOGRAPHY,
@@ -182,9 +184,12 @@ test('ready-screen swipes mirror its paging buttons', () => {
 
 test('modal pages stay short enough to clear their controls', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
-  const pages = fs.readFileSync(path.join(root, 'shared', 'exercise-info-pages.js'), 'utf8');
   assert.match(source, /import \{ exerciseInfoPages \} from '..\/..\/shared\/exercise-info-pages.js'/);
-  assert.match(pages, /hasImage \? 60 : 90, hasImage \? 3 : 6/);
+  const content = `## Description\n${'Long instruction. '.repeat(50)}`;
+  assert.ok(exerciseInfoPages(content, false, null).every((page) => page.body.split('\n').length <= 6));
+  assert.ok(exerciseInfoPages(content, true, '/image.png')[0].body.split('\n').length <= 3);
+  assert.ok(INFO_TEXT_LAYOUT.bodyY + INFO_TEXT_LAYOUT.bodyH < 348);
+  assert.ok(INFO_TEXT_LAYOUT.imageBodyY + INFO_TEXT_LAYOUT.imageBodyH < 348);
 });
 
 test('modal actions use large central touch targets and ASCII labels', () => {
@@ -192,9 +197,9 @@ test('modal actions use large central touch targets and ASCII labels', () => {
   const modal = source.slice(source.indexOf('function renderNotesModal'), source.indexOf('function heartRateColor'));
   const controls = source.slice(source.indexOf('function ensureModalControls'), source.indexOf('function destroyModalControls'));
 
-  assert.match(modal, /h: px\(246\)/);
-  assert.match(controls, /x: px\(48\),[\s\S]*?w: px\(80\),[\s\S]*?text: '<'/);
-  assert.match(controls, /x: px\(166\),[\s\S]*?w: px\(80\),[\s\S]*?text: '>'/);
+  assert.match(modal, /h: px\(INFO_TEXT_LAYOUT\.bodyH\)/);
+  assert.match(controls, /x: px\(INFO_NAV\.previous\.x\),[\s\S]*?w: px\(INFO_NAV\.previous\.w\),[\s\S]*?text: '<'/);
+  assert.match(controls, /x: px\(INFO_NAV\.next\.x\),[\s\S]*?w: px\(INFO_NAV\.next\.w\),[\s\S]*?text: '>'/);
   assert.match(controls, /text: '<'/);
   assert.match(controls, /text: '>'/);
   assert.doesNotMatch(controls, /[‹›]/);

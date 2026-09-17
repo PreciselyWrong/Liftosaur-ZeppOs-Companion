@@ -5,9 +5,14 @@
  * superset groups, and clean progression so every screen can be screenshotted.
  */
 
-function demoNotes(description, latestNote) {
-  return `Description\n${description}\n\nPast sessions\n• 2026-08-18: ${latestNote}`;
+function demoDetails(exerciseNotes, latestNote, latestDate = '2026-08-18') {
+  return {
+    exerciseNotes,
+    historyNotes: `Past sessions\n• ${latestDate}: ${latestNote}`,
+  };
 }
+
+const DEMO_ROW_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/dumbbell-bent-over-one-arm-row.png';
 
 const DEMO_LOADING_EQUIPMENT = {
   barbell: {
@@ -134,7 +139,7 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Barbell Squat',
-          notes: demoNotes(
+          ...demoDetails(
             'Keep your whole foot planted, brace before descending, and drive straight up.',
             'Depth felt consistent. Keep the same stance next time.',
           ),
@@ -158,7 +163,7 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Bench Press',
-          notes: demoNotes(
+          ...demoDetails(
             'Set your shoulder blades, keep your feet planted, and touch the lower chest.',
             'Bench at rack height 6. Left shoulder felt good.',
           ),
@@ -179,7 +184,7 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Lat Pulldown',
-          notes: demoNotes(
+          ...demoDetails(
             'Pull your elbows toward your ribs without leaning back or shrugging.',
             'Use the medium neutral handle again.',
           ),
@@ -197,7 +202,7 @@ export function createDummyProgramService() {
           index: 4,
           id: 'ex-4',
           name: 'Triceps Rope Pushdown',
-          notes: demoNotes(
+          ...demoDetails(
             'Keep your elbows fixed and separate the rope at full extension.',
             'Cable station 2 felt smoother.',
           ),
@@ -215,7 +220,7 @@ export function createDummyProgramService() {
           index: 5,
           id: 'ex-5',
           name: 'Hanging Leg Raise',
-          notes: demoNotes(
+          ...demoDetails(
             'Curl your pelvis toward your ribs and avoid swinging between repetitions.',
             'Pause briefly at the top.',
           ),
@@ -245,7 +250,7 @@ export function createDummyProgramService() {
           index: 1,
           id: 'ex-1',
           name: 'Overhead Press',
-          notes: demoNotes(
+          ...demoDetails(
             'Brace your trunk, keep the bar close, and finish with your head through.',
             'Grip one finger narrower. Bar path was cleaner.',
           ),
@@ -268,7 +273,7 @@ export function createDummyProgramService() {
           index: 2,
           id: 'ex-2',
           name: 'Deadlift',
-          notes: demoNotes(
+          ...demoDetails(
             'Brace before pulling, keep the bar against your legs, and push the floor away.',
             'Use the flat platform. Mixed grip was secure.',
           ),
@@ -289,9 +294,9 @@ export function createDummyProgramService() {
           index: 3,
           id: 'ex-3',
           name: 'Dumbbell Row',
-          imageUrl: 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif',
-          notes: demoNotes(
-            'Keep your torso still and pull the dumbbell toward your hip.\n\n![](https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif)',
+          imageUrl: DEMO_ROW_IMAGE_URL,
+          ...demoDetails(
+            'Keep your torso still and pull the dumbbell toward your hip.',
             'Use the adjustable bench at setting 3.',
           ),
           equipment: 'dumbbell',
@@ -315,7 +320,11 @@ export function createDummyProgramService() {
     id: exercise.id,
     name: exercise.name,
     index: index + 4,
-    notes: 'Description\nKeep your hips level and breathe steadily throughout the hold.\n\nPast sessions\n\u2022 2026-09-10: Held both sets for 30 seconds.',
+    ...demoDetails(
+      'Keep your hips level and breathe steadily throughout the hold.',
+      'Held both sets for 30 seconds.',
+      '2026-09-10',
+    ),
     equipment: null,
     supersetGroup: null,
     supersetTag: null,
