@@ -63,7 +63,7 @@ The settings save automatically on your phone.
 
 Under Workout Display, enable **Exercise images** to show the picture supplied by Liftosaur in the workout list, **Info** and **Prepare**. This option is off by default and is configured separately for each app. Images need the phone connection to load; exercise notes remain available if a picture cannot load. Image transfer and display still need physical-watch validation.
 
-This experimental 0.5.4 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
+This experimental 0.5.5 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
 
 ### How Direct Sync works
 
@@ -82,7 +82,7 @@ Once configured, the watch connects directly to Liftosaur Cloud:
   - **Amazfit Active 3 Premium** (Zepp OS 6, firmware 6.3.13.5) [TESTED (tester report) installation; not full compatibility certification]:
     **Workout Settings > Data page > scroll to bottom > Add page > App/Workout Data > tick Lifto**
 
-Free Training support is included in 0.5.4 but remains UNKNOWN on physical hardware. Active 2 testers should look for Lifto under **Workout > Free Training > Settings > More > Data Page > Add Page** and report the exact result.
+Free Training support is included in 0.5.5 but remains UNKNOWN on physical hardware. Active 2 testers should look for Lifto under **Workout > Free Training > Settings > More > Data Page > Add Page** and report the exact result.
 
 ## Things to know
 
