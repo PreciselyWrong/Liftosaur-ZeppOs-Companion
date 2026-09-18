@@ -1256,11 +1256,19 @@ function renderReadyScreen(view) {
     }
 
     if (image?.status === 'ready') {
-      addWidget(widget.IMG, {
+      addWidget(widget.FILL_RECT, {
         x: px(76),
         y: px(rowY + 4),
         w: px(70),
         h: px(70),
+        radius: px(12),
+        color: 0xffffff,
+      });
+      addWidget(widget.IMG, {
+        x: px(80),
+        y: px(rowY + 8),
+        w: px(62),
+        h: px(62),
         src: image.src,
         auto_scale: true,
         auto_scale_obj_fit: false,
@@ -2032,8 +2040,16 @@ function renderPreparationImage(apiImageUrl) {
   const image = exerciseImages?.get(imageUrl);
   if (image?.status === 'unavailable') return false;
   if (image?.status === 'ready') {
+    addWidget(widget.FILL_RECT, {
+      x: px(62),
+      y: px(88),
+      w: px(64),
+      h: px(64),
+      radius: px(12),
+      color: 0xffffff,
+    });
     addWidget(widget.IMG, {
-      x: px(62), y: px(88), w: px(64), h: px(64), src: image.src,
+      x: px(66), y: px(92), w: px(56), h: px(56), src: image.src,
       auto_scale: true, auto_scale_obj_fit: false,
     });
   }
@@ -2172,8 +2188,16 @@ function renderOverviewScreen(view) {
         color: isCurrent ? THEME.primaryDark : THEME.card,
       });
       if (image?.status === 'ready') {
+        addWidget(widget.FILL_RECT, {
+          x: px(70),
+          y: px(rowY + 6),
+          w: px(56),
+          h: px(56),
+          radius: px(10),
+          color: 0xffffff,
+        });
         addWidget(widget.IMG, {
-          x: px(70), y: px(rowY + 6), w: px(56), h: px(56), src: image.src,
+          x: px(73), y: px(rowY + 9), w: px(50), h: px(50), src: image.src,
           auto_scale: true, auto_scale_obj_fit: false,
         });
       }

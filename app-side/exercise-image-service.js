@@ -1,6 +1,6 @@
-import { exerciseImageFileExtension, MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/exercise-images.js';
+import { exerciseDownloadUrl, exerciseImageFileExtension, MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from '../shared/exercise-images.js';
 
-export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV3';
+export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV7';
 export const MAX_EXERCISE_IMAGE_FILES = 32;
 let serviceSequence = 0;
 const unavailable = (reason) => ({ status: 'unavailable', reason });
@@ -58,9 +58,10 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
         // Ready slots are immutable because transfers can survive Side Service teardown.
         if (!files[index].ready || !files[index].targetPath) {
           if (files[index].converting) return unavailable('CONVERSION_IN_PROGRESS');
+          const downloadUrl = exerciseDownloadUrl(url) || url;
           const downloadFile = (options) => new Promise((resolve, reject) => {
             active.reject = reject;
-            const task = active.task = download(url, options);
+            const task = active.task = download(downloadUrl, options);
             task.onProgress = ({ total, loaded }) => {
               if (total > MAX_EXERCISE_IMAGE_BYTES || loaded > MAX_EXERCISE_IMAGE_BYTES || !allowed()) cancel();
             };

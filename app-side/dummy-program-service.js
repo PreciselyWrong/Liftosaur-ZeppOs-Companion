@@ -12,12 +12,12 @@ function demoDetails(exerciseNotes, latestNote, latestDate = '2026-08-18') {
   };
 }
 
-const DEMO_SQUAT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/squat_barbell_single_small.png';
-const DEMO_BENCH_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/benchpress_barbell_single_small.png';
-const DEMO_LAT_PULLDOWN_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/latpulldown_cable_single_small.png';
-const DEMO_OHP_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/overheadpress_barbell_single_small.png';
-const DEMO_DEADLIFT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/deadlift_barbell_single_small.png';
-const DEMO_ROW_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/single/small/bentoveronearmrow_dumbbell_single_small.png';
+const DEMO_SQUAT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/barbell-squat.png';
+const DEMO_BENCH_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/barbell-bench-press.png';
+const DEMO_LAT_PULLDOWN_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/cable-lat-pulldown.png';
+const DEMO_OHP_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/barbell-overhead-press.png';
+const DEMO_DEADLIFT_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/barbell-deadlift.png';
+const DEMO_ROW_IMAGE_URL = 'https://www.liftosaur.com/externalimages/exercises/ogimages/dumbbell-bent-over-row.png';
 
 const DEMO_LOADING_EQUIPMENT = {
   barbell: {

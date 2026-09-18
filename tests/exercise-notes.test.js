@@ -25,9 +25,9 @@ test('only the API image URL supplies the watch image', () => {
   assert.equal(exerciseDisplayImageUrl('/externalimages/exercises/single/small/fallback.png'),
     'https://www.liftosaur.com/externalimages/exercises/single/small/fallback.png');
   assert.equal(exerciseDisplayImageUrl('https://www.liftosaur.com/externalimages/exercises/ogimages/cable-lat-pulldown.png'),
-    'https://www.liftosaur.com/externalimages/exercises/single/small/latpulldown_cable_single_small.png');
+    'https://www.liftosaur.com/externalimages/exercises/ogimages/cable-lat-pulldown.png');
   assert.equal(exerciseDisplayImageUrl('https://www.liftosaur.com/externalimages/exercises/ogimages/cable-seated-row.png'),
-    'https://www.liftosaur.com/externalimages/exercises/single/small/seatedrow_cable_single_small.png');
+    'https://www.liftosaur.com/externalimages/exercises/ogimages/cable-seated-row.png');
   assert.deepEqual(paginateNotes(details), ['Keep the chest against\nthe bench.']);
   assert.equal(exerciseDisplayImageUrl(null), null);
   assert.equal(exerciseDisplayImageUrl(details), null);
