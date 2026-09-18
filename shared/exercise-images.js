@@ -9,31 +9,9 @@ export function normalizeExerciseImages(value, fallback = false) {
   return value === true;
 }
 
-const EQUIPMENTS = ['barbell', 'dumbbell', 'cable', 'bodyweight', 'kettlebell', 'smith', 'band', 'leveragemachine', 'ezbar', 'trapbar', 'medicineball'];
-
-export function mapOgSlugToSingleSmall(ogSlug) {
-  for (const eq of EQUIPMENTS) {
-    if (ogSlug.startsWith(eq + '-')) {
-      const namePart = ogSlug.slice(eq.length + 1).replace(/-/g, '');
-      return `${namePart}_${eq}`;
-    }
-    if (ogSlug.endsWith('-' + eq)) {
-      const namePart = ogSlug.slice(0, -(eq.length + 1)).replace(/-/g, '');
-      return `${namePart}_${eq}`;
-    }
-  }
-  const noHyphen = ogSlug.replace(/-/g, '');
-  return `${noHyphen}_bodyweight`;
-}
-
 export function normalizeExerciseImageUrl(value) {
   if (typeof value !== 'string' || value.length > 512) return null;
   const path = value.replace(/^https:\/\/www\.liftosaur\.com/, '');
-  const ogMatch = /^\/externalimages\/exercises\/ogimages\/([a-zA-Z0-9_-]+)\.png$/.exec(path);
-  if (ogMatch) {
-    const slug = mapOgSlugToSingleSmall(ogMatch[1]);
-    return `https://www.liftosaur.com/externalimages/exercises/single/small/${slug}_single_small.png`;
-  }
   if (/^\/externalimages\/exercises\/(?:[a-zA-Z0-9_-]+\/)+[a-zA-Z0-9_-]+\.png$/.test(path)) {
     return `https://www.liftosaur.com${path}`;
   }
@@ -51,3 +29,12 @@ export function exerciseImageFileExtension(value) {
   const url = normalizeExerciseImageUrl(value);
   return url ? /\.([a-z0-9]+)$/i.exec(url)?.[1].toLowerCase() || null : null;
 }
+
+export function exerciseDownloadUrl(value) {
+  const url = normalizeExerciseImageUrl(value);
+  if (!url) return null;
+  if (!/\.png$/i.test(url)) return url;
+  return `https://wsrv.nl/exercise.png?url=${encodeURIComponent(url)}&w=140&h=140&fit=contain&cbg=white&bg=white&output=png`;
+}
+
+

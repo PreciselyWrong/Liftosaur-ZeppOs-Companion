@@ -3,7 +3,7 @@ import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from './exercise-
 
 const MAX_CACHED_IMAGES = 4;
 const MAX_QUEUE_SIZE = 16;
-export const EXERCISE_IMAGE_WATCH_STORAGE_KEY = 'watchExerciseImagesV3';
+export const EXERCISE_IMAGE_WATCH_STORAGE_KEY = 'watchExerciseImagesV7';
 let requestSequence = 0;
 
 export function createExerciseImageClient({
