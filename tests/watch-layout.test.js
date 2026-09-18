@@ -436,3 +436,15 @@ test('Companion teardown cannot perform native work that breaks the next launch'
     /\.dispose\(|stopClock\(|stopVibration\(|offGesture\(|offCurrentChange|resetDisplayHold\(|clearWidgets\(|destroyModalControls\(/,
   );
 });
+
+test('exercise thumbnails in companion and extension have a white backing tile', () => {
+  for (const relPath of ['page/common/index.js', 'data-widget/common/index.js']) {
+    const source = fs.readFileSync(path.join(root, relPath), 'utf8');
+    assert.match(
+      source,
+      /addWidget\(widget\.FILL_RECT,\s*\{[\s\S]*?color:\s*0xffffff[\s\S]*?\}\);\s*addWidget\(widget\.IMG/,
+      `expected white FILL_RECT before widget.IMG in ${relPath}`,
+    );
+  }
+});
+

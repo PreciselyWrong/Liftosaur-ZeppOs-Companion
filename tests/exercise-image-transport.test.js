@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { exerciseImageFileExtension, normalizeExerciseImageUrl, normalizeExerciseImages } from '../shared/exercise-images.js';
+import { exerciseDownloadUrl, exerciseImageFileExtension, normalizeExerciseImageUrl, normalizeExerciseImages } from '../shared/exercise-images.js';
 import { createExerciseImageService, EXERCISE_IMAGE_STORAGE_KEY } from '../app-side/exercise-image-service.js';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
 
@@ -19,6 +19,17 @@ test('exercise image runtime avoids optional calls unsupported by Zepp QuickJS',
   assert.match(onInit, /convert:\s*\(options\) => this\.convert\(options\)/);
   assert.match(onInit, /sendFile:\s*\(path, params\) => this\.sendFile\(path, params\)/);
   assert.doesNotMatch(onInit, /typeof (?:network|image|transferFile)/);
+});
+
+test('exercise download url proxies PNG images to white background and passes GIFs', () => {
+  const png = 'https://www.liftosaur.com/externalimages/exercises/single/small/squat.png';
+  assert.equal(
+    exerciseDownloadUrl(png),
+    'https://wsrv.nl/exercise.png?url=https%3A%2F%2Fwww.liftosaur.com%2Fexternalimages%2Fexercises%2Fsingle%2Fsmall%2Fsquat.png&w=140&h=140&fit=contain&cbg=white&bg=white&output=png',
+  );
+  const gif = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
+  assert.equal(exerciseDownloadUrl(gif), gif);
+  assert.equal(exerciseDownloadUrl(null), null);
 });
 
 test('image policy accepts public HTTPS image files and explicit opt-in', () => {
