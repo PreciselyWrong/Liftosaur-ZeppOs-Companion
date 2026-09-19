@@ -302,13 +302,14 @@ test('native workout destruction performs no device work and blocks late redraws
   const onDestroy = source.slice(source.indexOf('onDestroy()'), source.indexOf('onReceivedFile', source.indexOf('onDestroy()')));
 
   assert.match(source, /let isTearingDown = false/);
-  assert.match(renderUI, /if \(!hasBuilt\) return/);
+  assert.match(renderUI, /if \(isTearingDown \|\| !hasBuilt\) return/);
   assert.match(onDestroy, /isTearingDown = true/);
   assert.match(onDestroy, /hasBuilt = false/);
   assert.match(onDestroy, /exerciseImages\?\.abandon\(\)/);
+  assert.match(onDestroy, /workoutController\?\.dispose\(\)/);
   assert.doesNotMatch(
     onDestroy,
-    /resetDisplayHold|stopVibration|clearWidgets|\.dispose\(|\.persist\(|renderUI\(|request\(/,
+    /resetDisplayHold|stopVibration|clearWidgets|exerciseImages\??\.dispose\(|\.persist\(|renderUI\(|request\(/,
     'onDestroy must not call native device, persistence, transport, or UI work',
   );
 });
@@ -380,6 +381,7 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
   const view = { state: 'REST', rest: { remaining: 0, isPaused: false }, elapsedSeconds: 60 };
   const env = {
     updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
+    isTearingDown: false, isPaused: false, hasBuilt: true,
     SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
     refreshSportMetrics() {}, retryPendingWrites() {},
     workoutController: { view: () => view, advanceTimedSet() {}, pollCurrent: async () => false, nextSet: () => { starts++; } },
@@ -407,6 +409,7 @@ test('saved extension finish shows a rightward hint instead of a misleading Done
   assert.doesNotMatch(body, /text: 'Done'/);
   const nativeUpdates = [];
   const nativeEnv = {
+    isTearingDown: false, isPaused: false, hasBuilt: true,
     liveWidgets: {}, LAYOUT: { fit: props => props }, px: x => x,
     widget: { TEXT: 'TEXT' }, THEME: {}, font: () => 40, align: {}, text_style: {},
     prop: { MORE: 'MORE' }, LIVE_WIDGET_MUTABLE_KEYS: ['x', 'y', 'w', 'h', 'text'],

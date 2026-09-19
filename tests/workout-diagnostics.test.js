@@ -161,3 +161,61 @@ test('recording is opt-in and disabling clears the retained report', () => {
   assert.deepEqual(createWorkoutDiagnostics(storage).read().events, []);
   assert.equal(storage.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
 });
+
+test('keeps previous-run evidence when BOOT starts a new run', () => {
+  const storage = memoryStorage();
+  let time = 1_000;
+  const diagnostics = createWorkoutDiagnostics(storage, () => time++);
+  diagnostics.setEnabled(true);
+  diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
+  diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PAUSE);
+  diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
+  for (let index = 0; index < 20; index++) diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
+  assert.equal(diagnostics.read().events.length, 12);
+  assert.deepEqual(diagnostics.read().previousEvents.map((event) => event.code), [
+    WORKOUT_DIAGNOSTIC_CODES.SET_TAP,
+    WORKOUT_DIAGNOSTIC_CODES.PAUSE,
+  ]);
+});
+
+test('retains previous evidence through boot-only restarts', () => {
+  const storage = memoryStorage();
+  let time = 1_000;
+  const first = createWorkoutDiagnostics(storage, () => time++);
+  first.setEnabled(true);
+  first.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP);
+  first.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
+  const restarted = createWorkoutDiagnostics(storage, () => time++);
+  restarted.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
+  assert.deepEqual(createWorkoutDiagnostics(storage).read().previousEvents.map((event) => event.code), [
+    WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP,
+  ]);
+});
+
+test('sanitizes, copies, formats, and bounds both diagnostics runs', () => {
+  const storage = memoryStorage();
+  const diagnostics = createWorkoutDiagnostics(storage, () => 1_000);
+  diagnostics.setEnabled(true);
+  const events = Array.from({ length: 15 }, (_, index) => ({ at: index, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_END, secret: 'secret' }));
+  const previousEvents = Array.from({ length: 15 }, (_, index) => ({ at: index + 100, code: WORKOUT_DIAGNOSTIC_CODES.RESUME, token: 'secret' }));
+  assert.equal(diagnostics.replace({ version: 1, events, previousEvents }), true);
+  const report = diagnostics.read();
+  assert.equal(report.events.length, 12);
+  assert.equal(report.previousEvents.length, 12);
+  assert.deepEqual(report.events[0], { at: 3, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_END });
+  assert.deepEqual(report.previousEvents[0], { at: 103, code: WORKOUT_DIAGNOSTIC_CODES.RESUME });
+  report.previousEvents[0].code = WORKOUT_DIAGNOSTIC_CODES.BOOT;
+  assert.equal(diagnostics.read().previousEvents[0].code, WORKOUT_DIAGNOSTIC_CODES.RESUME);
+  assert.match(formatWorkoutDiagnostics(diagnostics.read()), /Previous run: 1970-01-01T00:00:00.103Z RESUME/);
+  assert.doesNotMatch(storage.values.get(WORKOUT_DIAGNOSTICS_KEY), /secret|token/);
+});
+
+test('disabling diagnostics clears both runs', () => {
+  const storage = memoryStorage();
+  const diagnostics = createWorkoutDiagnostics(storage, () => 1_000);
+  diagnostics.setEnabled(true);
+  diagnostics.replace({ version: 1, events: [{ at: 1, code: WORKOUT_DIAGNOSTIC_CODES.BOOT }], previousEvents: [{ at: 0, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] });
+  diagnostics.setEnabled(false);
+  assert.deepEqual(diagnostics.read(), { version: 1, events: [] });
+  assert.equal(storage.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
+});

@@ -102,6 +102,7 @@ export function createWorkoutController({
   let deferredServerWorkout = null;
   let lastServerWorkoutSignature = null;
   let sessionGeneration = 0;
+  let disposed = false;
   let getReadySeconds = 5;
 
   function hasActiveTimer() {
@@ -111,15 +112,20 @@ export function createWorkoutController({
   // External replacement invalidates terminal writes; same-workout adoption does not.
   let workoutGeneration = 0;
 
+  function dispose() {
+    disposed = true;
+    deferredServerWorkout = null;
+  }
+
   function log(message, data = {}) {
-    if (!logger) return;
+    if (disposed || !logger) return;
     if (typeof logger.log === 'function') {
       logger.log(data, message);
     }
   }
 
   function logError(message, err = null) {
-    if (!logger) return;
+    if (disposed || !logger) return;
     if (typeof logger.error === 'function') {
       logger.error({ error: err?.message || String(err) }, message);
     } else if (typeof logger.log === 'function') {
@@ -128,6 +134,7 @@ export function createWorkoutController({
   }
 
   function setStatus(patch = {}) {
+    if (disposed) return;
     currentStatus = {
       code: patch.code || SYNC_STATUS_CODES.IDLE,
       detail: patch.detail ?? null,
@@ -139,13 +146,14 @@ export function createWorkoutController({
   }
 
   function notifyChange() {
+    if (disposed) return;
     if (typeof onChange === 'function') {
       onChange(session.view(now()));
     }
   }
 
   function persist() {
-    if (!dayPlan || !store) return false;
+    if (disposed || !dayPlan || !store) return false;
     return store.save({
       plan: dayPlan,
       journal: session.getJournal(),
@@ -155,6 +163,7 @@ export function createWorkoutController({
   }
 
   function mutateSession(action) {
+    if (disposed) return;
     const deferredWrites = deferredServerWorkout && JSON.stringify(session.getWorkoutSetWrites());
     action();
     // A delayed snapshot cannot describe sets completed after it was received.
@@ -166,7 +175,7 @@ export function createWorkoutController({
   }
 
   function preserveIntervals(capturedAt = now()) {
-    if (directSync.mode !== 'DIRECT') return;
+    if (disposed || directSync.mode !== 'DIRECT') return;
     const through = directSync.intervalsPreservedThrough;
     const nextIntervals = session
       .getWorkoutIntervals(capturedAt)
@@ -222,6 +231,7 @@ export function createWorkoutController({
   }
 
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
+    if (disposed) return;
     if (hasActiveTimer()) {
       deferredServerWorkout = serverWorkout;
       return;
@@ -378,6 +388,7 @@ export function createWorkoutController({
       persist: shouldPersist = false,
     } = {}
   ) {
+    if (disposed) return;
     dayPlan = plan;
     session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
     sessionGeneration += 1;
@@ -397,6 +408,7 @@ export function createWorkoutController({
   }
 
   function restore() {
+    if (disposed) return { success: false, reason: 'DISPOSED' };
     if (!store) {
       return { success: false, reason: 'NO_STORE' };
     }
@@ -451,6 +463,7 @@ export function createWorkoutController({
   }
 
   function updateSync(patch = {}) {
+    if (disposed) return directSync;
     directSync = normalizeDirectSync({
       ...directSync,
       ...patch,
@@ -468,6 +481,7 @@ export function createWorkoutController({
       acknowledgedSetCount = null,
     } = {}
   ) {
+    if (disposed) return false;
     if (hasActiveTimer()) return false;
     if (directSync.mode === 'DIRECT') {
       preserveIntervals(now());
@@ -495,6 +509,7 @@ export function createWorkoutController({
   }
 
   function clear() {
+    if (disposed) return;
     if (store) {
       store.clear();
     }
@@ -570,6 +585,7 @@ export function createWorkoutController({
   }
 
   function ensureDirectWorkoutStarted() {
+    if (disposed) return Promise.resolve(false);
     if (directSync.mode !== 'DIRECT' || directSync.startConfirmed) {
       return Promise.resolve(false);
     }
@@ -597,10 +613,10 @@ export function createWorkoutController({
     directStartPromise = (async () => {
       try {
         const res = await request(MESSAGE_TYPES.START_WORKOUT, payload).catch((err) => {
-          if (session !== startingSession) return null;
+          if (disposed || session !== startingSession) return null;
           throw err;
         });
-        if (session !== startingSession) return false;
+        if (disposed || session !== startingSession) return false;
         policy.markAuthoritativeResponse();
         const payloadObj = res ? res.payload : null;
         const returnedWorkout = payloadObj ? payloadObj.workout : null;
@@ -620,6 +636,7 @@ export function createWorkoutController({
         notifyChange();
         return true;
       } catch (err) {
+        if (disposed || session !== startingSession) return false;
         if (err?.code === 'workout_already_active' || err?.code === 'workout_start_time_taken') {
           directSync.conflict = true;
           persist();
@@ -646,6 +663,7 @@ export function createWorkoutController({
   }
 
   function synchronizeDirectSets() {
+    if (disposed) return Promise.resolve(false);
     if (directSync.mode !== 'DIRECT' || directSync.conflict) return Promise.resolve(false);
     if (directSyncPromise) {
       return directSyncPromise;
@@ -659,12 +677,12 @@ export function createWorkoutController({
       let syncGeneration = null;
       try {
         await ensureDirectWorkoutStarted();
-        if (directSync.conflict || !directSync.startConfirmed) return false;
+        if (disposed || directSync.conflict || !directSync.startConfirmed) return false;
         syncSession = session;
         syncGeneration = sessionGeneration;
 
         while (true) {
-          if (session !== syncSession || sessionGeneration !== syncGeneration) return false;
+          if (disposed || session !== syncSession || sessionGeneration !== syncGeneration) return false;
           if (directSync.conflict) break;
           const allWrites = session.getWorkoutSetWrites();
           const batchStart = directSync.acknowledgedSetCount;
@@ -678,7 +696,7 @@ export function createWorkoutController({
           const batchLength = batch.length;
 
           const res = await request(MESSAGE_TYPES.SYNC_WORKOUT_SETS, { sets: batch });
-          if (session !== syncSession || sessionGeneration !== syncGeneration) return false;
+          if (disposed || session !== syncSession || sessionGeneration !== syncGeneration) return false;
           const currentWrites = session.getWorkoutSetWrites();
           const prefixMatches = directSync.acknowledgedSetCount === batchStart && batch.every(
             (write, index) => JSON.stringify(currentWrites[batchStart + index]) === JSON.stringify(write)
@@ -716,7 +734,7 @@ export function createWorkoutController({
         }
         return true;
       } catch (err) {
-        if (syncSession && (session !== syncSession || sessionGeneration !== syncGeneration)) {
+        if (disposed || (syncSession && (session !== syncSession || sessionGeneration !== syncGeneration))) {
           return false;
         }
         logError('sync direct sets failed', err);
@@ -739,6 +757,7 @@ export function createWorkoutController({
   }
 
   async function pollCurrentWorkout() {
+    if (disposed) return false;
     if (hasActiveTimer()) return false;
     if (directSync.mode !== 'DIRECT' || directSync.conflict) return false;
     if (!request) return false;
@@ -755,6 +774,7 @@ export function createWorkoutController({
 
     try {
       const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+      if (disposed) return false;
       policy.markSuccess();
       const payloadObj = res ? res.payload : null;
       const serverWorkout = payloadObj ? payloadObj.workout : null;
@@ -805,6 +825,7 @@ export function createWorkoutController({
       }
       return false;
     } catch (err) {
+      if (disposed) return false;
       policy.markFailure();
       logError('poll current workout failed', err);
       return false;
@@ -814,6 +835,7 @@ export function createWorkoutController({
   }
 
   function retryPendingWrites() {
+    if (disposed) return Promise.resolve(false);
     const pendingCount = session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
     if (directSync.mode !== 'DIRECT' || pendingCount <= 0 || !request || directSync.conflict) {
       return Promise.resolve(false);
@@ -822,7 +844,7 @@ export function createWorkoutController({
   }
 
   function requestWorkoutRefresh() {
-    if (directSync.mode !== 'DIRECT') return Promise.resolve(false);
+    if (disposed || directSync.mode !== 'DIRECT') return Promise.resolve(false);
     policy.request();
     return pollCurrentWorkout().catch((err) => {
       logError('background workout refresh failed', err);
@@ -831,10 +853,12 @@ export function createWorkoutController({
   }
 
   async function adoptCurrentWorkout({ preserveNavigation = false } = {}) {
+    if (disposed) return { success: false, reason: 'DISPOSED' };
     if (!request) return { success: false, reason: 'NO_TRANSPORT' };
     setStatus({ code: SYNC_STATUS_CODES.PENDING, detail: 'ADOPTING' });
     try {
       const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+      if (disposed) return { success: false, reason: 'DISPOSED' };
       policy.markAuthoritativeResponse();
       const payloadObj = res ? res.payload : null;
       const workout = payloadObj ? payloadObj.workout : null;
@@ -855,6 +879,7 @@ export function createWorkoutController({
       setStatus({ code: SYNC_STATUS_CODES.IDLE });
       return { success: true, workout };
     } catch (err) {
+      if (disposed) return { success: false, reason: 'DISPOSED' };
       logError('adopt current workout failed', err);
       setStatus({ code: SYNC_STATUS_CODES.ERROR, error: err });
       throw err;
@@ -866,12 +891,13 @@ export function createWorkoutController({
     const startTime = session.view(now()).startedAt;
     const programId = dayPlan?.programId;
     // Internal snapshot adoption may replace the session object for this workout.
-    return () => workoutGeneration === generation
+    return () => !disposed && workoutGeneration === generation
       && session.view(now()).startedAt === startTime
       && dayPlan?.programId === programId;
   }
 
   async function finishWorkoutRemote() {
+    if (disposed) return { success: false, reason: 'DISPOSED' };
     if (hasActiveTimer()) return { success: false, reason: 'TIMED_SET_ACTIVE' };
     if (directSync.mode !== 'DIRECT' || !dayPlan) {
       return { success: false, reason: 'NOT_DIRECT' };
@@ -937,6 +963,7 @@ export function createWorkoutController({
   }
 
   async function discardWorkoutRemote() {
+    if (disposed) return { success: false, reason: 'DISPOSED' };
     if (directDiscardPromise) return directDiscardPromise;
     if (directSync.mode !== 'DIRECT') {
       clear();
@@ -988,6 +1015,7 @@ export function createWorkoutController({
 
   return {
     configureTimedSets: (options = {}) => {
+      if (disposed) return;
       getReadySeconds = normalizeGetReadySeconds(options.getReadySeconds);
     },
     startTimedSet: (options = {}) => mutateSession(() =>
@@ -1004,6 +1032,7 @@ export function createWorkoutController({
     resumeTimedSet: (options = {}) => mutateSession(() =>
       session.resumeTimedSet({ timestamp: now(), ...options })),
     advanceTimedSet: (options = {}) => {
+      if (disposed) return false;
       if (!session.advanceTimedSet({ timestamp: now(), ...options })) return false;
       persist();
       notifyChange();
@@ -1021,6 +1050,7 @@ export function createWorkoutController({
     getStatus: () => ({ ...currentStatus }),
 
     startWorkout: (options = {}) => {
+      if (disposed) return;
       mutateSession(() => session.startWorkout({ timestamp: options.timestamp ?? now() }));
       if (directSync.mode === 'DIRECT' && request) {
         ensureDirectWorkoutStarted().catch((err) => {
@@ -1071,6 +1101,7 @@ export function createWorkoutController({
         session.adjustRest(deltaSeconds, { timestamp: options.timestamp ?? now() })
       ),
     nextSet: (options = {}) => {
+      if (disposed) return;
       if (deferredServerWorkout) {
         const sw = deferredServerWorkout;
         deferredServerWorkout = null;
@@ -1093,6 +1124,7 @@ export function createWorkoutController({
     getIntervals,
     persist,
     clear,
+    dispose,
 
     ensureStarted: ensureDirectWorkoutStarted,
     ensureDirectWorkoutStarted,
@@ -1110,8 +1142,9 @@ export function createWorkoutController({
     discardWorkoutRemote,
     hasDeferredServerWorkout: () => deferredServerWorkout !== null,
     getDeferredServerWorkout: () => deferredServerWorkout,
-    markAuthoritativeResponse: () => policy.markAuthoritativeResponse(),
+    markAuthoritativeResponse: () => !disposed && policy.markAuthoritativeResponse(),
     applyDeferredServerWorkout: () => {
+      if (disposed) return;
       if (deferredServerWorkout) {
         const sw = deferredServerWorkout;
         deferredServerWorkout = null;
@@ -1124,7 +1157,7 @@ export function createWorkoutController({
     getLastWorkoutSetWrite: () => session.getLastWorkoutSetWrite(),
     getJournal: () => session.getJournal(),
     getWorkoutIntervals: (endTime) => session.getWorkoutIntervals(endTime),
-    clearPersisted: () => store?.clear(),
+    clearPersisted: () => !disposed && store?.clear(),
     isAllCompleted: () => session.isAllCompleted(),
   };
 }

@@ -48,6 +48,10 @@ test('GET_SETTINGS keeps only sanitized watch diagnostics on the phone', async (
         { at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP, apiKey: 'secret' },
         { at: 1_001, code: 'Private workout' },
       ],
+      previousEvents: [
+        { at: 900, code: 'RENDER_START', exerciseName: 'Private exercise' },
+        { at: 901, code: 'Private workout' },
+      ],
     } },
   }));
   assert.equal(response.type, MESSAGE_TYPES.SETTINGS_DATA);
@@ -56,6 +60,7 @@ test('GET_SETTINGS keeps only sanitized watch diagnostics on the phone', async (
   assert.deepEqual(JSON.parse(values.get(WORKOUT_DIAGNOSTICS_KEY)), {
     version: 1,
     events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
+    previousEvents: [{ at: 900, code: 'RENDER_START' }],
   });
   assert.doesNotMatch(values.get(WORKOUT_DIAGNOSTICS_KEY), /secret|Private/);
 });

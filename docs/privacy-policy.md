@@ -24,7 +24,7 @@ communicating directly with Liftosaur's official servers.
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
 | Optional exercise images | Downloaded and converted on the phone, then stored locally on the watch | Download requests go to Liftosaur; image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
-| Optional Lifto Workout diagnostics (last 12 timestamps, action codes and available memory measurements) | Workout local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify the last steps and memory pressure before a crash when system logs cannot be exported |
+| Optional Lifto Workout diagnostics (up to 12 steps each from the current and previous runs: timestamps, action/lifecycle/drawing codes and available memory measurements) | Workout local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify the last steps and memory pressure before a crash when system logs cannot be exported |
 
 ## What the application never does
 

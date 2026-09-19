@@ -212,6 +212,8 @@ function setLightVibrationMode() {
 }
 
 function triggerRestVibration() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
+  const generation = lifecycleGeneration;
   try {
     stopVibration();
     if (!vibrator) {
@@ -220,6 +222,7 @@ function triggerRestVibration() {
     setRestVibrationMode();
     vibrator.start();
     vibrationTimer = setTimeout(() => {
+      if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
       vibrationTimer = null;
       stopVibration();
     }, 1400);
@@ -229,6 +232,8 @@ function triggerRestVibration() {
 }
 
 function triggerLightVibration() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
+  const generation = lifecycleGeneration;
   try {
     stopVibration();
     if (!vibrator) {
@@ -237,6 +242,7 @@ function triggerLightVibration() {
     setLightVibrationMode();
     vibrator.start();
     vibrationTimer = setTimeout(() => {
+      if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
       vibrationTimer = null;
       stopVibration();
     }, 300);
@@ -250,6 +256,8 @@ let workoutController = null;
 let restAlertTracker = createRestAlertTracker();
 let hasBuilt = false;
 let isTearingDown = false;
+let isPaused = false;
+let lifecycleGeneration = 0;
 let initialLoadPending = false;
 let restoredDisplaySettingsPending = false;
 let terminalActionPending = null;
@@ -303,6 +311,7 @@ let activeWidgets = [];
 let liveWidgets = {};
 
 function send(type, payload = {}, options = {}) {
+  if (isTearingDown) return Promise.reject(new Error('Workout page closed'));
   if (!widgetInstance || typeof widgetInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
@@ -310,6 +319,7 @@ function send(type, payload = {}, options = {}) {
   return withRequestTimeout(widgetInstance.request(createMessage({ type, payload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
+    if (isTearingDown) throw new Error('Workout page closed');
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
@@ -337,20 +347,28 @@ function updateSyncWarning() {
 }
 
 let isDispatchingClick = false;
-let renderScheduled = false;
+let renderTimer = null;
 
 function markControllerUiDirty() {
+  if (isTearingDown) return;
   controllerUiDirty = true;
 }
 
 function scheduleRenderUI() {
+  if (isTearingDown) return;
   controllerUiDirty = true;
-  if (renderScheduled) return;
-  renderScheduled = true;
-  setTimeout(() => {
-    renderScheduled = false;
+  if (isPaused || !hasBuilt || renderTimer !== null) return;
+  const generation = lifecycleGeneration;
+  renderTimer = setTimeout(() => {
+    if (generation !== lifecycleGeneration || isTearingDown || isPaused) return;
+    renderTimer = null;
     renderUI();
   }, 0);
+}
+
+function cancelScheduledRender() {
+  if (renderTimer !== null) clearTimeout(renderTimer);
+  renderTimer = null;
 }
 
 function consumeControllerUiChange() {
@@ -369,6 +387,7 @@ function beginRequest(message) {
 }
 
 function failRequest(err) {
+  if (isTearingDown) return;
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED);
   isBusy = false;
   statusMessage = '';
@@ -378,10 +397,12 @@ function failRequest(err) {
 }
 
 function logRecoverableError(message, err) {
+  if (isTearingDown) return;
   console.log(message, { code: err?.code || 'UNKNOWN' });
 }
 
 function handlePollFailure(err) {
+  if (isTearingDown) return;
   logRecoverableError('[lifto-ext] workout refresh failed', err);
   const previousWarning = syncWarning;
   updateSyncWarning();
@@ -389,7 +410,7 @@ function handlePollFailure(err) {
 }
 
 function applyNativePauseActions(actions) {
-  if (isTearingDown || !workoutController || !Array.isArray(actions) || actions.length === 0) return;
+  if (isTearingDown || isPaused || !workoutController || !Array.isArray(actions) || actions.length === 0) return;
   for (const action of actions) {
     if (action.type === 'pause') {
       workoutController.pauseWorkout({ timestamp: action.timestamp, source: 'native' });
@@ -404,12 +425,14 @@ const SPORT_METRICS_INTERVAL_MS = 3000;
 let lastSportMetricsSampleAt = 0;
 
 function refreshSportMetrics() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
+  const generation = lifecycleGeneration;
   const requestedAt = Date.now();
   if (requestedAt - lastSportMetricsSampleAt < SPORT_METRICS_INTERVAL_MS) return;
   lastSportMetricsSampleAt = requestedAt;
   try {
     getSportData({ type: 'duration' }, (result) => {
-      if (isTearingDown) return;
+      if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
       const parsed = parseSportDataResult(result, 'duration');
       const durationSeconds = parsed.ok ? parseDurationToSeconds(parsed.value) : null;
       const view = workoutController?.view();
@@ -438,6 +461,7 @@ function selectedScreenOnDuration() {
 }
 
 function applyDisplayHold() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
   const duration = selectedScreenOnDuration();
   const durationMs = duration === 'always' ? ALWAYS_SCREEN_ON_MS : duration * 1000;
   const gestureDuration = duration === 'always' ? 0 : durationMs;
@@ -475,6 +499,17 @@ function retryPendingWrites() {
     .catch(handlePollFailure);
 }
 
+function syncCompletedSets() {
+  const recordResult = (synced) => {
+    if (isTearingDown) return;
+    workoutDiagnostics.record(synced
+      ? WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED
+      : WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
+    if (!synced) controllerUiDirty = true;
+  };
+  return workoutController.syncSets().then(recordResult, () => recordResult(false));
+}
+
 function clearWidgets() {
   for (const w of activeWidgets) {
     try {
@@ -498,6 +533,8 @@ function addActionWidget(props) {
   return addRawWidget(widget.BUTTON, {
     ...props,
     click_func: typeof handler === 'function' ? (w) => {
+      if (isTearingDown || isPaused || !hasBuilt) return;
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP);
       isDispatchingClick = true;
       try {
         handler(w);
@@ -536,6 +573,7 @@ function addLiveButton(key, props) {
 const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius'];
 
 function updateLiveWidget(key, changes) {
+  if (isTearingDown || isPaused || !hasBuilt) return false;
   const entry = liveWidgets[key];
   if (!entry) return true;
   try {
@@ -1539,17 +1577,7 @@ function renderTimedSetScreen(view) {
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
       workoutController.stopTimedSide();
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
-      workoutController.syncSets().then(
-        (synced) => {
-          workoutDiagnostics.record(synced
-            ? WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED
-            : WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
-        },
-        () => {
-          workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
-          controllerUiDirty = true;
-        },
-      );
+      syncCompletedSets();
       if (workoutController.view().state === SESSION_STATES.FINISHED) submitWorkout();
     }
   });
@@ -1793,17 +1821,7 @@ function renderActiveSetScreen(view) {
         repsLeft: set?.isUnilateral ? set.reps : null,
       });
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
-      workoutController.syncSets().then(
-        (synced) => {
-          workoutDiagnostics.record(synced
-            ? WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED
-            : WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
-        },
-        () => {
-          workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SYNC_FAILED);
-          controllerUiDirty = true;
-        },
-      );
+      syncCompletedSets();
       if (workoutController.view().state === SESSION_STATES.FINISHED) {
         submitWorkout();
       }
@@ -2745,6 +2763,11 @@ function renderConflictScreen() {
 }
 
 function handleExerciseImageChange(_imageUrl, status) {
+  if (isTearingDown) return;
+  if (isPaused || !hasBuilt) {
+    controllerUiDirty = true;
+    return;
+  }
   if (isNotesModalOpen) {
     if (status === 'unavailable') { renderUI(); return; }
     updateNotesImage();
@@ -2763,11 +2786,17 @@ function handleExerciseImageChange(_imageUrl, status) {
 }
 
 function renderUI() {
+  if (isTearingDown || !hasBuilt) return;
+  if (isPaused) {
+    controllerUiDirty = true;
+    return;
+  }
   if (isDispatchingClick) {
     scheduleRenderUI();
     return;
   }
-  if (!hasBuilt) return;
+  cancelScheduledRender();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
   consumeControllerUiChange();
   preparationImageUrl = null;
   updateSyncWarning();
@@ -2779,6 +2808,7 @@ function renderUI() {
   renderClock();
   renderScreen();
   redraw();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
 }
 
 function renderScreen() {
@@ -2934,10 +2964,13 @@ function resetConnectionRetry() {
 }
 
 function scheduleConnectionRetry() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
+  const generation = lifecycleGeneration;
   const delay = nextPhoneRetryDelay(connectionRetryAttempt);
   if (delay === null || connectionRetryTimer) return;
   connectionRetryAttempt += 1;
   connectionRetryTimer = setTimeout(() => {
+    if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
     connectionRetryTimer = null;
     if (!isTearingDown && screen === EXTENSION_SCREENS.CONNECTION && !isBusy) {
       startInitialNetworkLoad();
@@ -2951,8 +2984,10 @@ function retryConnection() {
 }
 
 function loadDisplaySettings() {
+  const generation = lifecycleGeneration;
   const diagnosticsPayload = workoutDiagnostics.isEnabled() ? { diagnostics: workoutDiagnostics.read() } : {};
   return send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsPayload).then((settingsRes) => {
+    if (isTearingDown || generation !== lifecycleGeneration) return accountSettings;
     const diagnosticsWereEnabled = workoutDiagnostics.isEnabled();
     workoutDiagnostics.setEnabled(normalizeWorkoutDiagnosticsEnabled(settingsRes.payload?.workoutDiagnosticsEnabled));
     if (!diagnosticsWereEnabled && workoutDiagnostics.isEnabled()) {
@@ -3041,6 +3076,7 @@ function submitWorkout() {
   workoutController
     .finishWorkoutRemote()
     .then((result) => {
+      if (isTearingDown) return;
       if (result.reason === 'SESSION_REPLACED') return;
       if (!result.success) throw new Error(result.reason || 'Save failed');
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.FINISH_SAVED);
@@ -3051,6 +3087,7 @@ function submitWorkout() {
       renderUI();
     })
     .catch((err) => {
+      if (isTearingDown) return;
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.FINISH_FAILED);
       finishState = {
         status: 'FAILED',
@@ -3066,6 +3103,7 @@ function handleDiscardWorkout() {
   workoutController
     .discardWorkoutRemote()
     .then((result) => {
+      if (isTearingDown) return;
       if (result.reason === 'SESSION_REPLACED') return;
       if (!result.success) throw new Error(result.reason || 'Discard pending');
       returnAfterDiscard();
@@ -3107,6 +3145,7 @@ function adoptCurrentWorkout() {
 }
 
 function tick() {
+  if (isTearingDown || isPaused || !hasBuilt) return;
   updateClock();
   if (liveWidgets.finishSwipe) updateFinishSwipeHint();
 
@@ -3280,8 +3319,10 @@ DataWidget(
     },
 
     onResume() {
+      if (!hasBuilt || isTearingDown) return;
+      isPaused = false;
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RESUME);
       console.log('[lifto-ext] data-widget onResume');
-      if (!hasBuilt) return;
       loadDisplaySettings().catch((err) => {
         logRecoverableError('[lifto-ext] display settings unavailable', err);
       });
@@ -3311,9 +3352,15 @@ DataWidget(
           .catch(handlePollFailure);
       }
       renderUI();
+      if (screen === EXTENSION_SCREENS.CONNECTION && !isBusy) scheduleConnectionRetry();
     },
 
     onPause() {
+      isPaused = true;
+      lifecycleGeneration += 1;
+      cancelScheduledRender();
+      resetConnectionRetry();
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PAUSE);
       console.log('[lifto-ext] data-widget onPause');
       nativePauseReconciler.loseFocus({ timestamp: Date.now() });
       resetDisplayHold();
@@ -3332,6 +3379,10 @@ DataWidget(
     onDestroy() {
       isTearingDown = true;
       hasBuilt = false;
+      lifecycleGeneration += 1;
+      cancelScheduledRender();
+      resetConnectionRetry();
+      workoutController?.dispose();
       stopClock();
       if (vibrationTimer) clearTimeout(vibrationTimer);
       vibrationTimer = null;
