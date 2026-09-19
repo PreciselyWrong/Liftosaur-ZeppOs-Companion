@@ -1,5 +1,6 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
+import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 function isDemoApiKey(value) {
@@ -130,6 +131,7 @@ AppSettingsPage({
     screenOnDuration: 120,
     getReadySeconds: 5,
     exerciseImages: false,
+    autoPrepare: false,
     workoutDiagnosticsEnabled: false,
   },
 
@@ -286,6 +288,23 @@ AppSettingsPage({
                 props.settingsStorage.setItem('getReadySeconds', String(seconds));
               },
             }),
+            Toggle({
+              label: 'Auto prepare',
+              value: this.state.autoPrepare,
+              onChange: (value) => {
+                const enabled = normalizeAutoPrepare(value);
+                this.state.autoPrepare = enabled;
+                props.settingsStorage.setItem('autoPrepare', String(enabled));
+              },
+            }),
+            Text(
+              {
+                paragraph: true,
+                align: 'center',
+                style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' },
+              },
+              'Open the next set while rest runs.'
+            ),
             Select({
               label: settingSummary('Exercise images', EXERCISE_IMAGE_OPTIONS, exerciseImagesValue),
               value: exerciseImagesValue,
@@ -409,6 +428,7 @@ AppSettingsPage({
 
   getStorage(props) {
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
+    this.state.autoPrepare = normalizeAutoPrepare(props.settingsStorage.getItem('autoPrepare'));
     this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(
       props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY)
     );

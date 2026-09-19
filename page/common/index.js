@@ -1,7 +1,8 @@
 import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
+import { PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
+import { createRestPresentationState, updateRestPresentation } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -245,6 +246,7 @@ let flashWidget = null;
 let flashTimer = null;
 let vibrationTimer = null;
 let isRestMinimized = false;
+let restPresentation = createRestPresentationState();
 let isWorkoutTimerControlsOpen = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
@@ -261,6 +263,17 @@ let lastRenderedSecond = null;
 let lastRenderedState = null;
 let activeWidgets = [];
 let modalControls = null;
+
+function setRestPrepared(isPrepared) {
+  isRestMinimized = Boolean(isPrepared);
+  restPresentation = { ...restPresentation, isPrepared: isRestMinimized };
+}
+
+function syncRestPresentation(rest) {
+  const next = updateRestPresentation(restPresentation, rest, accountSettings?.autoPrepare);
+  if (next !== restPresentation) isRestMinimized = next.isPrepared;
+  restPresentation = next;
+}
 
 function selectedScreenOnDuration() {
   const configured = accountSettings?.screenOnDuration;
@@ -294,7 +307,10 @@ function resetDisplayHold() {
 
 function adoptAccountSettings(payload) {
   const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
+  const autoPrepareWasEnabled = accountSettings?.autoPrepare === true;
   accountSettings = payload || {};
+  const autoPrepareChanged = autoPrepareWasEnabled !== (accountSettings.autoPrepare === true);
+  if (autoPrepareChanged) restPresentation = createRestPresentationState();
   exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
   if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
     notesPage = 0;
@@ -303,6 +319,7 @@ function adoptAccountSettings(payload) {
   }
   workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
   applyDisplayHold();
+  if (autoPrepareChanged && screen === SCREEN.SESSION && !isNotesModalOpen) renderUI();
 }
 
 /**
@@ -506,7 +523,7 @@ function addLiveButton(key, props) {
   return w;
 }
 
-const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius'];
+const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width'];
 
 /** Returns false when the runtime refused the in-place update, so the caller can fall back. */
 function updateLiveWidget(key, changes) {
@@ -1315,7 +1332,7 @@ function handleGesture(gesture) {
 
   if (isRestMinimized) {
     if (gesture !== GESTURE_UP) return false;
-    isRestMinimized = false;
+    setRestPrepared(false);
     renderUI();
     requestWorkoutRefresh();
     return true;
@@ -1328,7 +1345,7 @@ function handleGesture(gesture) {
   } else if (gesture === GESTURE_UP) {
     persistAndRender(() => session.toggleRestPause());
   } else if (gesture === GESTURE_DOWN) {
-    isRestMinimized = true;
+    setRestPrepared(true);
     renderUI();
   } else {
     return false;
@@ -2376,6 +2393,59 @@ function renderTopBar(view, onBack) {
   });
 }
 
+function restStatusColor(rest) {
+  if (rest?.isPaused) return THEME.yellow;
+  if (rest?.isOvertime) return THEME.error;
+  return THEME.primary;
+}
+
+function renderRestBezel(rest) {
+  const props = {
+    x: 2,
+    y: 2,
+    w: W - 4,
+    h: H - 4,
+    radius: LAYOUT.isFitted ? Math.round(W * 0.12) : Math.round(W / 2),
+    line_width: Math.max(4, Math.round(W * 0.014)),
+    color: restStatusColor(rest),
+  };
+  const bezel = addRawWidget(widget.STROKE_RECT, props);
+  liveWidgets.restBezel = { widget: bezel, props };
+}
+
+function renderPreparedTopBar(view, onOverview, onRest) {
+  const topBar = PREPARED_TOP_BAR_LAYOUT;
+  addWidget(widget.BUTTON, {
+    x: px(topBar.menu.x), y: px(topBar.y), w: px(topBar.menu.width), h: px(topBar.height),
+    radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.cardActive,
+    text: MENU_LABEL, text_size: font('button'), click_func: onOverview,
+  });
+  addLiveButton('elapsed', {
+    x: px(topBar.elapsed.x), y: px(topBar.y), w: px(topBar.elapsed.width), h: px(topBar.height),
+    radius: px(10), normal_color: THEME.bg, press_color: THEME.primaryDark,
+    color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
+    text_size: font('micro'), text: elapsedLabel(view), click_func: openWorkoutTimerControls,
+  });
+  addLiveButton('restBannerText', {
+    x: px(topBar.rest.x), y: px(topBar.y), w: px(topBar.rest.width), h: px(topBar.height),
+    radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.cardActive,
+    color: restStatusColor(view.rest), text_size: font('micro'),
+    text: `Rest ${formatSeconds(view.rest.remaining)}`, click_func: onRest,
+  });
+  addLiveLabel('hr', {
+    x: px(topBar.metric.x), y: px(topBar.y), w: px(topBar.metric.width), h: px(topBar.height),
+    color: syncWarning ? THEME.orange : heartRateColor(liveHr), text_size: font('micro'),
+    text: syncWarning ? 'Sync!' : formatHeartRate(liveHr),
+  });
+}
+
+function renderChangeUnderline(visible, x, y, width) {
+  if (!visible) return;
+  addWidget(widget.FILL_RECT, {
+    x: px(x), y: px(y), w: px(width), h: px(2), radius: px(1), color: THEME.primary,
+  });
+}
+
 function renderOverviewScreen(view) {
   renderTopBar(view, () => {
     isOverviewOpen = false;
@@ -2649,41 +2719,13 @@ function renderActiveSetScreen(view) {
   const controls = activeSetLayout(set);
 
   if (isResting) {
-    const bannerColor = view.rest.isOvertime
-      ? THEME.error
-      : (view.rest.isPaused ? THEME.yellow : THEME.primaryPale);
-
-    addWidget(widget.BUTTON, {
-      x: px(82),
-      y: px(42),
-      w: px(44),
-      h: px(40),
-      radius: px(20),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      text: '≡',
-      text_size: font('button'),
-      click_func: () => {
-        isOverviewOpen = true;
-        renderUI();
-      },
-    });
-
-    addLiveButton('restBannerText', {
-      x: px(134),
-      y: px(42),
-      w: px(264),
-      h: px(40),
-      radius: px(20),
-      normal_color: THEME.card,
-      press_color: THEME.cardActive,
-      color: bannerColor,
-      text_size: font('caption'),
-      text: `Rest ${formatSeconds(view.rest.remaining)}`,
-      click_func: () => {
-        isRestMinimized = false;
-        renderUI();
-      },
+    renderRestBezel(view.rest);
+    renderPreparedTopBar(view, () => {
+      isOverviewOpen = true;
+      renderUI();
+    }, () => {
+      setRestPrepared(false);
+      renderUI();
     });
   } else {
     renderTopBar(view, () => {
@@ -2708,6 +2750,7 @@ function renderActiveSetScreen(view) {
     text_style: text_style.NONE,
     text: truncate(exerciseName, 22),
   });
+  renderChangeUnderline(isResting && pending?.changes.exercise, headerX + Math.max(8, (headerWidth - 64) / 2), 119, 64);
 
   {
     addWidget(widget.BUTTON, {
@@ -2785,6 +2828,7 @@ function renderActiveSetScreen(view) {
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
     onPlus: () => persistAndRender(() => session.adjustWeight(1)),
   });
+  renderChangeUnderline(isResting && pending?.changes.weight, 215, controls.rows[0].y + controls.rowHeight - 30, 50);
 
   // Reps stepper
   renderStepper({
@@ -2795,6 +2839,7 @@ function renderActiveSetScreen(view) {
     onMinus: () => persistAndRender(() => session.adjustReps(-1)),
     onPlus: () => persistAndRender(() => session.adjustReps(1)),
   });
+  renderChangeUnderline(isResting && pending?.changes.reps, 215, controls.rows[1].y + controls.rowHeight - 30, 50);
 
   if (controls.showRpe) {
     renderStepper({
@@ -2805,6 +2850,7 @@ function renderActiveSetScreen(view) {
       onMinus: () => persistAndRender(() => session.adjustRpe(-0.5)),
       onPlus: () => persistAndRender(() => session.adjustRpe(0.5)),
     });
+    renderChangeUnderline(isResting && pending?.changes.rpe, 215, controls.rows[2].y + controls.rowHeight - 30, 50);
   }
 
   addWidget(widget.BUTTON, {
@@ -2817,7 +2863,7 @@ function renderActiveSetScreen(view) {
     press_color: 0x1c9c6d,
     color: 0x00281c,
     text: view.timedSet?.phase === 'REST' ? 'Armed'
-      : isResting ? 'Start set' : view.timedSet ? (set.isUnilateral ? 'Start left' : 'Start set') : 'Done',
+      : isResting ? '\u25b6 Start set' : view.timedSet ? (set.isUnilateral ? 'Start left' : 'Start set') : 'Done',
     text_size: font('title'),
     click_func: () => {
       if (!isResting && view.timedSet) {
@@ -2830,7 +2876,7 @@ function renderActiveSetScreen(view) {
       }
       restAlertTracker.reset();
       if (isResting) {
-        isRestMinimized = false;
+        setRestPrepared(false);
         persistAndRender(handleNextSet);
       } else {
         completeCurrentSet();
@@ -3099,7 +3145,7 @@ function renderRestScreen(view) {
     text: 'Prepare',
     text_size: font('button'),
     click_func: () => {
-      isRestMinimized = true;
+      setRestPrepared(true);
       renderUI();
     },
   });
@@ -3116,7 +3162,7 @@ function renderRestScreen(view) {
     text_size: font('button'),
     click_func: () => {
       restAlertTracker.reset();
-      isRestMinimized = false;
+      setRestPrepared(false);
       persistAndRender(handleNextSet);
     },
   });
@@ -3429,6 +3475,7 @@ function renderScreen() {
   }
 
   const view = session.view();
+  syncRestPresentation(view.rest);
 
   if (directSync.mode === 'DIRECT' && directSync.conflict) {
     return renderDirectConflictScreen();
@@ -3550,6 +3597,7 @@ function tick() {
         text: `Rest ${formatSeconds(view.rest.remaining)}`,
         color: restColor,
       }) && patched;
+    patched = updateLiveWidget('restBezel', { color: restStatusColor(view.rest) }) && patched;
   }
 
   if (!patched) {

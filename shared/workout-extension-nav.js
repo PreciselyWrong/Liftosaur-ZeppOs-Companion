@@ -123,10 +123,6 @@ export function formatNextTargetSummary(rest) {
   return `${reps} x ${weight}${rpe}`;
 }
 
-export function shouldAutoStartPreparedSet(isPrepared, rest) {
-  return Boolean(isPrepared && rest && !rest.isPaused && rest.remaining <= 0);
-}
-
 export function formatDots(dots = []) {
   if (!Array.isArray(dots) || dots.length === 0) return '';
   return dots

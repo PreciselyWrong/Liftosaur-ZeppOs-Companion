@@ -9,6 +9,7 @@ import {
   TYPOGRAPHY,
   ACTIVE_SET_LAYOUT,
   EXTENSION_CLOCK_LAYOUT,
+  PREPARED_TOP_BAR_LAYOUT,
   activeSetLayout,
   extensionActiveSetLayout,
   shouldShowRpe,
@@ -72,6 +73,20 @@ test('dense screens show fewer readable rows instead of shrinking text', () => {
   assert.equal(LIST_PAGE_SIZE, 3);
   assert.equal(OVERVIEW_PAGE_SIZE, 3);
   assert.equal(READY_PREVIEW_SIZE, 2);
+});
+
+test('Prepare top bar fits the round-screen chord without overlapping controls', () => {
+  const { y, height, menu, elapsed, rest, metric } = PREPARED_TOP_BAR_LAYOUT;
+  const radius = 240;
+  const inset = radius - Math.sqrt(radius ** 2 - (radius - y) ** 2);
+  const visibleRight = 480 - inset;
+
+  assert.ok(menu.x >= inset);
+  assert.ok(menu.x + menu.width <= elapsed.x);
+  assert.ok(elapsed.x + elapsed.width <= rest.x);
+  assert.ok(rest.x + rest.width <= metric.x);
+  assert.ok(metric.x + metric.width <= visibleRight);
+  assert.ok(y + height <= 90);
 });
 
 test('ready exercise pages preserve order and wrap in both directions', () => {
@@ -271,8 +286,8 @@ test('session gestures mirror reversible rest and overview controls', () => {
   assert.match(handler, /session\.adjustRest\(-10\)/);
   assert.match(handler, /session\.adjustRest\(10\)/);
   assert.match(handler, /session\.toggleRestPause\(\)/);
-  assert.match(handler, /isRestMinimized = true/);
-  assert.match(handler, /isRestMinimized = false/);
+  assert.match(handler, /setRestPrepared\(true\)/);
+  assert.match(handler, /setRestPrepared\(false\)/);
   assert.match(handler, /overviewPage = \(overviewPage [+-] 1/);
   assert.match(handler, /isOverviewOpen = false/);
 });
