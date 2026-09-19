@@ -28,7 +28,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
   const agentInstructions = read('AGENTS.md');
   assert.match(
     agentInstructions,
-    /Pull requests: exactly one commit and one subject per PR; split independent changes into separate branches and PRs\./,
+    /Pull requests contain exactly one commit and one subject; split independent changes into separate branches and PRs\./,
   );
   assert.ok(agentInstructions.split(/\r?\n/).length <= 120, 'AGENTS.md must stay within 120 lines');
 });
@@ -36,6 +36,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
 test('README explains the two products and links their public guides', () => {
   const readme = read('README.md');
 
+  assert.ok(readme.split(/\r?\n/).length <= 150, 'README.md must stay within 150 lines');
   assert.match(readme, /two apps are complementary and can be installed together/i);
   assert.match(readme, /docs\/workout-extension-manual-actions\.md/);
   assert.match(readme, /docs\/workout-extension-hardware-test-plan\.md/);
@@ -62,7 +63,7 @@ test('GitHub Issues and Project own the work backlog', () => {
   assert.match(agents, /github\.com\/users\/PreciselyWrong\/projects\/1/i);
   assert.match(agents, /only backlog/i);
   assert.match(agents, /set `In Progress` when work starts/i);
-  assert.match(agents, /close the issue, and confirm `Done`/i);
+  assert.match(agents, /link the PR and close as `Done`/i);
 
   const forms = [
     ['bug.yml', 'bug'],
