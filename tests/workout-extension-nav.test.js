@@ -15,7 +15,6 @@ import {
   formatTargetRpeSummary,
   formatWeightValue,
   formatTargetRepsSummary,
-  shouldAutoStartPreparedSet,
   supersetColor,
 } from '../shared/workout-extension-nav.js';
 
@@ -144,14 +143,6 @@ test('formatting helpers format seconds and weight cleanly', () => {
     nextTargetRpe: 9,
     nextLogRpe: true,
   }), '12+ x 80kg @9+');
-});
-
-test('Prepare auto-starts only once rest has expired while running', () => {
-  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 0, isPaused: false }), true);
-  assert.equal(shouldAutoStartPreparedSet(true, { remaining: -1, isPaused: false }), true);
-  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 1, isPaused: false }), false);
-  assert.equal(shouldAutoStartPreparedSet(true, { remaining: 0, isPaused: true }), false);
-  assert.equal(shouldAutoStartPreparedSet(false, { remaining: 0, isPaused: false }), false);
 });
 
 test('supersetColor maps group identifiers to distinct high-contrast colors', () => {

@@ -142,7 +142,7 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   );
 
   assert.match(source, /withRequestTimeout/, 'Phone bridge requests must have a bounded timeout');
-  assert.match(source, /shouldAutoStartPreparedSet/, 'Prepare must auto-start when rest expires');
+  assert.doesNotMatch(source, /shouldAutoStartPreparedSet/, 'Prepare must keep running into overtime');
 
   // Display hold duration must be safely bounded to prevent 32-bit tick arithmetic overflow
   const alwaysMsMatch = source.match(/ALWAYS_SCREEN_ON_MS\s*=\s*(\d+)/);
@@ -350,6 +350,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
       restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
+      setRestPrepared(value) { env.isRestMinimized = value; },
       workoutController: { nextSet: () => { started++; } }, renderUI() {}, scheduleRenderUI() {}, openWorkoutTimerControls() {},
     };
     const render = new Function('env', `with (env) { ${extractFunction(source, 'renderRestScreen')}; return renderRestScreen; }`)(env);
@@ -389,7 +390,7 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
     syncWarning: null, updateSyncWarning() {}, handlePollFailure() {},
     lastRenderedState: 'REST', lastRenderedSecond: 1, isRestMinimized: false, liveWidgets: { restValue: {} },
     restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },
-    shouldAutoStartPreparedSet: () => false, THEME: {}, formatSeconds: String, updateLiveWidget() {},
+    restStatusColor: () => 0, THEME: {}, formatSeconds: String, updateLiveWidget() {},
     renderUI: () => { renders++; env.lastRenderedSecond = view.rest.remaining; },
   };
   const tick = new Function('env', `with (env) { ${extractFunction(readWidgetSource(), 'tick')}; return tick; }`)(env);

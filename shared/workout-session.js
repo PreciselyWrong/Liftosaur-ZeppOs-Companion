@@ -508,6 +508,7 @@ export function createWorkoutSession({
             loadSetTargets(upcomingIdx, progress[upcomingIdx].completedSets.length);
           }
           restInfo = {
+            identity: `rest:${event.timestamp}`,
             startedAt: event.timestamp,
             duration: restDuration,
             endsAt: event.timestamp + restDuration * 1000,
@@ -814,6 +815,9 @@ export function createWorkoutSession({
     if (!exercise || !prog) return null;
 
     const setIdx = state === SESSION_STATES.REST ? prog.completedSets.length : prog.currentSetIndex;
+    const completed = allCompletedSets();
+    const previous = completed.length > 0 ? completed[completed.length - 1] : null;
+    const set = describeSet(exercise, prog, setIdx);
     return {
       exerciseIndex: idx,
       exerciseName: exercise.name,
@@ -828,7 +832,18 @@ export function createWorkoutSession({
       setsDots: exercise.sets.map((_, i) =>
         i < prog.completedSets.length ? 'completed' : i === setIdx ? 'active' : 'pending'
       ),
-      set: describeSet(exercise, prog, setIdx),
+      set,
+      changes: previous ? {
+        exercise: previous.exerciseArrayIndex !== idx,
+        weight: previous.weight !== set.weight,
+        reps: previous.reps !== set.reps,
+        rpe: previous.rpe !== set.rpe,
+      } : {
+        exercise: false,
+        weight: false,
+        reps: false,
+        rpe: false,
+      },
     };
   }
 
@@ -910,6 +925,7 @@ export function createWorkoutSession({
         const workoutPaused = hasWorkoutPause();
         const remaining = restRemaining(now);
         rest = {
+          identity: restInfo.identity,
           duration: restInfo.duration,
           remaining,
           isPaused: Boolean(restInfo.isPaused || workoutPaused),
