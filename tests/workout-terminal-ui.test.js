@@ -19,6 +19,7 @@ test('terminal UI ignores responses belonging to a replaced session in both prod
       const calls = [];
       let operationStarted = 0;
       const env = {
+        isTearingDown: false,
         finishState: null,
         dayPlan: { id: 'old' },
         session: { view: () => ({}) },
