@@ -8,6 +8,11 @@ export function normalizeWorkoutDiagnosticsEnabled(value) {
 
 export const WORKOUT_DIAGNOSTIC_CODES = Object.freeze({
   BOOT: 'BOOT',
+  ACTION_TAP: 'ACTION_TAP',
+  RENDER_START: 'RENDER_START',
+  RENDER_END: 'RENDER_END',
+  PAUSE: 'PAUSE',
+  RESUME: 'RESUME',
   BUILD: 'BUILD',
   DIAGNOSTICS_ON: 'DIAGNOSTICS_ON',
   RESTORED: 'RESTORED',
@@ -54,6 +59,28 @@ export function readWorkoutMemory(getPackageInfo, getPerformance) {
   }
 }
 
+function sanitizeEvents(raw) {
+  if (!Array.isArray(raw)) return [];
+  const events = [];
+  for (const event of raw.slice(-MAX_EVENTS)) {
+    if (!event || !VALID_CODES.has(event.code)) continue;
+    if (!Number.isSafeInteger(event.at) || event.at < 0 || event.at > MAX_DATE_MILLISECONDS) continue;
+    const cleaned = { at: event.at, code: event.code };
+    const memory = sanitizeMemory(event.memory);
+    if (memory) cleaned.memory = memory;
+    events.push(cleaned);
+  }
+  return events;
+}
+
+function reportWithPrevious(events, previousEvents) {
+  return {
+    version: VERSION,
+    events,
+    ...(previousEvents.length > 0 ? { previousEvents } : {}),
+  };
+}
+
 function sanitizeReport(raw) {
   let report = raw;
   if (typeof report === 'string') {
@@ -64,16 +91,7 @@ function sanitizeReport(raw) {
     }
   }
   if (!report || report.version !== VERSION || !Array.isArray(report.events)) return null;
-  const events = [];
-  for (const event of report.events.slice(-MAX_EVENTS)) {
-    if (!event || !VALID_CODES.has(event.code)) continue;
-    if (!Number.isSafeInteger(event.at) || event.at < 0 || event.at > MAX_DATE_MILLISECONDS) continue;
-    const cleaned = { at: event.at, code: event.code };
-    const memory = sanitizeMemory(event.memory);
-    if (memory) cleaned.memory = memory;
-    events.push(cleaned);
-  }
-  return { version: VERSION, events };
+  return reportWithPrevious(sanitizeEvents(report.events), sanitizeEvents(report.previousEvents));
 }
 
 export function createWorkoutDiagnostics(storage, now = () => Date.now(), sampleMemory = () => null) {
@@ -125,13 +143,20 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
         const at = Math.trunc(now());
         if (!Number.isSafeInteger(at) || at < 0 || at > MAX_DATE_MILLISECONDS) return false;
         const event = { at, code };
-        const events = [...memory.events, event].slice(-MAX_EVENTS);
-        write({ version: VERSION, events });
+        const previousEvents = code === WORKOUT_DIAGNOSTIC_CODES.BOOT
+          && memory.events.some((entry) => entry.code !== WORKOUT_DIAGNOSTIC_CODES.BOOT)
+          ? memory.events.slice(-MAX_EVENTS)
+          : (memory.previousEvents || []);
+        const events = code === WORKOUT_DIAGNOSTIC_CODES.BOOT
+          ? [event]
+          : [...memory.events, event].slice(-MAX_EVENTS);
+        const report = reportWithPrevious(events, previousEvents);
+        write(report);
         let sampled = null;
         try { sampled = sanitizeMemory(sampleMemory(code)); } catch {}
         if (sampled) {
           event.memory = sampled;
-          write({ version: VERSION, events });
+          write(report);
         }
         return true;
       } catch {
@@ -139,10 +164,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
       }
     },
     read() {
-      return { version: VERSION, events: memory.events.map((event) => ({
-        ...event,
-        ...(event.memory ? { memory: { ...event.memory } } : {}),
-      })) };
+      return sanitizeReport(memory);
     },
     replace(report) {
       if (!enabled) return false;
@@ -154,9 +176,9 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
 
 export function formatWorkoutDiagnostics(raw) {
   const report = sanitizeReport(raw);
-  if (!report || report.events.length === 0) return 'No watch diagnostics yet';
+  if (!report || (report.events.length === 0 && !report.previousEvents?.length)) return 'No watch diagnostics yet';
   const mib = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
-  return report.events.map((event) => {
+  const formatEvent = (event) => {
     const parts = [`${new Date(event.at).toISOString()} ${event.code}`];
     const memory = event.memory;
     if (memory && Number.isSafeInteger(memory.appUsed)) {
@@ -167,5 +189,9 @@ export function formatWorkoutDiagnostics(raw) {
       parts.push(`system free ${mib(memory.systemTotal - memory.systemUsed)}/${mib(memory.systemTotal)} MiB`);
     }
     return parts.join(' | ');
-  }).join('\n');
+  };
+  return [
+    ...(report.previousEvents || []).map((event) => `Previous run: ${formatEvent(event)}`),
+    ...report.events.map(formatEvent),
+  ].join('\n');
 }

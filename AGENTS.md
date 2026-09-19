@@ -52,6 +52,7 @@
 - Capability evidence stays labelled `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN` or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
+- Do not attribute watch reboots to exercise images when reports predate their integration - distinguish reproduced app defects from an unconfirmed native reboot cause.
 - ⛔ Let fewer than 90% of user-visible elements and interactions match between Companion and Workout without a documented platform constraint - shared behavior and visual language are the default.
 - ⛔ Use distorted QEMU screenshots to dismiss API 4.2 black screens - screenshots are not display evidence, and launch failures require isolation against a minimal Mini Program.
 - ⛔ Restore `TODO.md` as a backlog - GitHub Issues and Project #1 are the single source of truth.
