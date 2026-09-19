@@ -460,3 +460,13 @@ test('completing active set and initiating terminal submission do not synchronou
     'Initiating terminal submission must defer redraw via controllerUiDirty',
   );
 });
+
+test('skipping a warmup defers the Workout redraw until after the native callback', () => {
+  const source = readWidgetSource();
+  const activeSet = extractFunction(source, 'renderActiveSetScreen');
+  const skipStart = activeSet.indexOf("text: 'Skip'");
+  const skipButton = activeSet.slice(activeSet.lastIndexOf('addWidget(widget.BUTTON', skipStart), activeSet.indexOf('});', skipStart) + 3);
+  assert.match(skipButton, /workoutController\.skipWarmup\(/);
+  assert.match(skipButton, /controllerUiDirty\s*=\s*true/);
+  assert.doesNotMatch(skipButton, /renderUI\(\)/);
+});

@@ -26,6 +26,7 @@ export const EVENT_TYPES = {
   ADJUST_REPS: 'ADJUST_REPS',
   ADJUST_RPE: 'ADJUST_RPE',
   COMPLETE_SET: 'COMPLETE_SET',
+  SKIP_WARMUP: 'SKIP_WARMUP',
   NEXT_SET: 'NEXT_SET',
   PAUSE_REST: 'PAUSE_REST',
   RESUME_REST: 'RESUME_REST',
@@ -520,6 +521,58 @@ export function createWorkoutSession({
           restInfo = null;
           advanceToNextSet({ timestamp: event.timestamp });
         }
+        break;
+      }
+
+      case EVENT_TYPES.SKIP_WARMUP: {
+        const payload = event.payload || {};
+        const exerciseIndex = exercises.findIndex((exercise) =>
+          exercise.index === payload.exerciseIndex &&
+          (payload.entryId == null || exercise.entryId === payload.entryId)
+        );
+        const exercise = exercises[exerciseIndex];
+        const prog = progress[exerciseIndex];
+        if (!exercise || !prog) break;
+
+        const setIndex = payload.setId != null
+          ? exercise.sets.findIndex((set) => set.setId === payload.setId)
+          : payload.setIndex - 1;
+        const target = exercise.sets[setIndex];
+        if (!target?.isWarmup) break;
+
+        const pendingExerciseIndex = pendingIndex();
+        const pendingProg = progress[pendingExerciseIndex];
+        const pendingSetIndex = state === SESSION_STATES.REST
+          ? pendingProg?.completedSets.length
+          : pendingProg?.currentSetIndex;
+        const removesPending = pendingExerciseIndex === exerciseIndex && pendingSetIndex === setIndex;
+
+        exercise.sets.splice(setIndex, 1);
+        exercise.warmupSetsCount -= 1;
+        let warmupIndex = 0;
+        exercise.sets.forEach((set, index) => {
+          set.index = index + 1;
+          set.totalWarmups = exercise.warmupSetsCount;
+          if (set.isWarmup) set.warmupIndex = ++warmupIndex;
+        });
+        if (setIndex < prog.currentSetIndex) prog.currentSetIndex -= 1;
+
+        if (!removesPending) break;
+        if (allSetsDone()) {
+          clearPauses(event.timestamp);
+          state = SESSION_STATES.FINISHED;
+          workoutEndTime = event.timestamp;
+          restInfo = null;
+          break;
+        }
+        if (state === SESSION_STATES.REST) {
+          const nextIndex = findNextExerciseIndex(currentExerciseIndex);
+          if (nextIndex !== -1) {
+            loadSetTargets(nextIndex, progress[nextIndex].completedSets.length);
+          }
+          break;
+        }
+        advanceToNextSet({ timestamp: event.timestamp });
         break;
       }
 
@@ -1122,6 +1175,25 @@ export function createWorkoutSession({
       };
 
       applyEvent({ type: EVENT_TYPES.COMPLETE_SET, payload, timestamp });
+    },
+
+    skipWarmup({ timestamp = Date.now() } = {}) {
+      if (state !== SESSION_STATES.ACTIVE_SET && state !== SESSION_STATES.REST) return false;
+      if (activeTimer) return false;
+      const pending = describePendingSet();
+      if (!pending?.set?.isWarmup) return false;
+      const exercise = exercises[pending.exerciseIndex];
+      applyEvent({
+        type: EVENT_TYPES.SKIP_WARMUP,
+        timestamp,
+        payload: {
+          exerciseIndex: exercise.index,
+          setIndex: pending.setIndex + 1,
+          entryId: exercise.entryId,
+          setId: pending.set.setId,
+        },
+      });
+      return true;
     },
 
     pauseRest({ timestamp = Date.now() } = {}) {
