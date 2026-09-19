@@ -1,4 +1,5 @@
 import { spawnSync } from 'node:child_process';
+import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
@@ -7,6 +8,21 @@ import {
 } from './generate-workout-extension.js';
 
 export const SUPPORTED_PRODUCTS = ['companion', 'workout', 'all'];
+const PRESERVED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md'];
+
+function preserveRootFiles(rootDir) {
+  return PRESERVED_ROOT_FILES.flatMap((relativePath) => {
+    const filePath = path.join(rootDir, relativePath);
+    if (!fs.existsSync(filePath)) return [];
+    return [{ filePath, content: fs.readFileSync(filePath) }];
+  });
+}
+
+function restoreRootFiles(files) {
+  for (const file of files) {
+    fs.writeFileSync(file.filePath, file.content);
+  }
+}
 
 export function normalizeProduct(product) {
   if (typeof product !== 'string') {
@@ -102,7 +118,13 @@ export function executeBuild(productInput, {
       ...spawnOptions,
     };
 
-    const result = spawn(command, args, options);
+    const preservedFiles = step.product === 'companion' ? preserveRootFiles(plan.rootDir) : [];
+    let result;
+    try {
+      result = spawn(command, args, options);
+    } finally {
+      restoreRootFiles(preservedFiles);
+    }
 
     if (result.error) {
       throw result.error;
