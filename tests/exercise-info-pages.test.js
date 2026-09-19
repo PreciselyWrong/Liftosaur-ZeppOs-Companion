@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import { exerciseInfoPages } from '../shared/exercise-info-pages.js';
-import { INFO_NAV, INFO_TEXT_LAYOUT } from '../shared/exercise-info-layout.js';
+import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../shared/exercise-info-layout.js';
 
 test('Info makes description, session notes and recent comments separate subtitles', () => {
   const content = '## Description\nBrace your core.\n\n## This session\nUse a lighter weight.\n\n## Recent sessions\nLast time: better.';
@@ -86,6 +86,22 @@ test('Info image takes the full first page when ready and collapses text widgets
     const image = source.slice(start, source.indexOf('\nfunction ', start + 1));
     assert.match(image, /h: px\(imagePage \? 0 : INFO_TEXT_LAYOUT\.bodyH\)/, product);
   }
+});
+
+test('Info geometry lifts only the subtitle and contains long Workout text above navigation', () => {
+  assert.equal(INFO_TEXT_LAYOUT.subtitleY, 93);
+  assert.equal(INFO_TEXT_LAYOUT.bodyY, 124);
+  assert.equal(INFO_TEXT_LAYOUT.bodyY + INFO_TEXT_LAYOUT.bodyH, 344);
+  assert.equal(WORKOUT_INFO_PANEL.y + WORKOUT_INFO_PANEL.h, 346);
+  assert.ok(INFO_TEXT_LAYOUT.bodyY + INFO_TEXT_LAYOUT.bodyH <= WORKOUT_INFO_PANEL.y + WORKOUT_INFO_PANEL.h);
+  assert.ok(WORKOUT_INFO_PANEL.y + WORKOUT_INFO_PANEL.h < 348);
+
+  const source = fs.readFileSync('data-widget/common/index.js', 'utf8');
+  const start = source.indexOf('function renderNotesScreen(');
+  const render = source.slice(start, source.indexOf('\nfunction ', start + 1));
+  assert.match(render, /WORKOUT_INFO_PANEL\.x/);
+  assert.match(render, /WORKOUT_INFO_PANEL\.y/);
+  assert.match(render, /WORKOUT_INFO_PANEL\.h/);
 });
 
 for (const product of ['page', 'data-widget']) {

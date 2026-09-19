@@ -7,7 +7,7 @@ export const INFO_NAV = {
 };
 
 export const INFO_TEXT_LAYOUT = {
-  subtitleY: 96,
+  subtitleY: 93,
   subtitleH: 26,
   bodyY: 124,
   bodyH: 220,
@@ -15,4 +15,12 @@ export const INFO_TEXT_LAYOUT = {
   imageBodyY: 228,
   imageBodyH: 100,
   image: { x: 157, y: 92, w: 166, h: 248 },
+};
+
+export const WORKOUT_INFO_PANEL = {
+  x: 50,
+  y: 80,
+  w: 380,
+  h: 266,
+  radius: 20,
 };
