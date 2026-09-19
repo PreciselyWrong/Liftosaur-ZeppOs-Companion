@@ -73,7 +73,7 @@ import {
   formatEditableSetValue,
   formatWeightValue,
   formatNextTargetSummary,
-  formatDots,
+  formatActiveSetProgress,
   formatOverviewExerciseLines,
   formatSupersetProgress,
   supersetColor,
@@ -1615,7 +1615,6 @@ function renderActiveSetScreen(view) {
   const exerciseDetails = isResting && pending ? pending.exerciseDetails : view.exerciseDetails;
   const supersetGroup = isResting && pending ? pending.supersetGroup : view.supersetGroup;
   const supersetContext = isResting && pending ? pending.supersetContext : view.supersetContext;
-  const setsDots = isResting && pending ? pending.setsDots : view.exerciseSetsDots;
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
@@ -1687,12 +1686,6 @@ function renderActiveSetScreen(view) {
   renderExerciseInfo(exerciseName, exerciseDetails, 88, 36, isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
 
   const ssColor = supersetColor(supersetGroup);
-  const ssBadge = supersetGroup ? ` (SS ${supersetGroup})` : '';
-
-  const setLabel = set?.isWarmup
-    ? `WARMUP ${set.warmupIndex}/${set.totalWarmups}${ssBadge}`
-    : `SET ${(set?.workSetIndex || setIndex + 1)}/${set?.totalWorkSets || totalSets}${ssBadge}`;
-
   addWidget(widget.TEXT, {
     x: px(headerX),
     y: px(122),
@@ -1703,7 +1696,7 @@ function renderActiveSetScreen(view) {
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: formatSupersetProgress(supersetContext) || `${setLabel}   ${formatDots(setsDots)}`,
+    text: formatActiveSetProgress(set, setIndex, totalSets),
   });
 
   if (supersetContext) {

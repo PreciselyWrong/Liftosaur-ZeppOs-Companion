@@ -196,7 +196,7 @@ test('Companion uses the shared set input guard and workout navigation labels', 
   const source = readWatchPage();
   assert.match(source, /checkRequiredPhoneInput/);
   assert.match(source, /MENU_LABEL/);
-  assert.match(source, /formatDots/);
+  assert.match(source, /formatOverviewExerciseLines/);
   assert.doesNotMatch(source, /function requiredPhoneInput\(/);
   assert.doesNotMatch(source, /function formatDots\(/);
   assert.match(source, /repsLeft: set\?\.isUnilateral \? set\.reps : null/);

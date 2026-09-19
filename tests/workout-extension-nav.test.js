@@ -5,6 +5,7 @@ import {
   EXTENSION_TOP_BAR_LAYOUT,
   MENU_LABEL,
   checkRequiredPhoneInput,
+  formatActiveSetProgress,
   formatDots,
   formatOverviewExerciseLines,
   formatSeconds,
@@ -101,6 +102,12 @@ test('overview preserves the whole exercise name, every dot, and the prescriptio
   });
   assert.equal(lines.title, `[SS A] Overhead Press With Dumbbells  ${formatDots(dots)}`);
   assert.equal(lines.prescription, '2W + 5 x 5 - 45kg');
+});
+
+test('active set progress is a stable label without overview dots or superset text', () => {
+  assert.equal(formatActiveSetProgress({ isWarmup: true, warmupIndex: 1, totalWarmups: 2 }), 'WARMUP 1/2');
+  assert.equal(formatActiveSetProgress({ workSetIndex: 2, totalWorkSets: 4 }, 3, 6), 'SET 2/4');
+  assert.equal(formatActiveSetProgress({}, 1, 3), 'SET 2/3');
 });
 
 test('formatting helpers format seconds and weight cleanly', () => {

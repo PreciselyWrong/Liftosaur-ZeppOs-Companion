@@ -124,6 +124,14 @@ for (const product of ['page', 'data-widget']) {
     assert.match(active, /Next:/);
   });
 
+  test(`${product} keeps active set progress separate from overview dots and supersets`, () => {
+    const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
+    const start = source.indexOf('function renderActiveSetScreen(');
+    const active = source.slice(start, source.indexOf('\nfunction ', start + 1));
+    assert.match(active, /formatActiveSetProgress\(/);
+    assert.doesNotMatch(active, /formatDots\(|formatSupersetProgress\(/);
+  });
+
   test(`${product} renders the resolved exercise image on the Prepare editor`, () => {
     const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
     const helperStart = source.indexOf('function renderPreparationImage(');
