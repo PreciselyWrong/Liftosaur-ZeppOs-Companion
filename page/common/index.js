@@ -2645,6 +2645,7 @@ function renderActiveSetScreen(view) {
   const setIndex = isResting && pending ? pending.setIndex : view.currentSetIndex;
   const totalSets = isResting && pending ? pending.totalSets : view.totalSets;
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
+  const canSkipWarmup = Boolean(set?.isWarmup && (!view.timedSet || view.timedSet.phase === 'READY'));
   const controls = activeSetLayout(set);
 
   if (isResting) {
@@ -2724,11 +2725,31 @@ function renderActiveSetScreen(view) {
     });
   }
 
+  if (canSkipWarmup) {
+    addWidget(widget.BUTTON, {
+      x: px(344),
+      y: px(126),
+      w: px(74),
+      h: px(38),
+      radius: px(19),
+      normal_color: THEME.card,
+      press_color: THEME.cardActive,
+      color: 0xffb544,
+      text: 'Skip',
+      text_size: font('caption'),
+      click_func: () => {
+        const skipped = session.skipWarmup();
+        renderUI();
+        if (skipped && session.view().state === SESSION_STATES.FINISHED) submitWorkout();
+      },
+    });
+  }
+
   const ssColor = supersetColor(supersetGroup);
   addWidget(widget.TEXT, {
     x: px(headerX),
     y: px(122),
-    w: px(showsPreparationImage ? 208 : 356),
+    w: px(canSkipWarmup ? 336 - headerX : (showsPreparationImage ? 208 : 356)),
     h: px(26),
     color: set.isWarmup ? 0xffb544 : (supersetGroup ? ssColor : THEME.textSecondary),
     text_size: font('caption'),
@@ -2742,7 +2763,7 @@ function renderActiveSetScreen(view) {
     addWidget(widget.TEXT, {
       x: px(headerX),
       y: px(146),
-      w: px(showsPreparationImage ? 208 : 356),
+      w: px(canSkipWarmup ? 336 - headerX : (showsPreparationImage ? 208 : 356)),
       h: px(22),
       color: THEME.textSecondary,
       text_size: font('micro'),

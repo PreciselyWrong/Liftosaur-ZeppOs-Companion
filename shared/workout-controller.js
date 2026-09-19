@@ -260,7 +260,11 @@ export function createWorkoutController({
     if (!plan || !plan.unit) return;
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
-    session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId });
+    session = createWorkoutSession({
+      plan: dayPlan,
+      resumeFromEntryId,
+      initialJournal: localState?.skippedWarmups || [],
+    });
     sessionGeneration += 1;
     restoreAdoptionState(localState, { preserveNavigation });
     directSync = normalizeDirectSync({
@@ -296,6 +300,9 @@ export function createWorkoutController({
 
     return {
       pendingSet,
+      skippedWarmups: session.getJournal()
+        .filter((event) => event.type === EVENT_TYPES.SKIP_WARMUP)
+        .map((event) => ({ ...event, payload: { ...event.payload } })),
       timingEvents: buildTimingEvents(
         view.startedAt,
         capturedAt,
@@ -568,11 +575,15 @@ export function createWorkoutController({
         sets: bindSets(exercise.sets || [], live.sets),
       };
     });
+    const reboundSets = exercises.map((exercise) => [...exercise.warmupSets, ...exercise.sets]);
     const journal = session.getJournal().map((event) => {
-      if (event.type !== EVENT_TYPES.COMPLETE_SET) return event;
-      const exercise = exercises.find((item) => item.index === event.payload.exerciseIndex);
-      const set = exercise && [...exercise.warmupSets, ...exercise.sets][event.payload.setIndex - 1];
+      if (event.type !== EVENT_TYPES.COMPLETE_SET && event.type !== EVENT_TYPES.SKIP_WARMUP) return event;
+      const exerciseArrayIndex = exercises.findIndex((item) => item.index === event.payload.exerciseIndex);
+      const exercise = exercises[exerciseArrayIndex];
+      const sets = reboundSets[exerciseArrayIndex];
+      const set = sets?.[event.payload.setIndex - 1];
       if (!set) fail('START_PLAN_MISMATCH');
+      if (event.type === EVENT_TYPES.SKIP_WARMUP) sets.splice(event.payload.setIndex - 1, 1);
       return { ...event, payload: { ...event.payload, entryId: exercise.entryId, setId: set.setId } };
     });
     // Rebind only identity: replay against unchanged targets to preserve local edits,
@@ -1077,6 +1088,14 @@ export function createWorkoutController({
           logError('background set sync failed', err);
         });
       }
+    },
+    skipWarmup: (options = {}) => {
+      if (disposed) return false;
+      let skipped = false;
+      mutateSession(() => {
+        skipped = session.skipWarmup({ timestamp: options.timestamp ?? now() });
+      });
+      return skipped;
     },
     pauseRest: (options = {}) =>
       mutateSession(() => session.pauseRest({ timestamp: options.timestamp ?? now() })),

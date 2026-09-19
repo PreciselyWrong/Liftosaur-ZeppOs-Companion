@@ -132,6 +132,16 @@ for (const product of ['page', 'data-widget']) {
     assert.doesNotMatch(active, /formatDots\(|formatSupersetProgress\(/);
   });
 
+  test(`${product} shows a compact top Skip button only for an available warmup`, () => {
+    const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
+    const start = source.indexOf('function renderActiveSetScreen(');
+    const active = source.slice(start, source.indexOf('\nfunction ', start + 1));
+    assert.match(active, /canSkipWarmup/);
+    assert.match(active, /text:\s*'Skip'/);
+    assert.match(active, /x:\s*px\(344\)[\s\S]*?y:\s*px\(126\)[\s\S]*?w:\s*px\(74\)[\s\S]*?h:\s*px\(38\)/);
+    assert.match(active, /skipWarmup\(/);
+  });
+
   test(`${product} renders the resolved exercise image on the Prepare editor`, () => {
     const source = fs.readFileSync(`${product}/common/index.js`, 'utf8');
     const helperStart = source.indexOf('function renderPreparationImage(');

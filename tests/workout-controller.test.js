@@ -1983,6 +1983,32 @@ test('ending prepared superset rest retains the displayed set across deferred sy
   }
 });
 
+test('same-workout adoption and restore preserve locally skipped warmups', () => {
+  const workout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  workout.entries[0].warmupSets = [
+    { index: 0, setId: 'warmup-1', weight: '20kg', reps: 10, timer: 60, isWarmup: true },
+    { index: 1, setId: 'warmup-2', weight: '40kg', reps: 5, timer: 60, isWarmup: true },
+  ];
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const controller = createWorkoutController({ store, now: () => 1000 });
+  controller.loadPlan(workoutToDayPlan(workout, { isCurrent: true }));
+
+  controller.skipWarmup();
+  assert.equal(controller.view().currentSet.setId, 'warmup-2');
+  assert.equal(controller.view().overviewExercises[0].setsDots.length, 3);
+
+  controller.applyAdoptedSnapshot(structuredClone(workout));
+  controller.applyAdoptedSnapshot(structuredClone(workout));
+  assert.equal(controller.view().currentSet.setId, 'warmup-2');
+  assert.equal(controller.view().overviewExercises[0].setsDots.length, 3);
+
+  const restored = createWorkoutController({ store, now: () => 1000 });
+  assert.equal(restored.restore().success, true);
+  assert.equal(restored.view().currentSet.setId, 'warmup-2');
+  assert.equal(restored.view().overviewExercises[0].setsDots.length, 3);
+  assert.deepEqual(restored.getWorkoutSetWrites(), []);
+});
+
 test('superset adoption retains manual selection but never revives an unavailable prepared set', () => {
   for (const change of ['unchanged', 'completed', 'removed', 'replaced', 'navigation-reset']) {
     const workout = structuredClone(SAMPLE_SERVER_WORKOUT);

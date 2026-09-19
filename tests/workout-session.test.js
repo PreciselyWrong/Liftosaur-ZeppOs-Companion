@@ -390,6 +390,85 @@ test('warmup sets run before work sets and are omitted from playground replay', 
   ]);
 });
 
+test('skipping warmups removes them durably without logging a completed set', () => {
+  const plan = {
+    programId: 'skip-warmup',
+    unit: 'kg',
+    exercises: [{
+      index: 1,
+      entryId: 'bench',
+      name: 'Bench Press',
+      warmupSets: [
+        { setId: 'warmup-1', targetReps: 10, targetWeight: 35, restSeconds: 60 },
+        { setId: 'warmup-2', targetReps: 5, targetWeight: 60, restSeconds: 60 },
+      ],
+      sets: [{ setId: 'work-1', index: 1, targetReps: 8, targetWeight: 80 }],
+    }],
+  };
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+
+  assert.equal(session.skipWarmup({ timestamp: 10 }), true);
+  let view = session.view(10);
+  assert.equal(view.currentSet.setId, 'warmup-2');
+  assert.equal(view.currentSet.warmupIndex, 1);
+  assert.equal(view.currentSet.totalWarmups, 1);
+  assert.equal(view.totalSets, 2);
+  assert.equal(view.overviewExercises[0].setsDots.length, 2);
+  assert.deepEqual(session.getWorkoutSetWrites(), []);
+
+  const restored = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+  view = restored.view(10);
+  assert.equal(view.currentSet.setId, 'warmup-2');
+  assert.equal(view.currentSet.warmupIndex, 1);
+  assert.equal(view.currentSet.totalWarmups, 1);
+  assert.equal(view.overviewExercises[0].setsDots.length, 2);
+  assert.equal(restored.getJournal().filter(event => event.type === 'SKIP_WARMUP').length, 1);
+
+  assert.equal(restored.skipWarmup({ timestamp: 20 }), true);
+  view = restored.view(20);
+  assert.equal(view.currentSet.setId, 'work-1');
+  assert.equal(view.totalSets, 1);
+  assert.equal(view.overviewExercises[0].setsDots.length, 1);
+  assert.equal(restored.skipWarmup({ timestamp: 30 }), false);
+  assert.deepEqual(restored.getWorkoutSetWrites(), []);
+
+  const replayedAgain = createWorkoutSession({ plan, initialJournal: restored.getJournal() });
+  assert.equal(replayedAgain.view(30).currentSet.setId, 'work-1');
+  assert.equal(replayedAgain.view(30).totalSets, 1);
+});
+
+test('skipping a prepared warmup keeps the current rest and exposes the next set', () => {
+  const plan = {
+    programId: 'skip-prepared-warmup',
+    unit: 'kg',
+    exercises: [{
+      index: 1,
+      entryId: 'squat',
+      name: 'Squat',
+      warmupSets: [
+        { setId: 'warmup-1', targetReps: 8, targetWeight: 40, restSeconds: 60 },
+        { setId: 'warmup-2', targetReps: 5, targetWeight: 60, restSeconds: 60 },
+      ],
+      sets: [{ setId: 'work-1', index: 1, targetReps: 5, targetWeight: 100 }],
+    }],
+  };
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+  session.completeSet({ timestamp: 1_000 });
+  const before = session.view(2_000);
+  assert.equal(before.pending.set.setId, 'warmup-2');
+
+  assert.equal(session.skipWarmup({ timestamp: 2_000 }), true);
+  const after = session.view(2_000);
+  assert.equal(after.state, SESSION_STATES.REST);
+  assert.equal(after.rest.endsAt, before.rest.endsAt);
+  assert.equal(after.pending.set.setId, 'work-1');
+  assert.equal(after.pending.set.isWarmup, false);
+  assert.equal(after.overviewExercises[0].setsDots.length, 2);
+  assert.deepEqual(session.getWorkoutSetWrites().map(write => write.setId), ['warmup-1']);
+});
+
 test('exercises in a superset group alternate working sets', () => {
   const plan = {
     programId: 'p1',
