@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import path from 'node:path';
 import fs from 'node:fs';
+import os from 'node:os';
 import {
   SUPPORTED_PRODUCTS,
   normalizeProduct,
@@ -108,6 +109,32 @@ test('executeBuild executes companion with zeus build in repository root', () =>
   assert.deepEqual(calls[0].args, process.platform === 'win32' ? [] : ['build']);
   assert.equal(calls[0].options.cwd, rootDir);
   assert.equal(calls[0].options.stdio, 'inherit');
+});
+
+test('executeBuild restores agent pointers removed by Zeus', () => {
+  const temporaryRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'lifto-build-pointers-'));
+  const agentsPath = path.join(temporaryRoot, 'AGENTS.md');
+  const claudePath = path.join(temporaryRoot, 'CLAUDE.md');
+
+  try {
+    fs.writeFileSync(agentsPath, 'project instructions\n');
+    fs.writeFileSync(claudePath, '@AGENTS.md\n');
+
+    executeBuild('companion', {
+      rootDir: temporaryRoot,
+      env: {},
+      spawn: () => {
+        fs.rmSync(agentsPath);
+        fs.rmSync(claudePath);
+        return { status: 0 };
+      },
+    });
+
+    assert.equal(fs.readFileSync(agentsPath, 'utf8'), 'project instructions\n');
+    assert.equal(fs.readFileSync(claudePath, 'utf8'), '@AGENTS.md\n');
+  } finally {
+    fs.rmSync(temporaryRoot, { recursive: true, force: true });
+  }
 });
 
 test('executeBuild generates project before running zeus build for workout', () => {
