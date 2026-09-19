@@ -83,6 +83,13 @@ export function formatEditableSetValue(value, requiresEntry = false) {
   return `${value}${requiresEntry ? '+' : ''}`;
 }
 
+export function formatActiveSetProgress(set = {}, setIndex = 0, totalSets = 0) {
+  if (set?.isWarmup) {
+    return `WARMUP ${set.warmupIndex}/${set.totalWarmups}`;
+  }
+  return `SET ${set?.workSetIndex || setIndex + 1}/${set?.totalWorkSets || totalSets}`;
+}
+
 export function formatTargetRepsSummary(set) {
   if (!set) return '-';
   if (set.setTimer > 0) return `${formatSeconds(set.setTimer)} hold`;
