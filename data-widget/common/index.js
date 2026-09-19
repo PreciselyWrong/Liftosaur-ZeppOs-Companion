@@ -3,7 +3,7 @@ import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-u
 import { TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
-import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js';
+import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
@@ -2423,11 +2423,11 @@ function renderNotesScreen() {
   renderTitle(activeNotesTitle || 'Notes');
 
   addWidget(widget.FILL_RECT, {
-    x: px(50),
-    y: px(80),
-    w: px(380),
-    h: px(250),
-    radius: px(20),
+    x: px(WORKOUT_INFO_PANEL.x),
+    y: px(WORKOUT_INFO_PANEL.y),
+    w: px(WORKOUT_INFO_PANEL.w),
+    h: px(WORKOUT_INFO_PANEL.h),
+    radius: px(WORKOUT_INFO_PANEL.radius),
     color: THEME.card,
   });
 
