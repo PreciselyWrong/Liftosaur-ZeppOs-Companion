@@ -118,6 +118,7 @@ CI runs `npm ci`, `npm test`, and synthetic Workout Extension generation on Node
 
 - [Tester Guide](docs/tester-guide.md)
 - [Timed Sets](docs/timed-sets.md)
+- [Synchronization Status and Set Corrections](docs/set-corrections.md)
 - [Privacy Policy](docs/privacy-policy.md)
 - [Workout Extension Manual Actions](docs/workout-extension-manual-actions.md)
 - [Workout Extension Hardware Test Plan](docs/workout-extension-hardware-test-plan.md)
