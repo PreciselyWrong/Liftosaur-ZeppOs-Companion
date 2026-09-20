@@ -1,3 +1,4 @@
+import { stopRestPulseAnimation } from '../shared/rest-visual.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -41,6 +42,8 @@ function fixture() {
     plan: () => ({}),
   };
   const env = {
+    stopRestPulseAnimation, restHaloWidgets: [], restPulseAnimHandles: [], restPulseAttempted: false,
+    prop: { ANIM_STATUS: 1, ALPHA: 2 }, anim_status: { STOP: 3 },
     hasBuilt: true, isTearingDown: false, isPaused: false, lifecycleGeneration: 0,
     controllerUiDirty: false, renderScheduled: false, renderTimer: null,
     connectionRetryTimer: null, connectionRetryAttempt: 0,
@@ -74,7 +77,7 @@ function fixture() {
   };
   vm.createContext(env);
   const functions = ['loadDisplaySettings', 'selectedScreenOnDuration', 'applyDisplayHold',
-    'resetDisplayHold', 'scheduleRenderUI', 'renderUI', 'clearWidgets', 'addRawWidget',
+    'stopRestBezelAnimation', 'resetDisplayHold', 'scheduleRenderUI', 'renderUI', 'clearWidgets', 'addRawWidget',
     'addActionWidget', 'resetConnectionRetry', 'syncCompletedSets'];
   if (source.includes('function cancelScheduledRender(')) functions.push('cancelScheduledRender');
   vm.runInContext(functions.map(extract).join('\n'), env);
@@ -243,4 +246,17 @@ test('late finish and discard results cannot draw, record or clear after destruc
       assert.deepEqual(calls, []);
     }
   }
+});
+
+test('pause stops native rest breathing before deletion; destroy does not call widgets', () => {
+  const { env, calls } = fixture();
+  env.restPulseAnimHandles = [{ id: 0, widget: { setProperty: (key) => calls.push(`pulse:${key}`) } }];
+  env.lifecycle.onPause();
+  assert.deepEqual(calls.filter(call => call.startsWith('pulse:')), ['pulse:1', 'pulse:2']);
+  assert.equal(env.restPulseAnimHandles.length, 0);
+  env.restPulseAnimHandles = [{ id: 1, widget: { setProperty: () => calls.push('unexpected-native') } }];
+  calls.length = 0;
+  env.lifecycle.onDestroy();
+  assert.ok(!calls.includes('unexpected-native'));
+  assert.equal(env.restPulseAnimHandles.length, 0);
 });
