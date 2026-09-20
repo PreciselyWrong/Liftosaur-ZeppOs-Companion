@@ -471,3 +471,275 @@ test('skipping a warmup defers the Workout redraw until after the native callbac
   assert.match(skipButton, /controllerUiDirty\s*=\s*true/);
   assert.doesNotMatch(skipButton, /renderUI\(\)/);
 });
+
+test('prepared active set UI matches contracts: no purple pill, > Start set countdown, purple changes, no overlap, skip left', () => {
+  const source = readWidgetSource();
+  assert.doesNotMatch(source, /restBannerText/);
+  assert.doesNotMatch(source, /renderChangeUnderline/);
+
+  const activeSet = extractFunction(source, 'renderActiveSetScreen');
+  assert.match(activeSet, /> Start set/);
+  assert.doesNotMatch(activeSet, /\\u25b6/);
+
+  const widgets = [];
+  const liveWidgets = {};
+  const THEME = {
+    bg: 0x000000,
+    card: 0x1c1c1e,
+    cardActive: 0x2c2c2e,
+    primary: 0x6e56cf,
+    primaryLight: 0x9e8cfc,
+    primaryDark: 0x3e26af,
+    textPrimary: 0xffffff,
+    textSecondary: 0x8e8e93,
+    success: 0x30d158,
+    yellow: 0xffd60a,
+    error: 0xff453a,
+    orange: 0xff9f0a,
+  };
+
+  const env = {
+    ...watchLayout,
+    THEME,
+    widget: { BUTTON: 'button', TEXT: 'text', SPORT_DATA: 'sport_data', STROKE_RECT: 'stroke_rect' },
+    sport_data: { HR: 1 },
+    edit_widget_group_type: { SPORTS: 2 },
+    align: { CENTER_H: 1, CENTER_V: 2, LEFT: 3 },
+    text_style: { NONE: 0 },
+    px: (x) => x,
+    font: (role) => watchLayout.TYPOGRAPHY[role] || 20,
+    formatSeconds: (sec) => {
+      const isNeg = sec < 0;
+      const abs = Math.abs(sec);
+      const m = Math.floor(abs / 60);
+      const s = String(abs % 60).padStart(2, '0');
+      return `${isNeg ? '-' : ''}${m}:${s}`;
+    },
+    formatActiveSetProgress: () => 'SET 1/3',
+    formatLoadoutLabel: () => '100 KG',
+    formatEditableSetValue: (val) => String(val),
+    truncate: (t) => t,
+    supersetColor: () => 0xffffff,
+    MENU_LABEL: '\u2261',
+    syncWarning: null,
+    liveHr: 72,
+    heartRateColor: () => 0xffffff,
+    formatHeartRate: (hr) => `${hr} bpm`,
+    SESSION_STATES: { REST: 'REST', FINISHED: 'FINISHED' },
+    renderRestBezel: () => {},
+    renderPreparationImage: () => false,
+    openNotes: () => {},
+    openWorkoutTimerControls: () => {},
+    checkRequiredPhoneInput: () => null,
+    stopVibration: () => {},
+    setRestPrepared: () => {},
+    workoutController: {
+      skipWarmup: () => false,
+      adjustWeight: () => {},
+      adjustReps: () => {},
+      adjustRpe: () => {},
+      completeSet: () => {},
+      nextSet: () => {},
+      startTimedSet: () => {},
+      view: () => ({}),
+    },
+    submitWorkout: () => {},
+    scheduleRenderUI: () => {},
+    consumeControllerUiChange: () => {},
+    controllerUiDirty: false,
+    liveWidgets,
+    addWidget: (type, props) => {
+      const entry = { type, ...props };
+      widgets.push(entry);
+      return entry;
+    },
+    addLiveLabel: (key, props) => {
+      const entry = { key, ...props };
+      liveWidgets[key] = { widget: entry, props: { ...props } };
+      widgets.push(entry);
+      return entry;
+    },
+    addLiveButton: (key, props) => {
+      const entry = { key, ...props };
+      liveWidgets[key] = { widget: entry, props: { ...props } };
+      widgets.push(entry);
+      return entry;
+    },
+    updateLiveWidget: (key, props) => {
+      if (liveWidgets[key]) {
+        Object.assign(liveWidgets[key].props, props);
+        return true;
+      }
+      return true;
+    },
+  };
+
+  const view = {
+    state: 'REST',
+    rest: { remaining: 59, isPaused: false, isOvertime: false },
+    pending: {
+      setIndex: 0,
+      totalSets: 3,
+      exerciseName: 'Warmup Squat',
+      exerciseDetails: 'Deep squat',
+      exerciseImageUrl: null,
+      loadingEquipment: 'barbell',
+      changes: { exercise: true, weight: true, reps: false, rpe: false },
+      set: { isWarmup: true, weight: 60, reps: 5, targetRpe: null },
+    },
+    currentSet: { isWarmup: true, weight: 60, reps: 5, targetRpe: null },
+    exerciseName: 'Warmup Squat',
+    exerciseDetails: 'Deep squat',
+    currentSetIndex: 0,
+    totalSets: 3,
+    unit: 'kg',
+    elapsedSeconds: 125,
+    isWorkoutPaused: false,
+  };
+
+  const renderActiveSetScreen = new Function('env', `with (env) {
+    ${extractFunction(source, 'renderPreparedTopBar')}
+    ${extractFunction(source, 'renderExerciseInfo')}
+    ${extractFunction(source, 'renderStepper')}
+    ${extractFunction(source, 'renderActiveSetScreen')}
+    return renderActiveSetScreen;
+  }`)(env);
+
+  renderActiveSetScreen(view);
+
+  // 1. Top bar: no purple restBannerText
+  assert.equal(widgets.some(w => w.key === 'restBannerText'), false, 'Top bar must not contain restBannerText');
+  const elapsedWidget = widgets.find(w => w.key === 'elapsed');
+  assert.ok(elapsedWidget, 'Elapsed button must be present in top bar');
+
+  // 2. Skip on left, Info on right, distinct hitboxes
+  const skipWidget = widgets.find(w => w.text === 'Skip');
+  const infoWidget = widgets.find(w => w.text === 'Info');
+  assert.ok(skipWidget, 'Skip button must be present for warmup');
+  assert.ok(infoWidget, 'Info button must be present');
+  assert.ok(skipWidget.x <= 100, `Skip must be on the left (got x=${skipWidget.x})`);
+  assert.ok(infoWidget.x >= 340, `Info must be on the right (got x=${infoWidget.x})`);
+  assert.ok(skipWidget.x + skipWidget.w < infoWidget.x, 'Skip and Info must have distinct hitboxes');
+
+  // Title and progress fit between Skip and Info without overlap
+  const titleWidget = widgets.find(w => w.key === 'exerciseTitle' || (w.text && w.text.includes('Warmup')));
+  assert.ok(titleWidget, 'Exercise title must be present');
+  assert.ok(titleWidget.x >= skipWidget.x + skipWidget.w, 'Title must not overlap Skip on the left');
+  assert.ok(titleWidget.x + titleWidget.w <= infoWidget.x, 'Title must not overlap Info on the right');
+
+  // 3. Changed colors: exercise title and weight value must be purple (THEME.primaryLight)
+  assert.equal(titleWidget.color, THEME.primaryLight, 'Changed exercise title must use purple primaryLight');
+  const weightValue = widgets.find(w => w.key === 'weight-value');
+  const repsValue = widgets.find(w => w.key === 'reps-value');
+  assert.equal(weightValue.color, THEME.primaryLight, 'Changed weight value must use purple primaryLight');
+  assert.equal(repsValue.color, THEME.textPrimary, 'Unchanged reps value must use textPrimary');
+
+  // 4. Stepper line-box breathing room and no value/label overlap
+  const weightLabel = widgets.find(w => w.key === 'weight-label');
+  assert.ok(weightValue.h > watchLayout.TYPOGRAPHY.value, `Value height ${weightValue.h} must be > font size for breathing room`);
+  assert.ok(weightLabel.y >= weightValue.y + weightValue.h, `Label y ${weightLabel.y} must not overlap value bottom ${weightValue.y + weightValue.h}`);
+
+  // 5. Action button: > Start set 0:59
+  const actionButton = widgets.find(w => typeof w.text === 'string' && w.text.includes('Start set'));
+  assert.ok(actionButton, 'Start set action button must be present');
+  assert.equal(actionButton.text, '> Start set 0:59', 'Must use plain ASCII > and live rest countdown');
+  assert.equal(actionButton.x, watchLayout.ACTIVE_SET_ACTION_LAYOUT.x);
+  assert.equal(actionButton.w, watchLayout.ACTIVE_SET_ACTION_LAYOUT.width);
+});
+
+test('tick updates prepared Start set action in place across zero, overtime, and pause without auto-completing', () => {
+  const source = readWidgetSource();
+  let uiRedrawn = false;
+  let nextSetCalled = false;
+
+  const liveWidgets = {
+    actionButton: { widget: {}, props: { text: '> Start set 1:00' } },
+    elapsed: { widget: {}, props: { text: '0:00' } },
+    restBezel: { widget: {}, props: { color: 0 } },
+  };
+
+  const env = {
+    ...watchLayout,
+    THEME: { yellow: 0xffff00, error: 0xff0000, primaryPale: 0x9999ff, textSecondary: 0x888888, primaryLight: 0x9e8cfc },
+    formatSeconds: (sec) => {
+      const isNeg = sec < 0;
+      const abs = Math.abs(sec);
+      const m = Math.floor(abs / 60);
+      const s = String(abs % 60).padStart(2, '0');
+      return `${isNeg ? '-' : ''}${m}:${s}`;
+    },
+    restStatusColor: () => 0x6e56cf,
+    workoutController: {
+      view: () => env.currentView,
+      nextSet: () => { nextSetCalled = true; },
+      pollCurrent: () => Promise.resolve(false),
+      advanceTimedSet: () => {},
+    },
+    renderUI: () => { uiRedrawn = true; },
+    isTearingDown: false,
+    isPaused: false,
+    hasBuilt: true,
+    screen: 'SESSION',
+    EXTENSION_SCREENS: { SESSION: 'SESSION' },
+    SESSION_STATES: { REST: 'REST', FINISHED: 'FINISHED' },
+    controllerUiDirty: false,
+    refreshSportMetrics: () => {},
+    retryPendingWrites: () => {},
+    updateTimedSetScreen: () => {},
+    restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },
+    lastRenderedState: 'REST',
+    updateClock: () => {},
+    handlePollFailure: () => {},
+    updateSyncWarning: () => {},
+    syncWarning: null,
+    liveWidgets,
+    lastRenderedSecond: null,
+    updateLiveWidget: (key, props) => {
+      if (liveWidgets[key]) {
+        Object.assign(liveWidgets[key].props, props);
+        return true;
+      }
+      return true;
+    },
+  };
+
+  const tick = new Function('env', `with (env) {
+    ${extractFunction(source, 'tick')}
+    return tick;
+  }`)(env);
+
+  // Normal countdown tick: 59s
+  env.currentView = { state: 'REST', rest: { remaining: 59, isPaused: false, isOvertime: false }, elapsedSeconds: 10 };
+  tick();
+  assert.equal(liveWidgets.actionButton.props.text, '> Start set 0:59');
+  assert.equal(uiRedrawn, false);
+  assert.equal(nextSetCalled, false);
+
+  // Countdown tick: 0s (zero must update in place without starting set)
+  env.currentView = { state: 'REST', rest: { remaining: 0, isPaused: false, isOvertime: false }, elapsedSeconds: 69 };
+  tick();
+  assert.equal(liveWidgets.actionButton.props.text, '> Start set 0:00');
+  assert.equal(uiRedrawn, false);
+  assert.equal(nextSetCalled, false);
+
+  // Countdown tick: -5s (overtime must update in place)
+  env.currentView = { state: 'REST', rest: { remaining: -5, isPaused: false, isOvertime: true }, elapsedSeconds: 74 };
+  tick();
+  assert.equal(liveWidgets.actionButton.props.text, '> Start set -0:05');
+  assert.equal(uiRedrawn, false);
+  assert.equal(nextSetCalled, false);
+
+  // Paused rest
+  env.currentView = { state: 'REST', rest: { remaining: 45, isPaused: true, isOvertime: false }, elapsedSeconds: 75 };
+  tick();
+  assert.equal(liveWidgets.actionButton.props.text, '> Start set 0:45');
+  assert.equal(uiRedrawn, false);
+  assert.equal(nextSetCalled, false);
+
+  // Timed set in REST phase
+  env.currentView = { state: 'REST', rest: { remaining: 30, isPaused: false }, timedSet: { phase: 'REST' }, elapsedSeconds: 80 };
+  tick();
+  assert.equal(liveWidgets.actionButton.props.text, 'Armed');
+  assert.equal(uiRedrawn, false);
+  assert.equal(nextSetCalled, false);
+});
