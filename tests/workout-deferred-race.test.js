@@ -49,6 +49,7 @@ test('deferred snapshots preserve newer writes, navigation and recovery across s
         continue;
       }
       controller.selectExercise(1);
+      controller.nextSet();
       controller.completeSet();
       const sync = controller.syncSets();
       await Promise.resolve();

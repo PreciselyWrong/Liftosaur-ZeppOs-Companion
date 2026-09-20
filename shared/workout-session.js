@@ -156,6 +156,7 @@ export function createWorkoutSession({
   const pauseSourceForEvent = (event) =>
     event.payload?.source === 'manual' ? 'manual-workout' : 'native-workout';
   let restInfo = null;
+  let selectedPendingExerciseIndex = null;
   let activeTimer = null;
   let journal = [];
   const intervals = [];
@@ -272,6 +273,12 @@ export function createWorkoutSession({
    */
   function pendingIndex() {
     if (state !== SESSION_STATES.REST) return currentExerciseIndex;
+    if (selectedPendingExerciseIndex !== null) {
+      if (hasUnfinishedSets(selectedPendingExerciseIndex)) {
+        return selectedPendingExerciseIndex;
+      }
+      selectedPendingExerciseIndex = null;
+    }
     const nextIdx = findNextExerciseIndex(currentExerciseIndex);
     return nextIdx === -1 ? currentExerciseIndex : nextIdx;
   }
@@ -379,11 +386,16 @@ export function createWorkoutSession({
     };
   }
 
-  function canSelectExercise(index) {
-    if (activeTimer) return false;
-    if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN || !Number.isInteger(index)) return false;
+  function hasUnfinishedSets(index) {
+    if (!Number.isInteger(index)) return false;
     const exercise = exercises[index];
     return Boolean(exercise && progress[index].completedSets.length < exercise.sets.length);
+  }
+
+  function canSelectExercise(index) {
+    if (activeTimer) return false;
+    if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN) return false;
+    return hasUnfinishedSets(index);
   }
 
   function applyEvent(event) {
@@ -401,6 +413,7 @@ export function createWorkoutSession({
         intervals.length = 0;
         activePauseReasons.clear();
         pauseStartedAt = null;
+        selectedPendingExerciseIndex = null;
         loadSetTargets(currentExerciseIndex, 0);
         break;
       }
@@ -409,10 +422,20 @@ export function createWorkoutSession({
         const target = event.payload?.exerciseIndex;
         if (!canSelectExercise(target)) break;
         const targetProg = progress[target];
+        const nextSetIdx = targetProg.completedSets.length;
+        if (targetProg.currentSetIndex !== nextSetIdx) {
+          loadSetTargets(target, nextSetIdx);
+        }
+        // Older journals used selection to end rest; retain that replay meaning.
+        if (state === SESSION_STATES.REST && event.payload?.preserveRest === true) {
+          selectedPendingExerciseIndex = target;
+          break;
+        }
         currentExerciseIndex = target;
-        loadSetTargets(target, targetProg.completedSets.length);
+        loadSetTargets(target, nextSetIdx);
         state = SESSION_STATES.ACTIVE_SET;
         restInfo = null;
+        selectedPendingExerciseIndex = null;
         endPause('rest', event.timestamp);
         break;
       }
@@ -488,6 +511,7 @@ export function createWorkoutSession({
           completedAt: event.timestamp,
         });
         activeTimer = null;
+        selectedPendingExerciseIndex = null;
 
         if (allSetsDone()) {
           clearPauses(event.timestamp);
@@ -564,10 +588,14 @@ export function createWorkoutSession({
           state = SESSION_STATES.FINISHED;
           workoutEndTime = event.timestamp;
           restInfo = null;
+          selectedPendingExerciseIndex = null;
           break;
         }
         if (state === SESSION_STATES.REST) {
-          const nextIndex = findNextExerciseIndex(currentExerciseIndex);
+          if (selectedPendingExerciseIndex !== null && !hasUnfinishedSets(selectedPendingExerciseIndex)) {
+            selectedPendingExerciseIndex = null;
+          }
+          const nextIndex = pendingIndex();
           if (nextIndex !== -1) {
             loadSetTargets(nextIndex, progress[nextIndex].completedSets.length);
           }
@@ -668,6 +696,7 @@ export function createWorkoutSession({
           workoutEndTime = event.timestamp;
         }
         restInfo = null;
+        selectedPendingExerciseIndex = null;
         break;
       }
 
@@ -679,6 +708,7 @@ export function createWorkoutSession({
         pauseStartedAt = null;
         activePauseReasons.clear();
         restInfo = null;
+        selectedPendingExerciseIndex = null;
         intervals.length = 0;
         activeTimer = null;
         intervalStart = null;
@@ -779,7 +809,10 @@ export function createWorkoutSession({
   }
 
   function advanceToNextSet({ keepAdjustments = false, timestamp = null } = {}) {
-    const nextIdx = findNextExerciseIndex(currentExerciseIndex);
+    const nextIdx = (selectedPendingExerciseIndex !== null && hasUnfinishedSets(selectedPendingExerciseIndex))
+      ? selectedPendingExerciseIndex
+      : findNextExerciseIndex(currentExerciseIndex);
+    selectedPendingExerciseIndex = null;
     if (nextIdx === -1) {
       state = SESSION_STATES.FINISHED;
       if (Number.isFinite(timestamp)) {
@@ -1140,7 +1173,7 @@ export function createWorkoutSession({
 
     selectExercise(exerciseIndex, { timestamp = Date.now() } = {}) {
       if (!canSelectExercise(exerciseIndex)) return;
-      applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex }, timestamp });
+      applyEvent({ type: EVENT_TYPES.SELECT_EXERCISE, payload: { exerciseIndex, preserveRest: true }, timestamp });
     },
 
     // Adjusting is allowed during rest too: that is what the "Prepare" screen is

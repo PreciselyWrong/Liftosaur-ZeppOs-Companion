@@ -249,7 +249,9 @@ export function createWorkoutController({
       Number.isFinite(mappedPlan.startTime) &&
       mappedPlan.startTime === localView.startedAt;
     const localState = isSameWorkout ? captureAdoptionState(capturedAt, localView) : null;
-    const resumeFromEntryId = preserveNavigation && isSameWorkout ? localView.entryId : null;
+    const resumeFromEntryId = preserveNavigation && isSameWorkout
+      ? (localView.pending?.set?.entryId || localView.entryId)
+      : null;
     if (isSameWorkout) {
       preserveIntervals(capturedAt);
     } else {
@@ -493,8 +495,9 @@ export function createWorkoutController({
     if (directSync.mode === 'DIRECT') {
       preserveIntervals(now());
     }
+    const viewNow = session.view(now());
     const resolvedResume = preserveNavigation
-      ? (resumeFromEntryId ?? session.view(now()).entryId)
+      ? (resumeFromEntryId ?? (viewNow.pending?.set?.entryId || session.view(now()).entryId))
       : resumeFromEntryId;
 
     dayPlan = newPlan;
