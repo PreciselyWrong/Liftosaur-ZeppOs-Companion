@@ -1,4 +1,4 @@
-import { recordingLabel } from '../../shared/recording-status.js';
+import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
@@ -81,6 +81,7 @@ import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
+  EXTENSION_CLOCK_LAYOUT,
   activeSetLayout,
   readyExercisePage,
   formatWorkoutPosition,
@@ -256,6 +257,7 @@ let vibrationTimer = null;
 let isRestMinimized = false;
 let restPresentation = createRestPresentationState();
 let isWorkoutTimerControlsOpen = false;
+let isSyncDetailsOpen = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
@@ -1312,6 +1314,12 @@ function handleGesture(gesture) {
     return true;
   }
 
+  if (isSyncDetailsOpen) {
+    if (gesture !== GESTURE_DOWN) return false;
+    closeSyncDetailsModal();
+    return true;
+  }
+
   if (isNotesModalOpen) {
     if (gesture === GESTURE_LEFT) moveNotesPage(1);
     else if (gesture === GESTURE_RIGHT) moveNotesPage(-1);
@@ -1596,9 +1604,6 @@ function renderSubtitle(text, { isError = false } = {}) {
   });
 }
 
-/** Design row of the clock line: the last one inside `DESIGN_BOX`. */
-const CLOCK_Y = 442;
-
 /**
  * Watch time in the user's own setting. `getFormatHour()` already applies the
  * 12h/24h choice; the constant is only needed to know whether a meridiem has
@@ -1632,21 +1637,35 @@ function currentClockLabel() {
  * and the one row of the design box no button ever occupies.
  */
 function renderClock() {
-  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
+  const sync = workoutController?.sync() || {};
+  const writes = workoutController?.getWorkoutSetWrites?.() || [];
+  const pendingCount = workoutController?.getPendingSetCount?.();
+  const label = [
+    currentClockLabel(),
+    recordingLabel(sync, writes.length, pendingCount),
+  ].filter(Boolean).join(' | ');
   if (!label) return;
   lastRenderedClock = label;
-  addLiveLabel('clock', {
-    x: px(130),
-    y: px(CLOCK_Y),
-    w: px(220),
-    h: px(20),
+  const props = {
+    x: px(EXTENSION_CLOCK_LAYOUT.x),
+    y: px(EXTENSION_CLOCK_LAYOUT.y),
+    w: px(EXTENSION_CLOCK_LAYOUT.width),
+    h: px(EXTENSION_CLOCK_LAYOUT.height),
+    radius: px(4),
+    normal_color: THEME.bg,
+    press_color: THEME.card,
     color: THEME.textSecondary,
     text_size: font('micro'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
     text: label,
-  });
+  };
+  if (canOpenSyncDetails()) {
+    addLiveButton('clock', { ...props, click_func: openSyncDetailsModal });
+  } else {
+    addLiveLabel('clock', props);
+  }
 }
 
 function formatHeartRate(hrVal) {
@@ -3376,6 +3395,109 @@ function renderWorkoutTimerControlsModal(view) {
   });
 }
 
+function canOpenSyncDetails() {
+  if (isNotesModalOpen || isWorkoutTimerControlsOpen) return false;
+  const state = workoutController?.view().state;
+  return state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST ||
+    state === SESSION_STATES.FINISHED;
+}
+
+function openSyncDetailsModal() {
+  if (isTearingDown) return;
+  if (!canOpenSyncDetails()) return;
+  if (isSyncDetailsOpen) {
+    closeSyncDetailsModal();
+    return;
+  }
+  isSyncDetailsOpen = true;
+  controllerUiDirty = true;
+  renderUI();
+}
+
+function closeSyncDetailsModal() {
+  if (isTearingDown) return;
+  isSyncDetailsOpen = false;
+  controllerUiDirty = true;
+  renderUI();
+}
+
+function renderSyncDetailsModal() {
+  const layout = WORKOUT_TIMER_MODAL_LAYOUT;
+  addWidget(widget.FILL_RECT, {
+    x: px(layout.panelX),
+    y: px(layout.panelY),
+    w: px(layout.panelWidth),
+    h: px(layout.panelHeight),
+    radius: px(layout.panelRadius),
+    color: THEME.card,
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(layout.contentX),
+    y: px(layout.titleY),
+    w: px(layout.contentWidth),
+    h: px(34),
+    color: THEME.textPrimary,
+    text_size: font('title'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: 'Sync status',
+  });
+
+  const sync = workoutController?.sync() || {};
+  const writes = workoutController?.getWorkoutSetWrites?.() || [];
+  const pendingCount = workoutController?.getPendingSetCount?.();
+  const details = recordingDetails(sync, {
+    completedCount: writes.length,
+    pendingCount,
+  });
+
+  const statusColor = (details.statusLabel === 'Conflict' || details.statusLabel === 'Recovery')
+    ? THEME.yellow
+    : (details.statusLabel === 'Synced' ? THEME.success : THEME.textPrimary);
+
+  addWidget(widget.TEXT, {
+    x: px(layout.contentX),
+    y: px(layout.stateY),
+    w: px(layout.contentWidth),
+    h: px(28),
+    color: statusColor,
+    text_size: font('body'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: details.statusLabel || 'On watch',
+  });
+
+  addWidget(widget.TEXT, {
+    x: px(layout.contentX),
+    y: px(layout.valueY),
+    w: px(layout.contentWidth),
+    h: px(110),
+    color: THEME.textSecondary,
+    text_size: font('caption'),
+    align_h: align.CENTER_H,
+    align_v: align.TOP,
+    text_style: text_style.WRAP,
+    text: details.description,
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(layout.closeX),
+    y: px(layout.closeY),
+    w: px(layout.closeWidth),
+    h: px(layout.closeHeight),
+    radius: px(layout.closeHeight / 2),
+    normal_color: THEME.cardActive,
+    press_color: THEME.card,
+    color: THEME.textPrimary,
+    text: 'Close',
+    text_size: font('caption'),
+    click_func: closeSyncDetailsModal,
+  });
+}
+
 function renderFinishedScreen(view) {
   renderTitle('Workout complete', THEME.success);
   renderSubtitle(truncate(view.dayName || '', 30));
@@ -3545,6 +3667,7 @@ function renderUI() {
 }
 
 function renderScreen() {
+  if (isSyncDetailsOpen) return renderSyncDetailsModal();
   if (isWorkoutTimerControlsOpen) {
     const timerView = workoutController.view();
     if (timerView.state === SESSION_STATES.ACTIVE_SET || timerView.state === SESSION_STATES.REST) {
@@ -3602,7 +3725,13 @@ function renderScreen() {
  * countdown skipping this file already had to fix once.
  */
 function updateClock() {
-  const label = [currentClockLabel(), recordingLabel(workoutController?.sync() || {}, workoutController?.getWorkoutSetWrites().length || 0)].filter(Boolean).join(' | ');
+  const sync = workoutController?.sync() || {};
+  const writes = workoutController?.getWorkoutSetWrites?.() || [];
+  const pendingCount = workoutController?.getPendingSetCount?.();
+  const label = [
+    currentClockLabel(),
+    recordingLabel(sync, writes.length, pendingCount),
+  ].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
   if (!updateLiveWidget('clock', { text: label })) renderUI();
@@ -3730,6 +3859,7 @@ function stopClock() {
 Page(
   BasePage({
     onInit() {
+      isSyncDetailsOpen = false;
       isTearingDown = false;
       exerciseImages = createWatchExerciseImages({
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
