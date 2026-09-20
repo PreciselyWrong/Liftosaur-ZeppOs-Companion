@@ -8,7 +8,15 @@ import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exe
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
-import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type } from '@zos/ui';
+import {
+  createRestHaloLayers,
+  darkenColor,
+  isPurpleRestRing,
+  getChangedFieldTextColor,
+  startRestPulseAnimation,
+  stopRestPulseAnimation,
+} from '../../shared/rest-visual.js';
+import { createWidget, deleteWidget, redraw, widget, align, text_style, prop, sport_data, edit_widget_group_type, anim_status } from '@zos/ui';
 import { px } from '@zos/utils';
 import { getDeviceInfo, SCREEN_SHAPE_ROUND } from '@zos/device';
 import {
@@ -523,7 +531,21 @@ function syncCompletedSets() {
   return workoutController.syncSets().then(recordResult, () => recordResult(false));
 }
 
+let restHaloWidgets = [];
+let restPulseAnimHandles = [];
+let restPulseAttempted = false;
+
+function stopRestBezelAnimation() {
+  restPulseAttempted = false;
+  if (restPulseAnimHandles.length > 0) {
+    stopRestPulseAnimation(restPulseAnimHandles, prop, anim_status);
+    restPulseAnimHandles = [];
+  }
+}
+
 function clearWidgets() {
+  stopRestBezelAnimation();
+  restHaloWidgets = [];
   for (const w of activeWidgets) {
     try {
       deleteWidget(w);
@@ -788,18 +810,76 @@ function restStatusColor(rest) {
   return THEME.primary;
 }
 
+function updateRestBezelAndHalo(rest) {
+  const baseColor = restStatusColor(rest);
+  if (liveWidgets.restBezel?.props.color !== baseColor) {
+    if (!updateLiveWidget('restBezel', { color: baseColor })) controllerUiDirty = true;
+  }
+  for (let i = 1; i < restHaloWidgets.length; i++) {
+    const h = restHaloWidgets[i];
+    const color = darkenColor(baseColor, h.factor);
+    if (h.props.color !== color && !updateLiveWidget(`restHalo_${i}`, { color })) {
+      controllerUiDirty = true;
+    }
+  }
+  if (rest?.isPaused) {
+    stopRestBezelAnimation();
+  } else if (!restPulseAttempted && restHaloWidgets.length > 0) {
+    restPulseAttempted = true;
+    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+  }
+}
+
 function renderRestBezel(rest) {
-  const props = {
-    x: 2,
-    y: 2,
-    w: W - 4,
-    h: H - 4,
-    radius: LAYOUT.isFitted ? Math.round(W * 0.12) : Math.round(W / 2),
-    line_width: Math.max(4, Math.round(W * 0.014)),
-    color: restStatusColor(rest),
-  };
-  const bezel = addRawWidget(widget.STROKE_RECT, props);
-  liveWidgets.restBezel = { widget: bezel, props };
+  stopRestBezelAnimation();
+  restHaloWidgets = [];
+
+  const { layers } = createRestHaloLayers({
+    width: W,
+    height: H,
+    isFitted: LAYOUT.isFitted,
+  });
+  const baseColor = restStatusColor(rest);
+
+  for (const layer of layers) {
+    const layerColor = darkenColor(baseColor, layer.factor);
+    const props = {
+      x: layer.x,
+      y: layer.y,
+      w: layer.w,
+      h: layer.h,
+      radius: layer.radius,
+      line_width: layer.line_width,
+      color: layerColor,
+    };
+    const nativeWidget = addRawWidget(widget.STROKE_RECT, props);
+    restHaloWidgets.push({ widget: nativeWidget, props, factor: layer.factor });
+    if (layer.index === 0) {
+      liveWidgets.restBezel = { widget: nativeWidget, props };
+    } else {
+      liveWidgets[`restHalo_${layer.index}`] = { widget: nativeWidget, props };
+    }
+  }
+
+  if (!rest?.isPaused) {
+    restPulseAttempted = true;
+    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+  }
+}
+
+function updatePreparedRestVisuals(view) {
+  if (!liveWidgets.restBezel || view.state !== SESSION_STATES.REST || !view.rest) return;
+  updateRestBezelAndHalo(view.rest);
+  for (const field of ['exercise', 'weight', 'reps', 'rpe']) {
+    const key = field === 'exercise' ? 'exerciseTitle' : `${field}-value`;
+    const color = getChangedFieldTextColor({
+      isChanged: view.pending?.changes[field], isResting: true, rest: view.rest,
+      primaryColor: THEME.primaryLight, normalColor: THEME.textPrimary,
+    });
+    if (liveWidgets[key] && liveWidgets[key].props.color !== color) {
+      if (!updateLiveWidget(key, { color })) controllerUiDirty = true;
+    }
+  }
 }
 
 function renderPreparedTopBar(view, onRest) {
@@ -1565,13 +1645,14 @@ function refreshActiveSetControls() {
   if (!set) return;
 
   consumeControllerUiChange();
+  const hasPurpleBezel = isPurpleRestRing({ isResting, rest: view.rest, hasRing: Boolean(liveWidgets.restBezel) });
   const updates = [
     updateLiveWidget('exerciseTitle', {
-      color: isResting && pending?.changes.exercise ? THEME.primaryLight : THEME.textPrimary,
+      color: hasPurpleBezel && pending?.changes.exercise ? THEME.primaryLight : THEME.textPrimary,
     }),
     updateLiveWidget('weight-value', {
       text: set.weight === null || set.weight === undefined ? '-' : String(set.weight),
-      color: isResting && pending?.changes.weight ? THEME.primaryLight : THEME.textPrimary,
+      color: hasPurpleBezel && pending?.changes.weight ? THEME.primaryLight : THEME.textPrimary,
     }),
     updateLiveWidget('weight-label', {
       text: formatLoadoutLabel(
@@ -1584,11 +1665,11 @@ function refreshActiveSetControls() {
     }),
     updateLiveWidget('reps-value', {
       text: formatEditableSetValue(set.reps, set.isAmrap),
-      color: isResting && pending?.changes.reps ? THEME.primaryLight : THEME.textPrimary,
+      color: hasPurpleBezel && pending?.changes.reps ? THEME.primaryLight : THEME.textPrimary,
     }),
     updateLiveWidget('rpe-value', {
       text: formatEditableSetValue(set.rpe, set.logRpe),
-      color: isResting && pending?.changes.rpe ? THEME.primaryLight : THEME.textPrimary,
+      color: hasPurpleBezel && pending?.changes.rpe ? THEME.primaryLight : THEME.textPrimary,
     }),
   ];
   if (updates.includes(false)) controllerUiDirty = true;
@@ -1716,13 +1797,14 @@ function renderActiveSetScreen(view) {
   const showsPreparationImage = isResting && !canSkipWarmup && renderPreparationImage(pending?.exerciseImageUrl);
   const headerX = (canSkipWarmup || showsPreparationImage) ? 132 : 64;
   const headerWidth = (canSkipWarmup || showsPreparationImage) ? 216 : 282;
+  const hasPurpleBezel = isPurpleRestRing({ isResting, rest: view.rest });
 
   addLiveLabel('exerciseTitle', {
     x: px(headerX),
     y: px(92),
     w: px(headerWidth),
     h: px(30),
-    color: (isResting && pending?.changes.exercise) ? THEME.primaryLight : THEME.textPrimary,
+    color: (hasPurpleBezel && pending?.changes.exercise) ? THEME.primaryLight : THEME.textPrimary,
     text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -1790,7 +1872,7 @@ function renderActiveSetScreen(view) {
     height: controls.rowHeight,
     label: formatLoadoutLabel(set?.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight) || (view.unit || 'KG').toUpperCase(),
     value: set?.weight === null || set?.weight === undefined ? '-' : String(set.weight),
-    valueColor: (isResting && pending?.changes.weight) ? THEME.primaryLight : THEME.textPrimary,
+    valueColor: (hasPurpleBezel && pending?.changes.weight) ? THEME.primaryLight : THEME.textPrimary,
     onMinus: () => {
       workoutController.adjustWeight(-1);
       refreshActiveSetControls();
@@ -1807,7 +1889,7 @@ function renderActiveSetScreen(view) {
     height: controls.rowHeight,
     label: 'REPS',
     value: formatEditableSetValue(set?.reps, set?.isAmrap),
-    valueColor: (isResting && pending?.changes.reps) ? THEME.primaryLight : THEME.textPrimary,
+    valueColor: (hasPurpleBezel && pending?.changes.reps) ? THEME.primaryLight : THEME.textPrimary,
     onMinus: () => {
       workoutController.adjustReps(-1);
       refreshActiveSetControls();
@@ -1825,7 +1907,7 @@ function renderActiveSetScreen(view) {
       height: controls.rowHeight,
       label: 'RPE',
       value: formatEditableSetValue(set?.rpe, set?.logRpe),
-      valueColor: (isResting && pending?.changes.rpe) ? THEME.primaryLight : THEME.textPrimary,
+      valueColor: (hasPurpleBezel && pending?.changes.rpe) ? THEME.primaryLight : THEME.textPrimary,
       onMinus: () => {
         workoutController.adjustRpe(-0.5);
         refreshActiveSetControls();
@@ -3280,6 +3362,8 @@ function tick() {
     return;
   }
 
+  updatePreparedRestVisuals(view);
+
   const currentSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
   if (currentSecond !== lastRenderedSecond) {
     lastRenderedSecond = currentSecond;
@@ -3299,7 +3383,6 @@ function tick() {
       updateLiveWidget('actionButton', {
         text: view.timedSet?.phase === 'REST' ? 'Armed' : `> Start set ${formatSeconds(view.rest.remaining)}`,
       });
-      updateLiveWidget('restBezel', { color: restStatusColor(view.rest) });
     }
     updateLiveWidget('elapsed', {
       text: formatSeconds(view.elapsedSeconds),
@@ -3441,6 +3524,7 @@ DataWidget(
     },
 
     onPause() {
+      stopRestBezelAnimation();
       isPaused = true;
       lifecycleGeneration += 1;
       cancelScheduledRender();
@@ -3474,6 +3558,9 @@ DataWidget(
       exerciseImages?.abandon();
       exerciseImages = null;
       widgetInstance = null;
+      restHaloWidgets = [];
+      restPulseAnimHandles = [];
+      restPulseAttempted = false;
       activeWidgets = [];
       liveWidgets = {};
     },
