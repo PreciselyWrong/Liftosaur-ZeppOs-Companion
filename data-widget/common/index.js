@@ -1,6 +1,6 @@
 import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
+import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { createRestPresentationState, updateRestPresentation } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
@@ -303,6 +303,9 @@ let isRestMinimized = false;
 let restPresentation = createRestPresentationState();
 let isWorkoutTimerControlsOpen = false;
 let isSyncDetailsOpen = false;
+let isEditLastSetOpen = false;
+let lastSetDraft = null;
+let lastSetEditError = null;
 let phoneRequiredReason = null;
 let discardConfirmationRequested = false;
 
@@ -2342,7 +2345,7 @@ function renderWorkoutTimerControlsModal(view) {
 }
 
 function canOpenSyncDetails() {
-  if (isNotesModalOpen || isWorkoutTimerControlsOpen) return false;
+  if (isEditLastSetOpen || isNotesModalOpen || isWorkoutTimerControlsOpen) return false;
   const state = workoutController?.view().state;
   return state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST ||
     state === SESSION_STATES.FINISHED;
@@ -2356,6 +2359,7 @@ function openSyncDetailsModal() {
     return;
   }
   isSyncDetailsOpen = true;
+  lastSetEditError = null;
   controllerUiDirty = true;
   scheduleRenderUI();
 }
@@ -2363,6 +2367,47 @@ function openSyncDetailsModal() {
 function closeSyncDetailsModal() {
   if (isTearingDown || isPaused) return;
   isSyncDetailsOpen = false;
+  controllerUiDirty = true;
+  scheduleRenderUI();
+}
+
+function startEditLastSet() {
+  if (isTearingDown || isPaused) return;
+  const draftResult = workoutController?.createLastSetDraft?.();
+  if (!draftResult || !draftResult.success || !draftResult.draft) {
+    lastSetEditError = draftResult?.reason || 'Cannot edit this set.';
+    scheduleRenderUI();
+    return;
+  }
+  lastSetEditError = null;
+  lastSetDraft = draftResult.draft;
+  isSyncDetailsOpen = false;
+  isEditLastSetOpen = true;
+  controllerUiDirty = true;
+  scheduleRenderUI();
+}
+
+function cancelEditLastSet() {
+  if (isTearingDown || isPaused) return;
+  isEditLastSetOpen = false;
+  lastSetDraft = null;
+  lastSetEditError = null;
+  controllerUiDirty = true;
+  scheduleRenderUI();
+}
+
+function saveEditLastSet() {
+  if (isTearingDown || isPaused) return;
+  const result = workoutController?.saveLastSetCorrection?.(lastSetDraft);
+  if (!result?.success) {
+    lastSetEditError = result?.reason || 'Could not save. Try again.';
+    controllerUiDirty = true;
+    scheduleRenderUI();
+    return;
+  }
+  lastSetEditError = null;
+  isEditLastSetOpen = false;
+  lastSetDraft = null;
   controllerUiDirty = true;
   scheduleRenderUI();
 }
@@ -2426,8 +2471,38 @@ function renderSyncDetailsModal() {
     align_h: align.CENTER_H,
     align_v: align.TOP,
     text_style: text_style.WRAP,
-    text: details.description,
+    text: lastSetEditError || details.description,
   });
+
+  const canEdit = workoutController?.canCorrectLastSet?.() || { allowed: false, reason: 'Unavailable' };
+  if (canEdit.allowed) {
+    addWidget(widget.BUTTON, {
+      x: px(layout.pauseX),
+      y: px(layout.pauseY),
+      w: px(layout.pauseWidth),
+      h: px(layout.pauseHeight),
+      radius: px(layout.pauseHeight / 2),
+      normal_color: THEME.primary,
+      press_color: THEME.primaryDeep,
+      color: THEME.textPrimary,
+      text: 'Edit last set',
+      text_size: font('button'),
+      click_func: startEditLastSet,
+    });
+  } else {
+    addWidget(widget.BUTTON, {
+      x: px(layout.pauseX),
+      y: px(layout.pauseY),
+      w: px(layout.pauseWidth),
+      h: px(layout.pauseHeight),
+      radius: px(layout.pauseHeight / 2),
+      normal_color: THEME.cardActive,
+      press_color: THEME.cardActive,
+      color: THEME.textSecondary,
+      text: canEdit.reason ? `No edit: ${canEdit.reason}` : 'Cannot edit last set',
+      text_size: font('micro'),
+    });
+  }
 
   addWidget(widget.BUTTON, {
     x: px(layout.closeX),
@@ -2442,6 +2517,112 @@ function renderSyncDetailsModal() {
     text_size: font('caption'),
     click_func: closeSyncDetailsModal,
   });
+}
+
+function renderEditLastSetScreen() {
+  const draft = lastSetDraft;
+  if (!draft) return;
+  const layout = SET_CORRECTION_LAYOUT;
+
+  addWidget(widget.BUTTON, {
+    x: px(layout.titleX),
+    y: px(layout.titleY),
+    w: px(layout.titleWidth),
+    h: px(layout.titleHeight),
+    radius: px(1),
+    normal_color: THEME.bg,
+    press_color: THEME.bg,
+    color: THEME.primaryLight,
+    text_size: font('title'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text: formatMarqueeText(draft.exerciseName || 'Last set', 16),
+  });
+
+  const setLabel = `Set ${draft.setIndex}${draft.isWarmup ? ' (Warmup)' : ''}`;
+  addWidget(widget.TEXT, {
+    x: px(layout.setX),
+    y: px(layout.setY),
+    w: px(layout.setWidth),
+    h: px(layout.setHeight),
+    color: THEME.textSecondary,
+    text_size: font('body'),
+    align_h: align.CENTER_H,
+    align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: setLabel,
+  });
+
+  const step = draft.step;
+  renderStepper({
+    key: 'edit-weight',
+    y: px(layout.weightY),
+    height: layout.rowHeight,
+    label: draft.unit.toUpperCase(),
+    value: draft.weight === null ? '-' : String(draft.weight),
+    onMinus: () => {
+      draft.weight = Math.max(0, Math.round((draft.weight - step) * 100) / 100);
+      scheduleRenderUI();
+    },
+    onPlus: () => {
+      draft.weight = Math.max(0, Math.round((draft.weight + step) * 100) / 100);
+      scheduleRenderUI();
+    },
+  });
+
+  renderStepper({
+    key: 'edit-reps',
+    y: px(layout.repsY),
+    height: layout.rowHeight,
+    label: 'REPS',
+    value: String(draft.reps),
+    onMinus: () => {
+      draft.reps = Math.max(0, Math.round(draft.reps - 1));
+      scheduleRenderUI();
+    },
+    onPlus: () => {
+      draft.reps = Math.max(0, Math.round(draft.reps + 1));
+      scheduleRenderUI();
+    },
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(layout.cancelX),
+    y: px(layout.actionY),
+    w: px(layout.actionWidth),
+    h: px(layout.actionHeight),
+    radius: px(layout.actionHeight / 2),
+    normal_color: THEME.card,
+    press_color: THEME.cardActive,
+    color: THEME.textPrimary,
+    text: 'Cancel',
+    text_size: font('button'),
+    click_func: cancelEditLastSet,
+  });
+
+  addWidget(widget.BUTTON, {
+    x: px(layout.saveX),
+    y: px(layout.actionY),
+    w: px(layout.actionWidth),
+    h: px(layout.actionHeight),
+    radius: px(layout.actionHeight / 2),
+    normal_color: THEME.primary,
+    press_color: THEME.primaryDeep,
+    color: THEME.textPrimary,
+    text: 'Save',
+    text_size: font('button'),
+    click_func: saveEditLastSet,
+  });
+  if (lastSetEditError) {
+    addWidget(widget.TEXT, {
+      x: px(layout.errorX), y: px(layout.errorY),
+      w: px(layout.errorWidth), h: px(layout.errorHeight),
+      color: THEME.error, text_size: font('micro'),
+      align_h: align.CENTER_H, align_v: align.TOP,
+      text_style: text_style.WRAP, text: lastSetEditError,
+    });
+  }
+
 }
 
 function renderOverviewScreen(view) {
@@ -3100,6 +3281,10 @@ function renderUI() {
 }
 
 function renderScreen() {
+  if (isEditLastSetOpen) {
+    if (lastSetDraft) return renderEditLastSetScreen();
+    isEditLastSetOpen = false;
+  }
   if (isSyncDetailsOpen) return renderSyncDetailsModal();
   if (isWorkoutTimerControlsOpen) {
     const timerView = workoutController.view();
@@ -3542,6 +3727,9 @@ DataWidget(
   BasePage({
     onInit() {
       isSyncDetailsOpen = false;
+      isEditLastSetOpen = false;
+      lastSetDraft = null;
+      lastSetEditError = null;
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
       exerciseImages = createWatchExerciseImages({
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),

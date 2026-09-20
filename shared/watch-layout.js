@@ -148,3 +148,11 @@ export function extensionActiveSetLayout(set) {
     actionHeight: Math.min(layout.actionHeight, availableHeight),
   };
 }
+
+export const SET_CORRECTION_LAYOUT = Object.freeze({
+  titleX: 104, titleY: 46, titleWidth: 272, titleHeight: 36,
+  setX: 80, setY: 86, setWidth: 320, setHeight: 30,
+  weightY: 132, repsY: 216, rowHeight: 64,
+  actionY: 316, actionHeight: 64, actionWidth: 170, cancelX: 64, saveX: 246,
+  errorX: 108, errorY: 386, errorWidth: 264, errorHeight: 48,
+});
