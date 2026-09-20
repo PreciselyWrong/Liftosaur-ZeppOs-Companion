@@ -1140,10 +1140,12 @@ function supersetColor(group) {
 }
 
 let notesPage = 0;
+let notesModalHasImage = false;
 
 
 function closeTextModal() {
   isNotesModalOpen = false;
+  notesModalHasImage = false;
   notesImageWidget = null;
   notesPage = 0;
   renderUI();
@@ -1170,7 +1172,7 @@ function updateNotesImage() {
   const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   const image = exerciseImages?.get(activeNotesImageUrl);
   const pages = exerciseInfoPages(activeNotesContent, enabled, activeNotesImageUrl, image?.status);
-  const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
+  const imagePage = Boolean(pages[notesPage]?.image && notesPage === 0 && image?.status === 'ready');
   notesImageWidget?.setProperty(prop.VISIBLE, false);
   updateLiveWidget('modal-subtitle', {
     y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.subtitleY),
@@ -1194,6 +1196,12 @@ function updateNotesImage() {
 function renderNotesModal() {
   notesImageWidget = null;
   const pages = currentNotesPages();
+  const hasImage = Boolean(pages[0]?.image);
+  // Reconcile during render so image arrivals while paused preserve the reading position.
+  if (hasImage !== notesModalHasImage) {
+    notesPage = Math.max(0, notesPage + (hasImage ? 1 : -1));
+    notesModalHasImage = hasImage;
+  }
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -1649,6 +1657,7 @@ function openTextModal(title, content, imageUrl = null) {
   activeNotesContent = content;
   activeNotesImageUrl = exerciseDisplayImageUrl(imageUrl);
   notesImageWidget = null;
+  notesModalHasImage = Boolean(currentNotesPages()[0]?.image);
   exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
   renderUI();
 }
@@ -3410,7 +3419,14 @@ function renderLoadingScreen() {
 function handleExerciseImageChange(_imageUrl, status) {
   if (isTearingDown) return;
   if (isNotesModalOpen) {
-    if (status === 'unavailable') { renderUI(); return; }
+    if (!_imageUrl || _imageUrl === activeNotesImageUrl) {
+      const hasImageNow = Boolean(currentNotesPages()[0]?.image);
+      if (hasImageNow !== notesModalHasImage) {
+        renderUI();
+        return;
+      }
+      if (status === 'unavailable') { renderUI(); return; }
+    }
     updateNotesImage();
     redraw();
     return;

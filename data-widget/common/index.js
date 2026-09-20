@@ -281,6 +281,7 @@ let listPage = 0;
 let readyPage = 0;
 let overviewPage = 0;
 let notesPage = 0;
+let notesModalHasImage = false;
 let activeNotesImageUrl = null;
 let notesImageWidget = null;
 let exerciseImages = null;
@@ -649,6 +650,7 @@ function openNotes(title, content, imageUrl = null) {
   activeNotesContent = content;
   activeNotesImageUrl = exerciseDisplayImageUrl(imageUrl);
   notesImageWidget = null;
+  notesModalHasImage = Boolean(currentNotesPages()[0]?.image);
   exerciseImages?.load(activeNotesImageUrl, { retry: true, priority: true });
   isNotesModalOpen = true;
   scheduleRenderUI();
@@ -673,6 +675,7 @@ function renderExerciseInfo(exerciseName, details, y, height, imageUrl) {
 
 function closeNotes() {
   isNotesModalOpen = false;
+  notesModalHasImage = false;
   notesImageWidget = null;
   activeNotesTitle = '';
   activeNotesContent = '';
@@ -2429,7 +2432,7 @@ function updateNotesImage() {
   const enabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   const image = exerciseImages?.get(activeNotesImageUrl);
   const pages = exerciseInfoPages(activeNotesContent, enabled, activeNotesImageUrl, image?.status);
-  const imagePage = enabled && activeNotesImageUrl && notesPage === 0 && image?.status === 'ready';
+  const imagePage = Boolean(pages[notesPage]?.image && notesPage === 0 && image?.status === 'ready');
   notesImageWidget?.setProperty(prop.VISIBLE, false);
   updateLiveWidget('modal-subtitle', {
     y: px(imagePage ? -999 : INFO_TEXT_LAYOUT.subtitleY),
@@ -2468,6 +2471,12 @@ function moveNotesPage(delta) {
 function renderNotesScreen() {
   notesImageWidget = null;
   const pages = currentNotesPages();
+  const hasImage = Boolean(pages[0]?.image);
+  // Reconcile during render so image arrivals while paused preserve the reading position.
+  if (hasImage !== notesModalHasImage) {
+    notesPage = Math.max(0, notesPage + (hasImage ? 1 : -1));
+    notesModalHasImage = hasImage;
+  }
   const totalPages = pages.length;
   if (notesPage >= totalPages) notesPage = totalPages - 1;
   if (notesPage < 0) notesPage = 0;
@@ -2835,7 +2844,14 @@ function handleExerciseImageChange(_imageUrl, status) {
     return;
   }
   if (isNotesModalOpen) {
-    if (status === 'unavailable') { renderUI(); return; }
+    if (!_imageUrl || _imageUrl === activeNotesImageUrl) {
+      const hasImageNow = Boolean(currentNotesPages()[0]?.image);
+      if (hasImageNow !== notesModalHasImage) {
+        renderUI();
+        return;
+      }
+      if (status === 'unavailable') { renderUI(); return; }
+    }
     updateNotesImage();
     redraw();
     return;
