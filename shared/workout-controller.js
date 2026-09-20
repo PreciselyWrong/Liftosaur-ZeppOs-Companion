@@ -1140,6 +1140,13 @@ export function createWorkoutController({
     cancelWorkout: (options = {}) =>
       mutateSession(() => session.cancelWorkout({ timestamp: options.timestamp ?? now() })),
 
+    getPendingSetCount: () => {
+      const allWrites = session.getWorkoutSetWrites();
+      const pendingWrites = allWrites.slice(directSync.acknowledgedSetCount);
+      return new Set(pendingWrites.map((w) => w.setId)).size;
+    },
+
+
     updateSync,
     replaceFromServer,
     preserveIntervals,
