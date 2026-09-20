@@ -230,6 +230,38 @@ export function createWorkoutController({
     };
   }
 
+  function canCorrectLastSet() {
+    if (disposed) return { allowed: false, reason: 'Session closed' };
+    if (directSync.mode !== 'DIRECT') return { allowed: false, reason: 'Direct workout required' };
+    if (directSync.conflict) return { allowed: false, reason: 'Resolve the sync conflict first' };
+    if (directSync.remoteMissing) return { allowed: false, reason: 'Recover the workout first' };
+    if (directSync.finishRequestedAt !== null || directSync.discardRequestedAt !== null) {
+      return { allowed: false, reason: 'Workout is closing' };
+    }
+    return session.canCorrectLastSet();
+  }
+
+  function completionFingerprint(set) {
+    return JSON.stringify([
+      set.entryId, set.setId, set.weight, set.reps, set.unit, set.rpe,
+      set.repsLeft, set.setTimer, set.setTimerLeft, set.userVars, set.isUnilateral,
+    ]);
+  }
+
+  function localCompletionJournal(newPlan) {
+    const view = session.view(now());
+    if (newPlan?.programId !== view.programId || newPlan?.startTime !== view.startedAt) return [];
+    const knownIds = new Set(session.getWorkoutSetWrites().map((write) => write.setId));
+    const incoming = (newPlan.exercises || []).flatMap((exercise) =>
+      [...(exercise.warmupSets || []), ...(exercise.sets || [])].filter((set) => set.completed)
+    );
+    if (incoming.some((set) => !knownIds.has(set.setId))) return [];
+    const completions = session.getLocalCompletions();
+    return completions.length ? [{
+      type: EVENT_TYPES.LOCAL_COMPLETIONS, payload: { completions }, timestamp: now(),
+    }] : [];
+  }
+
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
     if (disposed) return;
     if (hasActiveTimer()) {
@@ -260,12 +292,13 @@ export function createWorkoutController({
     }
     const plan = isSameWorkout ? preserveLocalExerciseMetadata(mappedPlan) : mappedPlan;
     if (!plan || !plan.unit) return;
+    const completionJournal = localCompletionJournal(plan);
     dayPlan = plan;
     lastServerWorkoutSignature = JSON.stringify(serverWorkout);
     session = createWorkoutSession({
       plan: dayPlan,
       resumeFromEntryId,
-      initialJournal: localState?.skippedWarmups || [],
+      initialJournal: [...(localState?.skippedWarmups || []), ...completionJournal],
     });
     sessionGeneration += 1;
     restoreAdoptionState(localState, { preserveNavigation });
@@ -500,10 +533,11 @@ export function createWorkoutController({
       ? (resumeFromEntryId ?? (viewNow.pending?.set?.entryId || session.view(now()).entryId))
       : resumeFromEntryId;
 
+    const completionJournal = localCompletionJournal(newPlan);
     dayPlan = newPlan;
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
-    session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId: resolvedResume });
+    session = createWorkoutSession({ plan: dayPlan, resumeFromEntryId: resolvedResume, initialJournal: completionJournal });
     sessionGeneration += 1;
     workoutGeneration += 1;
     directSync = normalizeDirectSync({
@@ -580,7 +614,7 @@ export function createWorkoutController({
     });
     const reboundSets = exercises.map((exercise) => [...exercise.warmupSets, ...exercise.sets]);
     const journal = session.getJournal().map((event) => {
-      if (event.type !== EVENT_TYPES.COMPLETE_SET && event.type !== EVENT_TYPES.SKIP_WARMUP) return event;
+      if (event.type !== EVENT_TYPES.COMPLETE_SET && event.type !== EVENT_TYPES.SKIP_WARMUP && event.type !== EVENT_TYPES.CORRECT_SET) return event;
       const exerciseArrayIndex = exercises.findIndex((item) => item.index === event.payload.exerciseIndex);
       const exercise = exercises[exerciseArrayIndex];
       const sets = reboundSets[exerciseArrayIndex];
@@ -1146,6 +1180,77 @@ export function createWorkoutController({
       return new Set(pendingWrites.map((w) => w.setId)).size;
     },
 
+    canCorrectLastSet,
+
+    createLastSetDraft: () => {
+      const check = canCorrectLastSet();
+      if (!check.allowed) return { success: false, reason: check.reason };
+      const set = check.set;
+      return {
+        success: true,
+        draft: {
+          workoutStartedAt: session.view(now()).startedAt,
+          programId: session.view(now()).programId,
+          originalCompletion: completionFingerprint(set),
+          setId: set.setId,
+          entryId: set.entryId,
+          exerciseName: set.exerciseName,
+          exerciseIndex: set.exerciseIndex,
+          setIndex: set.setIndex,
+          isWarmup: set.isWarmup,
+          weight: set.weight,
+          reps: set.reps,
+          unit: set.unit,
+          step: weightStepFor(set.unit),
+        },
+      };
+    },
+
+    saveLastSetCorrection: (draft) => {
+      const check = canCorrectLastSet();
+      if (!check.allowed) return { success: false, reason: check.reason };
+      if (!draft?.setId) return { success: false, reason: 'Missing draft' };
+      const view = session.view(now());
+      if (draft.workoutStartedAt !== view.startedAt || draft.programId !== view.programId) {
+        return { success: false, reason: 'Workout changed. Reopen the editor.' };
+      }
+      if (check.set.setId !== draft.setId) {
+        return { success: false, reason: 'Latest set changed. Reopen the editor.' };
+      }
+      if (completionFingerprint(check.set) !== draft.originalCompletion) {
+        return { success: false, reason: 'Set changed. Reopen the editor.' };
+      }
+      if (deferredServerWorkout) {
+        const remotePlan = mapWorkout(deferredServerWorkout, { units: dayPlan.unit, isCurrent: true });
+        const remoteSession = createWorkoutSession({ plan: remotePlan });
+        const remoteSet = remoteSession.getCompletedSet(draft.setId);
+        const knownIds = new Set(session.getWorkoutSetWrites().map((write) => write.setId));
+        const hasNewCompletion = remoteSession.getWorkoutSetWrites().some((write) => !knownIds.has(write.setId));
+        if (remotePlan?.startTime !== draft.workoutStartedAt || remotePlan?.programId !== draft.programId ||
+            hasNewCompletion || !remoteSet || completionFingerprint(remoteSet) !== draft.originalCompletion) {
+          return { success: false, reason: 'Cloud set changed. Reopen the editor after rest.' };
+        }
+      }
+      if (!Number.isFinite(draft.weight) || draft.weight < 0 || !Number.isSafeInteger(draft.reps) || draft.reps < 0) {
+        return { success: false, reason: 'Enter a valid weight and whole repetitions.' };
+      }
+      if (check.set.weight === draft.weight && check.set.reps === draft.reps) return { success: true };
+      if (!session.correctSet({ setId: draft.setId, weight: draft.weight, reps: draft.reps, timestamp: now() })) {
+        return { success: false, reason: 'Cannot edit this set.' };
+      }
+      // No callback or network request can observe an unpersisted correction.
+      try {
+        if (store && persist() !== true) throw new Error('Storage did not confirm the save');
+      } catch (error) {
+        session.rollbackLastCorrection();
+        logError('set correction persistence failed', error);
+        return { success: false, reason: 'Could not save on watch. Try again.' };
+      }
+      deferredServerWorkout = null;
+      notifyChange();
+      if (request) synchronizeDirectSets().catch((error) => logError('set correction sync failed', error));
+      return { success: true };
+    },
 
     updateSync,
     replaceFromServer,

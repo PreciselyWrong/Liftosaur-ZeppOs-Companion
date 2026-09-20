@@ -18,6 +18,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
   assert.deepEqual(markdownFiles, [
     'active-2-workout-integration-test.md',
     'privacy-policy.md',
+    'set-corrections.md',
     'store-listing.md',
     'tester-guide.md',
     'timed-sets.md',
@@ -39,6 +40,7 @@ test('README explains the two products and links their public guides', () => {
   assert.ok(readme.split(/\r?\n/).length <= 150, 'README.md must stay within 150 lines');
   assert.match(readme, /two apps are complementary and can be installed together/i);
   assert.match(readme, /docs\/workout-extension-manual-actions\.md/);
+  assert.match(readme, /docs\/set-corrections\.md/);
   assert.match(readme, /docs\/workout-extension-hardware-test-plan\.md/);
   assert.match(readme, /silent_jacob/);
   assert.match(readme, /lead tester/i);
