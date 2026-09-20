@@ -1521,6 +1521,7 @@ test('delayed startup rebinds queued sets durably without changing rest, edits o
   time = 2000;
   controller.completeSet({ repsLeft: 2, setTimer: 30, userVars: { effort: 7 } });
   controller.selectExercise(1);
+  controller.nextSet();
   controller.adjustReps(2);
   time = 3000;
   controller.completeSet();
@@ -1613,6 +1614,7 @@ test('startup rebinds warmups and repeated entry IDs by their validated position
   offline.startWorkout();
   offline.completeSet();
   offline.selectExercise(2);
+  offline.nextSet();
   offline.completeSet();
   const transport = createFakeTransport();
   const live = structuredClone(preview);
@@ -2030,4 +2032,79 @@ test('superset adoption retains manual selection but never revives an unavailabl
       assert.notEqual(controller.view().currentSet.setId, prepared.setId, change);
     }
   }
+});
+
+test('controller preserves selected pending exercise during rest across persistence and restore', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const controller = createWorkoutController({ store, now: () => 1000 });
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  controller.completeSet(); // enters REST
+
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  controller.selectExercise(1);
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  assert.equal(controller.view().pending.exerciseName, 'Bench Press');
+
+  controller.adjustWeight(1); // edits pending set
+
+  const restored = createWorkoutController({ store, now: () => 1000 });
+  assert.equal(restored.restore().success, true);
+  assert.equal(restored.view().state, SESSION_STATES.REST);
+  assert.equal(restored.view().pending.exerciseName, 'Bench Press');
+  assert.equal(restored.view().pending.set.weight, 82.5);
+});
+
+test('deferred server snapshot during rest does not reset rest or undo selection, and adopts selected exercise on nextSet', async () => {
+  const adapter = createMemoryStorageAdapter();
+  const store = createSessionStore(adapter);
+  const transport = createFakeTransport();
+
+  const modifiedWorkout = structuredClone(SAMPLE_SERVER_WORKOUT);
+  modifiedWorkout.entries[0].sets[0].completed = { reps: 5, weight: '100kg' };
+  modifiedWorkout.entries[1].sets[0].reps = 10;
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: modifiedWorkout },
+    })
+  );
+
+  let currentTime = 1000;
+  const controller = createWorkoutController({
+    store,
+    request: transport.request,
+    now: () => currentTime,
+  });
+
+  controller.loadPlan(SAMPLE_DIRECT_PLAN);
+  controller.startWorkout();
+  await controller.ensureStarted();
+  controller.completeSet(); // enters REST
+
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  await controller.syncSets();
+
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  assert.equal(controller.hasDeferredServerWorkout(), true);
+
+  // Lifter selects Exercise 1 (Bench Press) during rest
+  controller.selectExercise(1);
+  assert.equal(controller.view().state, SESSION_STATES.REST);
+  assert.equal(controller.view().pending.exerciseName, 'Bench Press');
+  assert.equal(controller.hasDeferredServerWorkout(), true);
+
+  // Lifter edits pending set
+  controller.adjustWeight(1);
+
+  // Advance to next set
+  controller.nextSet();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+  assert.equal(controller.hasDeferredServerWorkout(), false);
+  assert.equal(controller.view().exerciseName, 'Bench Press');
+  assert.equal(controller.view().currentSet.weight, 82.5);
 });

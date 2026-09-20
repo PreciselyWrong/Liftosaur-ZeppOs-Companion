@@ -2453,7 +2453,10 @@ function renderOverviewScreen(view) {
 
   all.slice(start, start + OVERVIEW_PAGE_SIZE).forEach((ex, i) => {
     const idx = start + i;
-    const isCurrent = idx === view.currentExerciseIndex;
+    const currentTargetIndex = view.state === SESSION_STATES.REST
+      ? (view.pending?.exerciseIndex ?? view.currentExerciseIndex)
+      : view.currentExerciseIndex;
+    const isCurrent = idx === currentTargetIndex;
     let showsImage = imagesEnabled && Boolean(ex.imageUrl);
     let image = null;
     const lines = formatOverviewExerciseLines(ex);

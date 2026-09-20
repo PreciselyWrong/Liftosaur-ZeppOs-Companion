@@ -1731,12 +1731,21 @@ describe('Workout API set-write journal support', () => {
     assert.equal(session.view().totalCompletedSetsCount, 1);
 
     session.selectExercise(1, { timestamp: 2500 });
-    assert.equal(session.view().exerciseName, 'Exercise 2');
+    assert.equal(session.view().state, SESSION_STATES.REST);
+    assert.equal(session.view().pending.exerciseName, 'Exercise 2');
 
     session.selectExercise(0, { timestamp: 3000 });
-    assert.equal(session.view().exerciseName, 'Exercise 2', 'navigation to completed exercise is rejected');
+    assert.equal(session.view().state, SESSION_STATES.REST);
+    assert.equal(session.view().pending.exerciseName, 'Exercise 2', 'navigation to completed exercise is rejected');
 
     session.completeSet({ timestamp: 3500 });
+    assert.equal(session.view().totalCompletedSetsCount, 1, 'completeSet during rest is ignored');
+
+    session.nextSet({ timestamp: 3600 });
+    assert.equal(session.view().state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(session.view().exerciseName, 'Exercise 2');
+
+    session.completeSet({ timestamp: 3700 });
     assert.equal(session.view().totalCompletedSetsCount, 2);
     assert.equal(session.view().state, SESSION_STATES.FINISHED);
 
@@ -1775,7 +1784,7 @@ describe('Workout API set-write journal support', () => {
     assert.equal(session.getCompletedSets().length, 1);
   });
 
-  test('selecting unfinished exercise resumes rest pause in workout intervals', () => {
+  test('selecting unfinished exercise preserves rest pause in workout intervals', () => {
     const plan = makeNavigationPlan();
 
     const session = createWorkoutSession({ plan });
@@ -1783,19 +1792,29 @@ describe('Workout API set-write journal support', () => {
     session.completeSet({ timestamp: 2000 });
     session.pauseRest({ timestamp: 3000 });
     session.selectExercise(1, { timestamp: 4000 });
+
+    assert.equal(session.view(4000).state, SESSION_STATES.REST);
+    assert.equal(session.view(4000).rest.isPaused, true);
+    assert.equal(session.view(4000).pending.exerciseName, 'Exercise 2');
+
+    session.nextSet({ timestamp: 6000 });
+    assert.equal(session.view(6000).state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(session.view(6000).exerciseName, 'Exercise 2');
+
     session.finishWorkout({ timestamp: 10000 });
 
-    assert.equal(session.view(10000).elapsedSeconds, 8);
+    assert.equal(session.view(10000).elapsedSeconds, 6);
     assert.deepEqual(session.getWorkoutIntervals(), [
       [1000, 3000],
-      [4000, 10000],
+      [6000, 10000],
     ]);
 
     const replayed = createWorkoutSession({ plan, initialJournal: session.getJournal() });
     assert.deepEqual(replayed.getWorkoutIntervals(), [
       [1000, 3000],
-      [4000, 10000],
+      [6000, 10000],
     ]);
+    assert.equal(replayed.view(10000).elapsedSeconds, 6);
   });
 
   test('selecting completed or invalid exercise does not resume rest pause in intervals', () => {
@@ -1826,11 +1845,27 @@ describe('Workout API set-write journal support', () => {
     session.pauseWorkout({ timestamp: 3500 });
     session.selectExercise(1, { timestamp: 4000 });
     session.resumeWorkout({ timestamp: 5000 });
+
+    assert.equal(session.view(5000).state, SESSION_STATES.REST);
+    assert.equal(session.view(5000).rest.isPaused, true);
+    assert.deepEqual(session.getWorkoutIntervals(5000), [
+      [1000, 3000],
+    ]);
+
+    session.nextSet({ timestamp: 6000 });
+    assert.equal(session.view(6000).state, SESSION_STATES.ACTIVE_SET);
+
     session.finishWorkout({ timestamp: 10000 });
 
     assert.deepEqual(session.getWorkoutIntervals(), [
       [1000, 3000],
-      [5000, 10000],
+      [6000, 10000],
+    ]);
+
+    const replayed = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+    assert.deepEqual(replayed.getWorkoutIntervals(), [
+      [1000, 3000],
+      [6000, 10000],
     ]);
   });
 
@@ -1885,5 +1920,334 @@ describe('Workout API set-write journal support', () => {
       assert.deepEqual(restoredCompleted.getWorkoutSetWrites(), session.getWorkoutSetWrites());
       assert.strictEqual(restoredCompleted.getCompletedSets()[0].weight, 0);
     }
+  });
+
+  test('selection during running rest preserves countdown, startedAt, endsAt, duration, identity and changes upcoming pending exercise', () => {
+    const plan = {
+      programId: 'running-rest-selection',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          entryId: 'ex-1',
+          name: 'Squat',
+          sets: [
+            { setId: 's1', targetReps: 5, targetWeight: 100, restSeconds: 120 },
+            { setId: 's2', targetReps: 5, targetWeight: 100, restSeconds: 120 },
+          ],
+        },
+        {
+          index: 2,
+          entryId: 'ex-2',
+          name: 'Bench Press',
+          sets: [
+            { setId: 'b1', targetReps: 8, targetWeight: 80, restSeconds: 90 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 });
+
+    const viewAt20s = session.view(22_000);
+    assert.equal(viewAt20s.state, SESSION_STATES.REST);
+    assert.equal(viewAt20s.rest.startedAt, 2000);
+    assert.equal(viewAt20s.rest.endsAt, 122_000);
+    assert.equal(viewAt20s.rest.duration, 120);
+    assert.equal(viewAt20s.rest.identity, 'rest:2000');
+    assert.equal(viewAt20s.rest.remaining, 100);
+    assert.equal(viewAt20s.pending.exerciseName, 'Squat');
+
+    // Lifter selects Exercise 2 (Bench Press, index 1) at timestamp 40_000
+    session.selectExercise(1, { timestamp: 40_000 });
+
+    const viewAfterSelect = session.view(40_000);
+    assert.equal(viewAfterSelect.state, SESSION_STATES.REST, 'state remains REST');
+    assert.equal(viewAfterSelect.rest.startedAt, 2000, 'startedAt preserved');
+    assert.equal(viewAfterSelect.rest.endsAt, 122_000, 'endsAt preserved');
+    assert.equal(viewAfterSelect.rest.duration, 120, 'duration preserved');
+    assert.equal(viewAfterSelect.rest.identity, 'rest:2000', 'identity preserved');
+    assert.equal(viewAfterSelect.rest.remaining, 82, 'remaining continues countdown');
+    assert.equal(viewAfterSelect.rest.nextExerciseName, 'Bench Press', 'next preview updated to selected exercise');
+    assert.equal(viewAfterSelect.pending.exerciseIndex, 1, 'pending exerciseIndex updated');
+    assert.equal(viewAfterSelect.pending.exerciseName, 'Bench Press', 'pending exerciseName updated');
+    assert.equal(viewAfterSelect.pending.set.setId, 'b1', 'pending set updated');
+
+    // Further countdown verified at 50_000
+    const viewAt50s = session.view(50_000);
+    assert.equal(viewAt50s.rest.remaining, 72);
+
+    // Explicit nextSet ends rest and begins Bench Press set b1
+    session.nextSet({ timestamp: 60_000 });
+    assert.equal(session.view(60_000).state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(session.view(60_000).exerciseName, 'Bench Press');
+    assert.equal(session.view(60_000).currentSet.setId, 'b1');
+  });
+
+  test('selection during running rest after manual duration adjustment preserves updated endsAt and duration', () => {
+    const plan = makeNavigationPlan();
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 }); // rest 120s, ends at 122_000
+
+    session.adjustRest(10, { timestamp: 10_000 }); // +10s -> duration 130s, ends at 132_000
+    assert.equal(session.view(10_000).rest.duration, 130);
+    assert.equal(session.view(10_000).rest.endsAt, 132_000);
+
+    session.selectExercise(1, { timestamp: 20_000 });
+    const view = session.view(20_000);
+    assert.equal(view.state, SESSION_STATES.REST);
+    assert.equal(view.rest.duration, 130);
+    assert.equal(view.rest.endsAt, 132_000);
+    assert.equal(view.rest.remaining, 112);
+    assert.equal(view.pending.exerciseName, 'Exercise 2');
+  });
+
+  test('selection during paused rest preserves paused remaining seconds and frozen state', () => {
+    const plan = makeNavigationPlan();
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 }); // rest 120s
+
+    session.pauseRest({ timestamp: 12_000 }); // 10s elapsed, remaining: 110s
+    assert.equal(session.view(12_000).rest.isPaused, true);
+    assert.equal(session.view(12_000).rest.remaining, 110);
+    assert.equal(session.view(12_000).rest.pausedRemaining, 110);
+
+    // Selection during paused rest
+    session.selectExercise(1, { timestamp: 30_000 });
+    const viewAfter = session.view(30_000);
+    assert.equal(viewAfter.state, SESSION_STATES.REST);
+    assert.equal(viewAfter.rest.isPaused, true);
+    assert.equal(viewAfter.rest.pausedRemaining, 110);
+    assert.equal(viewAfter.rest.remaining, 110, 'countdown stays frozen while paused');
+    assert.equal(viewAfter.pending.exerciseName, 'Exercise 2');
+
+    // Resume rest unfreezes countdown with exact remaining
+    session.resumeRest({ timestamp: 40_000 });
+    const viewResumed = session.view(40_000);
+    assert.equal(viewResumed.rest.isPaused, false);
+    assert.equal(viewResumed.rest.endsAt, 150_000);
+    assert.equal(session.view(50_000).rest.remaining, 100);
+  });
+
+  test('selection during overtime rest preserves negative countdown and overtime status', () => {
+    const plan = {
+      programId: 'overtime-test',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Exercise 1',
+          sets: [{ setId: 's1', targetReps: 5, targetWeight: 50, restSeconds: 30 }],
+        },
+        {
+          index: 2,
+          name: 'Exercise 2',
+          sets: [{ setId: 's2', targetReps: 5, targetWeight: 50, restSeconds: 30 }],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 }); // ends at 32_000
+
+    // At 42_000: 10 seconds overtime
+    const viewOvertime = session.view(42_000);
+    assert.equal(viewOvertime.rest.isOvertime, true);
+    assert.equal(viewOvertime.rest.remaining, -10);
+
+    session.selectExercise(1, { timestamp: 45_000 });
+    const viewAfterSelect = session.view(45_000);
+    assert.equal(viewAfterSelect.state, SESSION_STATES.REST);
+    assert.equal(viewAfterSelect.rest.isOvertime, true);
+    assert.equal(viewAfterSelect.rest.remaining, -13);
+    assert.equal(viewAfterSelect.pending.exerciseName, 'Exercise 2');
+  });
+
+  test('ordinary navigation and both directions inside supersets during rest', () => {
+    const plan = {
+      programId: 'superset-nav',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          entryId: 'a',
+          name: 'Exercise A',
+          supersetGroup: 'G1',
+          sets: [
+            { setId: 'a1', targetReps: 5, targetWeight: 100, restSeconds: 60 },
+            { setId: 'a2', targetReps: 5, targetWeight: 100, restSeconds: 60 },
+          ],
+        },
+        {
+          index: 2,
+          entryId: 'b',
+          name: 'Exercise B',
+          supersetGroup: 'G1',
+          sets: [
+            { setId: 'b1', targetReps: 8, targetWeight: 50, restSeconds: 60 },
+            { setId: 'b2', targetReps: 8, targetWeight: 50, restSeconds: 60 },
+          ],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+
+    // 1. Complete A1 -> enters REST. Automatic next is B (index 1)
+    session.completeSet({ timestamp: 1000 });
+    assert.equal(session.view().state, SESSION_STATES.REST);
+    assert.equal(session.view().pending.exerciseName, 'Exercise B');
+
+    // Lifter overrides automatic progression: selects A (index 0) to do A2 first
+    session.selectExercise(0, { timestamp: 2000 });
+    assert.equal(session.view().state, SESSION_STATES.REST, 'rest continues');
+    assert.equal(session.view().pending.exerciseName, 'Exercise A');
+    assert.equal(session.view().pending.set.setId, 'a2');
+
+    // Start set -> A2 is active!
+    session.nextSet({ timestamp: 3000 });
+    assert.equal(session.view().state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(session.view().exerciseName, 'Exercise A');
+    assert.equal(session.view().currentSet.setId, 'a2');
+
+    // Complete A2 -> enters REST. B has 0 completed sets, so automatic next is B (index 1)
+    session.completeSet({ timestamp: 4000 });
+    assert.equal(session.view().state, SESSION_STATES.REST);
+    assert.equal(session.view().pending.exerciseName, 'Exercise B');
+
+    // Navigation inside superset in opposite direction: select B explicitly
+    session.selectExercise(1, { timestamp: 5000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise B');
+    assert.equal(session.view().pending.set.setId, 'b1');
+
+    session.nextSet({ timestamp: 6000 });
+    assert.equal(session.view().exerciseName, 'Exercise B');
+    assert.equal(session.view().currentSet.setId, 'b1');
+
+    // Complete B1 -> enters REST. A is fully done (2/2), B has 1 left, so next is B2
+    session.completeSet({ timestamp: 7000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise B');
+    assert.equal(session.view().pending.set.setId, 'b2');
+
+    // Attempting to select fully completed A is rejected
+    session.selectExercise(0, { timestamp: 8000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise B');
+
+    session.nextSet({ timestamp: 9000 });
+    session.completeSet({ timestamp: 10000 });
+    assert.equal(session.view().state, SESSION_STATES.FINISHED);
+    assert.deepEqual(session.getWorkoutSetWrites().map(w => w.setId), ['a1', 'a2', 'b1', 'b2']);
+  });
+
+  test('repeated selections during same rest update pending exercise and preserve edits', () => {
+    const plan = {
+      programId: 'repeated-selection',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Exercise 1',
+          sets: [{ setId: 's1', targetReps: 5, targetWeight: 100, restSeconds: 60 }],
+        },
+        {
+          index: 2,
+          name: 'Exercise 2',
+          sets: [{ setId: 's2', targetReps: 5, targetWeight: 50, restSeconds: 60 }],
+        },
+        {
+          index: 3,
+          name: 'Exercise 3',
+          sets: [{ setId: 's3', targetReps: 5, targetWeight: 30, restSeconds: 60 }],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 1000 }); // enters REST, automatic next is Ex 2 (index 1)
+
+    // Select Ex 3 (index 2)
+    session.selectExercise(2, { timestamp: 2000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise 3');
+    session.adjustWeight(2, { timestamp: 2500 }); // 30 + 5 = 35kg
+
+    // Select Ex 2 (index 1)
+    session.selectExercise(1, { timestamp: 3000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise 2');
+
+    // Select Ex 3 again -> previous edit (+5kg) is retained!
+    session.selectExercise(2, { timestamp: 4000 });
+    assert.equal(session.view().pending.exerciseName, 'Exercise 3');
+    assert.equal(session.view().pending.set.weight, 35);
+
+    // Explicit start activates Exercise 3 with edited weight
+    session.nextSet({ timestamp: 5000 });
+    assert.equal(session.view().state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(session.view().exerciseName, 'Exercise 3');
+    assert.equal(session.view().currentSet.weight, 35);
+  });
+
+  test('journal replay preserves rest selection, state, adjustments, and exact intervals', () => {
+    const plan = makeNavigationPlan();
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 1000 });
+    session.completeSet({ timestamp: 2000 }); // rest 120s
+    session.pauseRest({ timestamp: 3000 });
+    session.selectExercise(1, { timestamp: 4000 });
+    session.adjustWeight(1, { timestamp: 4500 }); // 50 + 2.5 = 52.5kg
+    session.adjustReps(2, { timestamp: 4500 }); // 5 + 2 = 7 reps
+    session.resumeRest({ timestamp: 6000 });
+
+    const journal = session.getJournal();
+    const restored = createWorkoutSession({ plan, initialJournal: journal });
+
+    assert.equal(restored.view(7000).state, SESSION_STATES.REST);
+    assert.equal(restored.view(7000).pending.exerciseName, 'Exercise 2');
+    assert.equal(restored.view(7000).pending.set.weight, 52.5);
+    assert.equal(restored.view(7000).pending.set.reps, 7);
+    assert.equal(restored.view(7000).rest.isPaused, false);
+    assert.deepEqual(restored.getWorkoutIntervals(7000), session.getWorkoutIntervals(7000));
+  });
+
+  test('timed set: active timed set blocks navigation, but selection during rest starts selected timed set', () => {
+    const plan = {
+      programId: 'timed-nav-test',
+      unit: 'kg',
+      exercises: [
+        {
+          index: 1,
+          name: 'Untimed Set',
+          sets: [{ setId: 'untimed-1', targetReps: 5, targetWeight: 50, restSeconds: 60 }],
+        },
+        {
+          index: 2,
+          name: 'Plank',
+          sets: [{ setId: 'plank-1', targetReps: 1, targetWeight: 0, setTimer: 45, restSeconds: 60 }],
+        },
+      ],
+    };
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 1000 }); // enters REST
+
+    // Select Plank during rest
+    session.selectExercise(1, { timestamp: 2000 });
+    assert.equal(session.view().state, SESSION_STATES.REST);
+    assert.equal(session.view().pending.exerciseName, 'Plank');
+
+    // Arm timed set during rest
+    session.startTimedSet({ timestamp: 3000, getReadySeconds: 5 });
+    assert.equal(session.view(3000).timedSet.phase, 'REST');
+
+    // While timed set is active/armed, selecting another exercise is blocked
+    session.selectExercise(0, { timestamp: 3500 });
+    assert.equal(session.view().pending.exerciseName, 'Plank', 'navigation blocked while timed set active');
   });
 });
