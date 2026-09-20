@@ -97,16 +97,19 @@ test('Prepare identifies a change of exercise', () => {
 });
 
 for (const [name, source] of [['Companion', companionSource], ['Workout', workoutSource]]) {
-  test(`${name} Prepare keeps rest, workout time, heart rate, bezel and explicit start visible`, () => {
+  test(`${name} Prepare shows live countdown in Start set, no purple pill, no underlines, purple change colors, and Skip on left`, () => {
     const start = source.indexOf('function renderActiveSetScreen(');
     const end = source.indexOf('function renderRestScreen(', start);
     const active = source.slice(start, end);
 
     assert.match(active, /renderPreparedTopBar\(view/);
     assert.match(active, /renderRestBezel\(view\.rest\)/);
-    assert.match(active, /\\u25b6 Start set/);
-    assert.match(active, /pending\?\.changes/);
-    assert.match(active, /renderChangeUnderline/);
+    assert.match(active, /> Start set/);
+    assert.doesNotMatch(active, /\\u25b6/);
+    assert.doesNotMatch(source, /restBannerText/);
+    assert.doesNotMatch(active, /renderChangeUnderline/);
+    assert.match(active, /changes\.exercise\)?\s*\?\s*THEME\.primaryLight\s*:\s*THEME\.textPrimary/);
+    assert.match(active, /text:\s*'Skip'[\s\S]*?x:\s*px\(62\)|x:\s*px\(62\)[\s\S]*?text:\s*'Skip'/);
   });
 }
 
