@@ -1,3 +1,4 @@
+import { isPurpleRestRing } from '../shared/rest-visual.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -381,6 +382,7 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
   let starts = 0;
   const view = { state: 'REST', rest: { remaining: 0, isPaused: false }, elapsedSeconds: 60 };
   const env = {
+    updatePreparedRestVisuals() {},
     updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
     isTearingDown: false, isPaused: false, hasBuilt: true,
     SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
@@ -500,6 +502,8 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
 
   const env = {
     ...watchLayout,
+    isPurpleRestRing,
+    updatePreparedRestVisuals() {},
     THEME,
     widget: { BUTTON: 'button', TEXT: 'text', SPORT_DATA: 'sport_data', STROKE_RECT: 'stroke_rect' },
     sport_data: { HR: 1 },
@@ -660,6 +664,8 @@ test('tick updates prepared Start set action in place across zero, overtime, and
 
   const env = {
     ...watchLayout,
+    isPurpleRestRing,
+    updatePreparedRestVisuals() {},
     THEME: { yellow: 0xffff00, error: 0xff0000, primaryPale: 0x9999ff, textSecondary: 0x888888, primaryLight: 0x9e8cfc },
     formatSeconds: (sec) => {
       const isNeg = sec < 0;
