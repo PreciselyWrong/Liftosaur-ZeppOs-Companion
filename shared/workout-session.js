@@ -37,6 +37,8 @@ export const EVENT_TYPES = {
   FINISH_WORKOUT: 'FINISH_WORKOUT',
   CANCEL_WORKOUT: 'CANCEL_WORKOUT',
   TIMED_SET: 'TIMED_SET',
+  CORRECT_SET: 'CORRECT_SET',
+  LOCAL_COMPLETIONS: 'LOCAL_COMPLETIONS',
 };
 
 export function weightStepFor(unit) {
@@ -160,6 +162,7 @@ export function createWorkoutSession({
   let activeTimer = null;
   let journal = [];
   const intervals = [];
+  const setWrites = [];
   let intervalStart = null;
 
   const progress = exercises.map((exercise) => ({
@@ -179,7 +182,7 @@ export function createWorkoutSession({
         const target = exercise.sets[setIdx];
         if (!target.completed) break;
         const completed = target.completed;
-        prog.completedSets.push({
+        const importedRecord = {
           exerciseIndex: exercise.index,
           exerciseArrayIndex: exerciseIdx,
           exerciseName: exercise.name,
@@ -199,7 +202,12 @@ export function createWorkoutSession({
           userVars: completed.userVars ?? null,
           unit: completed.unit || target.unit || unit,
           completedAt: completionOrder++,
-        });
+          isImported: true,
+          isUnilateral: Boolean(target.isUnilateral),
+        };
+        prog.completedSets.push(importedRecord);
+        const initialWrite = formatSetWrite(importedRecord);
+        if (initialWrite) setWrites.push(initialWrite);
       }
       const nextSetIdx = prog.completedSets.length;
       prog.currentSetIndex = nextSetIdx;
@@ -489,7 +497,7 @@ export function createWorkoutSession({
         const userVars = payload?.userVars !== undefined ? payload.userVars : null;
         const setUnit = payload?.unit || target?.unit || unit;
 
-        prog.completedSets.push({
+        const completedRecord = {
           exerciseIndex: exercise.index,
           exerciseArrayIndex: currentExerciseIndex,
           exerciseName: exercise.name,
@@ -509,7 +517,12 @@ export function createWorkoutSession({
           userVars,
           unit: setUnit,
           completedAt: event.timestamp,
-        });
+          isImported: false,
+          isUnilateral: Boolean(target?.isUnilateral),
+        };
+        prog.completedSets.push(completedRecord);
+        const write = formatSetWrite(completedRecord);
+        if (write) setWrites.push(write);
         activeTimer = null;
         selectedPendingExerciseIndex = null;
 
@@ -720,7 +733,47 @@ export function createWorkoutSession({
           prog.currentReps = exercises[i].sets[0]?.targetReps ?? null;
           prog.currentRpe = exercises[i].sets[0]?.targetRpe ?? null;
         });
+        setWrites.length = 0;
         journal = [];
+        break;
+      }
+
+      case EVENT_TYPES.CORRECT_SET: {
+        const { setId, weight, reps } = event.payload || {};
+        if (setId) {
+          for (const prog of progress) {
+            const completed = prog.completedSets.find((s) => s.setId === setId);
+            if (completed) {
+              if (weight !== undefined && weight !== null) {
+                completed.weight = weight;
+              }
+              if (reps !== undefined && reps !== null) {
+                completed.reps = reps;
+              }
+              const write = formatSetWrite(completed);
+              if (write) setWrites.push(write);
+              break;
+            }
+          }
+        }
+        break;
+      }
+
+      case EVENT_TYPES.LOCAL_COMPLETIONS: {
+        const completions = event.payload?.completions || [];
+        for (const record of completions) {
+          if (!record.setId) continue;
+          for (const prog of progress) {
+            const match = prog.completedSets.find((s) => s.setId === record.setId);
+            if (match) {
+              match.isImported = false;
+              if (Number.isFinite(record.completedAt)) {
+                match.completedAt = record.completedAt;
+              }
+              break;
+            }
+          }
+        }
         break;
       }
     }
@@ -888,6 +941,101 @@ export function createWorkoutSession({
     return progress
       .flatMap((prog) => prog.completedSets)
       .sort((a, b) => a.completedAt - b.completedAt);
+  }
+
+  function getLatestCompletedSet() {
+    const completed = allCompletedSets();
+    if (completed.length === 0) return null;
+    const localSets = completed.filter((s) => !s.isImported);
+    // Any local completion happened after the imported baseline. Adoption only
+    // carries this provenance when the server has no newly completed set.
+    if (localSets.length > 0) return localSets[localSets.length - 1];
+    return completed.length === 1
+      ? completed[0]
+      : { isAmbiguous: true, reason: 'Imported order unknown' };
+  }
+
+  function canCorrectLastSet() {
+    if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN) {
+      return { allowed: false, reason: state === SESSION_STATES.FINISHED ? 'Session finished' : 'No plan' };
+    }
+    const latest = getLatestCompletedSet();
+    if (!latest) {
+      return { allowed: false, reason: 'No completed sets' };
+    }
+    if (latest.isAmbiguous) {
+      return { allowed: false, reason: latest.reason };
+    }
+    if (latest.isUnilateral || latest.repsLeft !== null) {
+      return { allowed: false, reason: 'Unilateral repetitions unsupported' };
+    }
+    if (
+      !latest.setId ||
+      latest.weight === null ||
+      latest.weight === undefined ||
+      !Number.isFinite(latest.weight) ||
+      latest.weight < 0 ||
+      latest.reps === null ||
+      latest.reps === undefined ||
+      !Number.isInteger(latest.reps) ||
+      latest.reps < 0
+    ) {
+      return { allowed: false, reason: 'Missing required values' };
+    }
+    return { allowed: true, set: { ...latest } };
+  }
+
+  function correctSet({ setId, weight, reps, timestamp = Date.now() } = {}) {
+    if (state === SESSION_STATES.FINISHED || state === SESSION_STATES.NO_PLAN) return false;
+    const check = canCorrectLastSet();
+    if (!check.allowed || !check.set || check.set.setId !== setId) return false;
+    if (typeof weight !== 'number' || !Number.isFinite(weight) || weight < 0) return false;
+    if (typeof reps !== 'number' || !Number.isInteger(reps) || reps < 0) return false;
+
+    const target = allCompletedSets().find((s) => s.setId === setId);
+    if (!target) return false;
+    if (target.weight === weight && target.reps === reps) return true;
+    applyEvent({
+      type: EVENT_TYPES.CORRECT_SET,
+      payload: {
+        setId,
+        entryId: target.entryId,
+        exerciseIndex: target.exerciseIndex,
+        setIndex: target.setIndex,
+        prevWeight: target.weight,
+        prevReps: target.reps,
+        weight,
+        reps,
+      },
+      timestamp,
+    });
+    return true;
+  }
+
+  function rollbackLastCorrection() {
+    const lastEvent = journal[journal.length - 1];
+    if (!lastEvent || lastEvent.type !== EVENT_TYPES.CORRECT_SET) return false;
+    journal.pop();
+    setWrites.pop();
+    const { setId, prevWeight, prevReps } = lastEvent.payload || {};
+    for (const prog of progress) {
+      const completed = prog.completedSets.find((s) => s.setId === setId);
+      if (completed) {
+        if (prevWeight !== undefined) completed.weight = prevWeight;
+        if (prevReps !== undefined) completed.reps = prevReps;
+        break;
+      }
+    }
+    return true;
+  }
+
+  function getLocalCompletions() {
+    return allCompletedSets()
+      .filter((s) => !s.isImported && s.setId)
+      .map((s) => ({
+        setId: s.setId,
+        completedAt: s.completedAt,
+      }));
   }
 
   function describeSet(exercise, prog, setIdx) {
@@ -1313,18 +1461,22 @@ export function createWorkoutSession({
 
     /** Exact API payload writes for completed sets in completion order. */
     getWorkoutSetWrites() {
-      return allCompletedSets()
-        .map(formatSetWrite)
-        .filter(Boolean);
+      return [...setWrites];
     },
 
     /** The newest API set write payload, or null if none exist. */
     getLastWorkoutSetWrite() {
-      const writes = allCompletedSets()
-        .map(formatSetWrite)
-        .filter(Boolean);
-      return writes.length > 0 ? writes[writes.length - 1] : null;
+      return setWrites.length > 0 ? setWrites[setWrites.length - 1] : null;
     },
+
+    getCompletedSet: (setId) => {
+      const set = allCompletedSets().find((item) => item.setId === setId);
+      return set ? { ...set } : null;
+    },
+    canCorrectLastSet: () => canCorrectLastSet(),
+    correctSet: (options = {}) => correctSet(options),
+    rollbackLastCorrection: () => rollbackLastCorrection(),
+    getLocalCompletions: () => getLocalCompletions(),
 
     getWorkoutIntervals(endTime = workoutEndTime) {
       const result = intervals.map((interval) => [...interval]);
