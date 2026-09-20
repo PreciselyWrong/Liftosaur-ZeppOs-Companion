@@ -241,7 +241,12 @@ test('modal pages stay short enough to clear their controls', () => {
   assert.match(source, /import \{ exerciseInfoPages \} from '..\/..\/shared\/exercise-info-pages.js'/);
   const content = `## Description\n${'Long instruction. '.repeat(50)}`;
   assert.ok(exerciseInfoPages(content, false, null).every((page) => page.body.split('\n').length <= 6));
-  assert.ok(exerciseInfoPages(content, true, '/image.png')[0].body.split('\n').length <= 3);
+  const imagePages = exerciseInfoPages(content, true, '/image.png', 'ready');
+  assert.deepEqual(imagePages[0], { image: true, subtitle: '', body: '' });
+  assert.deepEqual(imagePages.slice(1), exerciseInfoPages(content, false, null));
+  assert.ok(imagePages.slice(1).every((page) => page.body.split('\n').length <= 6));
+  assert.deepEqual(exerciseInfoPages(content, true, '/image.png', 'loading'),
+    exerciseInfoPages(content, false, null));
   assert.ok(INFO_TEXT_LAYOUT.bodyY + INFO_TEXT_LAYOUT.bodyH < 348);
   assert.ok(INFO_TEXT_LAYOUT.imageBodyY + INFO_TEXT_LAYOUT.imageBodyH < 348);
 });
