@@ -14,11 +14,24 @@ export const LIST_PAGE_SIZE = 3;
 export const PREPARED_TOP_BAR_LAYOUT = Object.freeze({
   y: 48,
   height: 40,
-  menu: Object.freeze({ x: 100, width: 40 }),
-  elapsed: Object.freeze({ x: 144, width: 66 }),
-  rest: Object.freeze({ x: 214, width: 96 }),
-  metric: Object.freeze({ x: 314, width: 68 }),
+  menu: Object.freeze({ x: 100, width: 82 }),
+  elapsed: Object.freeze({ x: 186, width: 96 }),
+  metric: Object.freeze({ x: 286, width: 96 }),
 });
+export const ACTIVE_SET_ACTION_LAYOUT = Object.freeze({
+  x: 84,
+  width: 312,
+});
+
+export function stepperRowLayout(rowHeight) {
+  const labelHeight = TYPOGRAPHY.micro + 2;
+  const valueHeight = rowHeight - labelHeight;
+  return {
+    valueHeight,
+    labelHeight,
+    labelOffsetY: valueHeight,
+  };
+}
 export const TIMED_SET_LAYOUT = Object.freeze({
   centerX: 240, centerY: 232, radius: 76, horizontalRadius: 84, dotSize: 12, segments: 12,
   valueX: 176, valueWidth: 128, valueY: 195, valueHeight: 74, labelY: 316, detailY: 346,

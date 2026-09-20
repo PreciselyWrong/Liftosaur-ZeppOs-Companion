@@ -8,10 +8,12 @@ import { INFO_TEXT_LAYOUT } from '../shared/exercise-info-layout.js';
 import {
   TYPOGRAPHY,
   ACTIVE_SET_LAYOUT,
+  ACTIVE_SET_ACTION_LAYOUT,
   EXTENSION_CLOCK_LAYOUT,
   PREPARED_TOP_BAR_LAYOUT,
   activeSetLayout,
   extensionActiveSetLayout,
+  stepperRowLayout,
   shouldShowRpe,
   LIST_PAGE_SIZE,
   OVERVIEW_PAGE_SIZE,
@@ -76,17 +78,54 @@ test('dense screens show fewer readable rows instead of shrinking text', () => {
 });
 
 test('Prepare top bar fits the round-screen chord without overlapping controls', () => {
-  const { y, height, menu, elapsed, rest, metric } = PREPARED_TOP_BAR_LAYOUT;
+  const { y, height, menu, elapsed, metric } = PREPARED_TOP_BAR_LAYOUT;
   const radius = 240;
   const inset = radius - Math.sqrt(radius ** 2 - (radius - y) ** 2);
   const visibleRight = 480 - inset;
 
   assert.ok(menu.x >= inset);
   assert.ok(menu.x + menu.width <= elapsed.x);
-  assert.ok(elapsed.x + elapsed.width <= rest.x);
-  assert.ok(rest.x + rest.width <= metric.x);
+  assert.ok(elapsed.x + elapsed.width <= metric.x);
   assert.ok(metric.x + metric.width <= visibleRight);
   assert.ok(y + height <= 90);
+  assert.equal(PREPARED_TOP_BAR_LAYOUT.rest, undefined, 'Rest pill must be removed from prepared top bar layout');
+});
+
+test('stepper value line-box provides breathing room without label overlap across row modes and scales', () => {
+  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
+  assert.doesNotMatch(source, /h:\s*height\s*-\s*px\(24\)/, 'Value line box must not use clamped height-24 formula');
+  assert.doesNotMatch(source, /y:\s*y\s*\+\s*height\s*-\s*px\(28\)/, 'Label must not overlap value box');
+
+  for (const rowHeight of [ACTIVE_SET_LAYOUT.withRpe.rowHeight, ACTIVE_SET_LAYOUT.withoutRpe.rowHeight]) {
+    const layout = stepperRowLayout(rowHeight);
+    assert.ok(layout.valueHeight > TYPOGRAPHY.value, 'Value line-box must be taller than font size for breathing room');
+    assert.ok(layout.labelOffsetY >= layout.valueHeight, 'Label must not overlap value box vertically');
+    assert.equal(layout.valueHeight + layout.labelHeight, rowHeight, 'Row elements must fill row height exactly');
+  }
+
+  for (const scale of [1.0, 0.8, 0.75]) {
+    const rowHeight = Math.round(ACTIVE_SET_LAYOUT.withRpe.rowHeight * scale);
+    const design = stepperRowLayout(ACTIVE_SET_LAYOUT.withRpe.rowHeight);
+    const layout = Object.fromEntries(Object.entries(design).map(([key, value]) => [key, Math.round(value * scale)]));
+    assert.ok(layout.valueHeight + layout.labelHeight <= rowHeight + 1);
+    assert.ok(layout.labelHeight >= Math.round(TYPOGRAPHY.micro * scale) + Math.round(2 * scale));
+    const scaledFont = Math.round(TYPOGRAPHY.value * scale);
+    assert.ok(layout.valueHeight >= scaledFont, 'Scaled value line-box must fit scaled font');
+    assert.ok(layout.labelOffsetY >= layout.valueHeight, 'Scaled label must not overlap value box');
+  }
+});
+
+test('active set action button fits within circular screen chord and keeps clock gap', () => {
+  const radius = 240;
+  const layout = extensionActiveSetLayout({ targetRpe: 8 });
+  const bottomY = layout.actionY + layout.actionHeight;
+  const chordHalf = Math.sqrt(radius ** 2 - (bottomY - radius) ** 2);
+  const leftEdge = radius - chordHalf;
+  const rightEdge = radius + chordHalf;
+
+  assert.ok(ACTIVE_SET_ACTION_LAYOUT.x >= leftEdge, 'Action button left must fit within round chord');
+  assert.ok(ACTIVE_SET_ACTION_LAYOUT.x + ACTIVE_SET_ACTION_LAYOUT.width <= rightEdge, 'Action button right must fit within round chord');
+  assert.ok(EXTENSION_CLOCK_LAYOUT.y - bottomY >= EXTENSION_CLOCK_LAYOUT.minimumActionGap, 'Must keep minimum clock gap');
 });
 
 test('ready exercise pages preserve order and wrap in both directions', () => {

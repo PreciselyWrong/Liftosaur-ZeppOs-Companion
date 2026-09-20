@@ -1,6 +1,6 @@
 import { recordingLabel } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT } from '../../shared/watch-layout.js';
+import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { createRestPresentationState, updateRestPresentation } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
@@ -799,44 +799,37 @@ function renderRestBezel(rest) {
   liveWidgets.restBezel = { widget: bezel, props };
 }
 
-function renderPreparedTopBar(view, onOverview, onRest) {
+function renderPreparedTopBar(view, onRest) {
   const topBar = PREPARED_TOP_BAR_LAYOUT;
-  const metricIconWidth = 22;
+  const metricIconWidth = 32;
   addWidget(widget.BUTTON, {
     x: px(topBar.menu.x), y: px(topBar.y), w: px(topBar.menu.width), h: px(topBar.height),
     radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.cardActive,
-    text: MENU_LABEL, text_size: font('button'), click_func: onOverview,
+    text: syncWarning ? 'Sync!' : '<',
+    color: syncWarning ? THEME.orange : THEME.textPrimary,
+    text_size: font('button'), click_func: onRest,
   });
   addLiveButton('elapsed', {
     x: px(topBar.elapsed.x), y: px(topBar.y), w: px(topBar.elapsed.width), h: px(topBar.height),
-    radius: px(10), normal_color: THEME.bg, press_color: THEME.primaryDark,
+    radius: px(12), normal_color: THEME.bg, press_color: THEME.primaryDark,
     color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
-    text_size: font('micro'), text: formatSeconds(view.elapsedSeconds), click_func: openWorkoutTimerControls,
-  });
-  addLiveButton('restBannerText', {
-    x: px(topBar.rest.x), y: px(topBar.y), w: px(topBar.rest.width), h: px(topBar.height),
-    radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.cardActive,
-    color: restStatusColor(view.rest), text_size: font('micro'),
-    text: `Rest ${formatSeconds(view.rest.remaining)}`, click_func: onRest,
+    text_size: font('button'), align_h: align.CENTER_H, align_v: align.CENTER_V,
+    text_style: text_style.NONE,
+    text: formatSeconds(view.elapsedSeconds), click_func: openWorkoutTimerControls,
   });
   addLiveLabel('heart', {
     x: px(topBar.metric.x), y: px(topBar.y), w: px(metricIconWidth), h: px(topBar.height),
-    color: THEME.textSecondary, text_size: font('micro'), text: '\u2665',
+    radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.card,
+    color: THEME.textSecondary, text_size: font('caption'), text: '\u2665',
+    text_style: text_style.NONE,
   });
   addWidget(widget.SPORT_DATA, {
     x: px(topBar.metric.x + metricIconWidth), y: px(topBar.y),
     w: px(topBar.metric.width - metricIconWidth), h: px(topBar.height),
     edit_id: 2, category: edit_widget_group_type.SPORTS, default_type: sport_data.HR,
-    text_size: font('micro'), text_color: THEME.textSecondary,
+    text_size: font('caption'), text_color: THEME.textSecondary,
     text_x: 0, text_y: 0, text_w: px(topBar.metric.width - metricIconWidth),
     text_h: px(topBar.height), sub_text_visible: false, rect_visible: false,
-  });
-}
-
-function renderChangeUnderline(key, visible, x, y, width) {
-  addLiveShape(`change-${key}`, {
-    x: px(x), y: px(y), w: px(width), h: px(2), radius: px(1),
-    color: visible ? THEME.primary : THEME.bg,
   });
 }
 
@@ -1501,8 +1494,12 @@ function renderReadyScreen(view) {
   });
 }
 
-function renderStepper({ key, y, height, label, value, onMinus, onPlus }) {
-  const buttonSize = height;
+function renderStepper({ key, y, height, label, value, valueColor = THEME.textPrimary, onMinus, onPlus }) {
+  const buttonSize = px(height);
+  const row = stepperRowLayout(height);
+  const valueHeight = px(row.valueHeight);
+  const labelHeight = px(row.labelHeight);
+
   addWidget(widget.BUTTON, {
     x: px(74),
     y,
@@ -1520,8 +1517,8 @@ function renderStepper({ key, y, height, label, value, onMinus, onPlus }) {
     x: px(142),
     y,
     w: px(196),
-    h: height - px(24),
-    color: THEME.textPrimary,
+    h: valueHeight,
+    color: valueColor,
     text_size: font('value'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
@@ -1531,9 +1528,9 @@ function renderStepper({ key, y, height, label, value, onMinus, onPlus }) {
 
   addLiveLabel(`${key}-label`, {
     x: px(142),
-    y: y + height - px(28),
+    y: y + valueHeight,
     w: px(196),
-    h: px(24),
+    h: labelHeight,
     color: THEME.textSecondary,
     text_size: font('micro'),
     align_h: align.CENTER_H,
@@ -1566,8 +1563,12 @@ function refreshActiveSetControls() {
 
   consumeControllerUiChange();
   const updates = [
+    updateLiveWidget('exerciseTitle', {
+      color: isResting && pending?.changes.exercise ? THEME.primaryLight : THEME.textPrimary,
+    }),
     updateLiveWidget('weight-value', {
       text: set.weight === null || set.weight === undefined ? '-' : String(set.weight),
+      color: isResting && pending?.changes.weight ? THEME.primaryLight : THEME.textPrimary,
     }),
     updateLiveWidget('weight-label', {
       text: formatLoadoutLabel(
@@ -1580,21 +1581,11 @@ function refreshActiveSetControls() {
     }),
     updateLiveWidget('reps-value', {
       text: formatEditableSetValue(set.reps, set.isAmrap),
+      color: isResting && pending?.changes.reps ? THEME.primaryLight : THEME.textPrimary,
     }),
     updateLiveWidget('rpe-value', {
       text: formatEditableSetValue(set.rpe, set.logRpe),
-    }),
-    updateLiveWidget('change-exercise', {
-      color: isResting && pending?.changes.exercise ? THEME.primary : THEME.bg,
-    }),
-    updateLiveWidget('change-weight', {
-      color: isResting && pending?.changes.weight ? THEME.primary : THEME.bg,
-    }),
-    updateLiveWidget('change-reps', {
-      color: isResting && pending?.changes.reps ? THEME.primary : THEME.bg,
-    }),
-    updateLiveWidget('change-rpe', {
-      color: isResting && pending?.changes.rpe ? THEME.primary : THEME.bg,
+      color: isResting && pending?.changes.rpe ? THEME.primaryLight : THEME.textPrimary,
     }),
   ];
   if (updates.includes(false)) controllerUiDirty = true;
@@ -1709,9 +1700,6 @@ function renderActiveSetScreen(view) {
   if (isResting) {
     renderRestBezel(view.rest);
     renderPreparedTopBar(view, () => {
-      isOverviewOpen = true;
-      scheduleRenderUI();
-    }, () => {
       setRestPrepared(false);
       scheduleRenderUI();
     });
@@ -1722,31 +1710,30 @@ function renderActiveSetScreen(view) {
     });
   }
 
-  const showsPreparationImage = isResting && renderPreparationImage(pending?.exerciseImageUrl);
-  const headerX = showsPreparationImage ? 134 : 62;
-  const headerWidth = showsPreparationImage ? 208 : 290;
+  const showsPreparationImage = isResting && !canSkipWarmup && renderPreparationImage(pending?.exerciseImageUrl);
+  const headerX = (canSkipWarmup || showsPreparationImage) ? 132 : 64;
+  const headerWidth = (canSkipWarmup || showsPreparationImage) ? 216 : 282;
 
-  addWidget(widget.TEXT, {
+  addLiveLabel('exerciseTitle', {
     x: px(headerX),
     y: px(92),
     w: px(headerWidth),
     h: px(30),
-    color: THEME.textPrimary,
+    color: (isResting && pending?.changes.exercise) ? THEME.primaryLight : THEME.textPrimary,
     text_size: font('title'),
     align_h: align.CENTER_H,
     align_v: align.CENTER_V,
     text_style: text_style.NONE,
-    text: truncate(exerciseName, 20),
+    text: formatMarqueeText(exerciseName, 16),
   });
-  renderChangeUnderline('exercise', isResting && pending?.changes.exercise, headerX + Math.max(8, (headerWidth - 64) / 2), 119, 64);
 
-  renderExerciseInfo(exerciseName, exerciseDetails, 88, 36, isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
+  renderExerciseInfo(exerciseName, exerciseDetails, 88, 38, isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
 
   if (canSkipWarmup) {
     addWidget(widget.BUTTON, {
-      x: px(344),
-      y: px(126),
-      w: px(74),
+      x: px(62),
+      y: px(88),
+      w: px(64),
       h: px(38),
       radius: px(19),
       normal_color: THEME.card,
@@ -1765,8 +1752,8 @@ function renderActiveSetScreen(view) {
   const ssColor = supersetColor(supersetGroup);
   addWidget(widget.TEXT, {
     x: px(headerX),
-    y: px(122),
-    w: px(canSkipWarmup ? 336 - headerX : (showsPreparationImage ? 208 : 356)),
+    y: px(124),
+    w: px(headerWidth),
     h: px(26),
     color: set?.isWarmup ? 0xffb544 : (supersetGroup ? ssColor : THEME.textSecondary),
     text_size: font('caption'),
@@ -1779,8 +1766,8 @@ function renderActiveSetScreen(view) {
   if (supersetContext) {
     addWidget(widget.TEXT, {
       x: px(headerX),
-      y: px(146),
-      w: px(canSkipWarmup ? 336 - headerX : (showsPreparationImage ? 208 : 356)),
+      y: px(148),
+      w: px(headerWidth),
       h: px(22),
       color: THEME.textSecondary,
       text_size: font('micro'),
@@ -1797,9 +1784,10 @@ function renderActiveSetScreen(view) {
   renderStepper({
     key: 'weight',
     y: px(controls.rows[0].y),
-    height: px(controls.rowHeight),
+    height: controls.rowHeight,
     label: formatLoadoutLabel(set?.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight) || (view.unit || 'KG').toUpperCase(),
     value: set?.weight === null || set?.weight === undefined ? '-' : String(set.weight),
+    valueColor: (isResting && pending?.changes.weight) ? THEME.primaryLight : THEME.textPrimary,
     onMinus: () => {
       workoutController.adjustWeight(-1);
       refreshActiveSetControls();
@@ -1809,14 +1797,14 @@ function renderActiveSetScreen(view) {
       refreshActiveSetControls();
     },
   });
-  renderChangeUnderline('weight', isResting && pending?.changes.weight, 215, controls.rows[0].y + controls.rowHeight - 30, 50);
 
   renderStepper({
     key: 'reps',
     y: px(controls.rows[1].y),
-    height: px(controls.rowHeight),
+    height: controls.rowHeight,
     label: 'REPS',
     value: formatEditableSetValue(set?.reps, set?.isAmrap),
+    valueColor: (isResting && pending?.changes.reps) ? THEME.primaryLight : THEME.textPrimary,
     onMinus: () => {
       workoutController.adjustReps(-1);
       refreshActiveSetControls();
@@ -1826,15 +1814,15 @@ function renderActiveSetScreen(view) {
       refreshActiveSetControls();
     },
   });
-  renderChangeUnderline('reps', isResting && pending?.changes.reps, 215, controls.rows[1].y + controls.rowHeight - 30, 50);
 
   if (controls.showRpe) {
     renderStepper({
       key: 'rpe',
       y: px(controls.rows[2].y),
-      height: px(controls.rowHeight),
+      height: controls.rowHeight,
       label: 'RPE',
       value: formatEditableSetValue(set?.rpe, set?.logRpe),
+      valueColor: (isResting && pending?.changes.rpe) ? THEME.primaryLight : THEME.textPrimary,
       onMinus: () => {
         workoutController.adjustRpe(-0.5);
         refreshActiveSetControls();
@@ -1844,22 +1832,24 @@ function renderActiveSetScreen(view) {
         refreshActiveSetControls();
       },
     });
-    renderChangeUnderline('rpe', isResting && pending?.changes.rpe, 215, controls.rows[2].y + controls.rowHeight - 30, 50);
   }
 
   // Action button
-  addWidget(widget.BUTTON, {
-    x: px(100),
+  const actionText = view.timedSet?.phase === 'REST' ? 'Armed'
+    : isResting ? (view.rest ? `> Start set ${formatSeconds(view.rest.remaining)}` : '> Start set')
+    : view.timedSet ? (set.isUnilateral ? 'Start left' : 'Start set') : 'Done';
+
+  addLiveButton('actionButton', {
+    x: px(ACTIVE_SET_ACTION_LAYOUT.x),
     y: px(controls.actionY),
-    w: px(280),
+    w: px(ACTIVE_SET_ACTION_LAYOUT.width),
     h: px(controls.actionHeight),
     radius: px(controls.actionHeight / 2),
     normal_color: THEME.success,
     press_color: 0x1c9c6d,
     color: 0x00281c,
-    text: view.timedSet?.phase === 'REST' ? 'Armed'
-      : isResting ? '\u25b6 Start set' : view.timedSet ? (set.isUnilateral ? 'Start left' : 'Start set') : 'Done',
-    text_size: font('title'),
+    text: actionText,
+    text_size: font('button'),
     click_func: () => {
       if (!isResting && view.timedSet) {
         const reason = checkRequiredPhoneInput(set);
@@ -3287,7 +3277,9 @@ function tick() {
 
       updateLiveWidget('restLabel', { text: labelText, color: labelColor });
       updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor });
-      updateLiveWidget('restBannerText', { text: `Rest ${formatSeconds(view.rest.remaining)}`, color: restColor });
+      updateLiveWidget('actionButton', {
+        text: view.timedSet?.phase === 'REST' ? 'Armed' : `> Start set ${formatSeconds(view.rest.remaining)}`,
+      });
       updateLiveWidget('restBezel', { color: restStatusColor(view.rest) });
     }
     updateLiveWidget('elapsed', {
