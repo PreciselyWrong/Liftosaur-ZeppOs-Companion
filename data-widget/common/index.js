@@ -328,6 +328,11 @@ function syncRestPresentation(rest) {
 }
 
 let clockTimer = null;
+// Rest countdowns and alerts need a tighter cadence; network requests and
+// sport-metric sampling remain independently throttled.
+const TICK_FAST_MS = 250;
+const TICK_SLOW_MS = 1000;
+let clockInterval = null;
 let lastRenderedState = null;
 let lastRenderedSecond = null;
 let lastRenderedClock = null;
@@ -3277,6 +3282,7 @@ function renderUI() {
     return;
   }
   cancelScheduledRender();
+  if (clockTimer) startClock();
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
   consumeControllerUiChange();
   preparationImageUrl = null;
@@ -3726,8 +3732,13 @@ function tick() {
 }
 
 function startClock() {
-  if (clockTimer) return;
-  clockTimer = setInterval(tick, 1000);
+  const interval = screen === EXTENSION_SCREENS.SESSION && workoutController?.view().state === SESSION_STATES.REST
+    ? TICK_FAST_MS
+    : TICK_SLOW_MS;
+  if (clockTimer && clockInterval === interval) return;
+  if (clockTimer) clearInterval(clockTimer);
+  clockInterval = interval;
+  clockTimer = setInterval(tick, interval);
 }
 
 function stopClock() {
@@ -3735,6 +3746,7 @@ function stopClock() {
     clearInterval(clockTimer);
     clockTimer = null;
   }
+  clockInterval = null;
 }
 
 DataWidget(
