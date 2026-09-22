@@ -153,13 +153,13 @@ test('an empty ready exercise page remains stable without controls', () => {
   });
 });
 
-test('ready-screen actions render above decorative labels', () => {
+test('ready-screen actions render above the demo badge and below the disabled footer', () => {
   const source = fs.readFileSync(
     path.join(root, 'page', 'common', 'index.js'),
     'utf8',
   );
   const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
-  assert.ok(renderUi.indexOf('renderClock()') < renderUi.indexOf('renderScreen()'));
+  assert.ok(renderUi.indexOf('renderClock()') > renderUi.indexOf('renderScreen()'));
   assert.match(source, /function renderReadyScreen[\s\S]*?text_size:\s*font\('body'\)/);
 });
 

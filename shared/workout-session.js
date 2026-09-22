@@ -903,6 +903,8 @@ export function createWorkoutSession({
     const setIdx = state === SESSION_STATES.REST ? prog.completedSets.length : prog.currentSetIndex;
     const completed = allCompletedSets();
     const previous = completed.length > 0 ? completed[completed.length - 1] : null;
+    // Superset partners have independent numeric targets.
+    const previousForExercise = prog.completedSets[prog.completedSets.length - 1];
     const set = describeSet(exercise, prog, setIdx);
     return {
       exerciseIndex: idx,
@@ -921,9 +923,9 @@ export function createWorkoutSession({
       set,
       changes: previous ? {
         exercise: previous.exerciseArrayIndex !== idx,
-        weight: previous.weight !== set.weight,
-        reps: previous.reps !== set.reps,
-        rpe: previous.rpe !== set.rpe,
+        weight: Boolean(previousForExercise && previousForExercise.weight !== set.weight),
+        reps: Boolean(previousForExercise && previousForExercise.reps !== set.reps),
+        rpe: Boolean(previousForExercise && previousForExercise.rpe !== set.rpe),
       } : {
         exercise: false,
         weight: false,
