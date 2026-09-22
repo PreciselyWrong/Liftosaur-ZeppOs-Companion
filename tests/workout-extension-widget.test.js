@@ -1,4 +1,4 @@
-import { isPurpleRestRing } from '../shared/rest-visual.js';
+import { isPurpleRestRing, darkenColor } from '../shared/rest-visual.js';
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import fs from 'node:fs';
@@ -503,6 +503,7 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
   const env = {
     ...watchLayout,
     isPurpleRestRing,
+    darkenColor,
     updatePreparedRestVisuals() {},
     THEME,
     widget: { BUTTON: 'button', TEXT: 'text', SPORT_DATA: 'sport_data', STROKE_RECT: 'stroke_rect' },
@@ -602,6 +603,7 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
   };
 
   const renderActiveSetScreen = new Function('env', `with (env) {
+    ${extractFunction(source, 'restStatusColor')}
     ${extractFunction(source, 'renderPreparedTopBar')}
     ${extractFunction(source, 'renderExerciseInfo')}
     ${extractFunction(source, 'renderStepper')}

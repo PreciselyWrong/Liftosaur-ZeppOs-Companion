@@ -13,6 +13,7 @@ import {
 } from '../shared/rest-visual.js';
 import * as restVisual from '../shared/rest-visual.js';
 import * as watchLayout from '../shared/watch-layout.js';
+import { createScreenLayout } from '../shared/screen-layout.js';
 
 const root = process.cwd();
 const companionSource = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
@@ -122,6 +123,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
 
   const THEME = {
     primary: 0x8356f6,
+    success: 0x23c88e,
     primaryLight: 0xa48bfa,
     primaryPale: 0xccc1f9,
     primaryDark: 0x393248,
@@ -225,6 +227,8 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
       return entry;
     },
     addRawWidget: (type, props) => env.addWidget(type, props),
+    addActionWidget: (props) => env.addWidget('button', props),
+    deleteWidget: (entry) => { widgets.splice(widgets.indexOf(entry), 1); },
     addLiveLabel: (key, props) => {
       const entry = {
         key,
@@ -329,9 +333,11 @@ for (const [name, source, isCompanion] of [
     }`)(env);
     api.render(view);
     const count = widgets.length;
+    const actionCallback = liveWidgets.actionButton.props.click_func;
     const values = ['weight', 'reps', 'rpe'].map(key => liveWidgets[`${key}-value`].props.text);
     const colors = () => ['exerciseTitle', 'weight-value', 'reps-value', 'rpe-value'].map(key => liveWidgets[key].props.color);
     assert.deepEqual(colors(), Array(4).fill(THEME.primaryLight));
+    assert.equal(liveWidgets.actionButton.props.normal_color, liveWidgets.restBezel.props.color);
     const animStarts = () => setPropertyCalls.filter(call => call.prop === env.prop.ANIM).length;
     const initialStarts = animStarts();
     assert.equal(initialStarts, REST_HALO_CONFIG.LAYER_COUNT);
@@ -343,18 +349,24 @@ for (const [name, source, isCompanion] of [
     view.rest.isPaused = true;
     api.tick();
     assert.equal(liveWidgets.restBezel.props.color, THEME.yellow);
+    assert.equal(liveWidgets.actionButton.props.normal_color, THEME.yellow);
+    assert.equal(liveWidgets.actionButton.widget.normal_color, THEME.yellow);
     assert.deepEqual(colors(), Array(4).fill(THEME.textPrimary));
     api.refresh();
     assert.deepEqual(colors(), Array(4).fill(THEME.textPrimary), 'Edits during pause remain white');
     view.rest.isPaused = false;
     api.tick();
     assert.equal(liveWidgets.restBezel.props.color, THEME.primary);
+    assert.equal(liveWidgets.actionButton.props.normal_color, THEME.primary);
     assert.deepEqual(colors(), Array(4).fill(THEME.primaryLight));
+    assert.equal(liveWidgets.actionButton.props.normal_color, liveWidgets.restBezel.props.color);
     assert.equal(animStarts(), initialStarts * 2, 'Resume starts one cycle per layer');
     view.rest.isOvertime = true;
     view.rest.remaining = -1;
     api.tick();
     assert.equal(liveWidgets.restBezel.props.color, THEME.error);
+    assert.equal(liveWidgets.actionButton.props.normal_color, THEME.error);
+    assert.equal(liveWidgets.actionButton.widget.normal_color, THEME.error);
     assert.deepEqual(colors(), Array(4).fill(THEME.textPrimary));
     api.refresh();
     assert.deepEqual(colors(), Array(4).fill(THEME.textPrimary), 'Edits during overtime remain white');
@@ -362,6 +374,8 @@ for (const [name, source, isCompanion] of [
       assert.equal(liveWidgets[`restHalo_${i}`].props.color, darkenColor(THEME.error, REST_HALO_CONFIG.FADE_FACTORS[i]));
     }
     assert.equal(widgets.length, count);
+    assert.equal(liveWidgets.actionButton.widget.click_func, actionCallback, 'Color transitions preserve the action');
+    assert.equal(liveWidgets.actionButton.widget.text, '> Start set -0:01');
     assert.deepEqual(['weight', 'reps', 'rpe'].map(key => liveWidgets[`${key}-value`].props.text), values);
     view.rest = null;
     view.state = 'ACTIVE_SET';
@@ -426,5 +440,67 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
     view.rest.isPaused = true;
     api.update(view);
     assert.equal(env.controllerUiDirty, true);
+  });
+}
+
+for (const [name, source] of [['Companion', companionSource], ['Workout', extensionSource]]) {
+  test(`${name}: footer is above the halo with an opaque disabled backing and fits the panel`, () => {
+    for (const device of [
+      { width: 480, height: 480, isRound: true },
+      { width: 390, height: 390, isRound: true },
+      { width: 390, height: 450, isRound: false },
+      { width: 480, height: 480, isRound: false },
+      { width: 336, height: 480, isRound: false },
+    ]) {
+      const { env, view, widgets } = createMockEnv({ source });
+      const scale = device.width / 480;
+      Object.assign(env, {
+        W: device.width, H: device.height, LAYOUT: createScreenLayout(device),
+        px: value => value * scale, font: () => 20 * scale,
+        lastRenderedClock: '', currentClockLabel: () => '12:59 PM',
+        recordingLabel: () => 'Synced', isTearingDown: false, hasBuilt: true,
+        isPaused: false, isDispatchingClick: false, isNotesModalOpen: false,
+        preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
+        workoutDiagnostics: { record() {} }, cancelScheduledRender() {},
+        updateSyncWarning() {}, clearWidgets() {}, hideModalControls() {},
+        renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => false,
+      });
+      env.workoutController.sync = () => ({});
+      env.workoutController.getWorkoutSetWrites = () => [1];
+      env.addLiveLabel = (key, props) => {
+        const entry = { key, ...env.LAYOUT.fit(props), setEnable: enabled => { entry.enabled = enabled; } };
+        widgets.push(entry);
+        return entry;
+      };
+      const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClock', 'renderUI'];
+      const render = new Function('env', `with (env) {
+        ${names.map(name => extractFunction(source, name)).join('\n')}
+        const renderScreen = () => renderRestBezel(view.rest);
+        return renderUI;
+      }`)(env);
+      render();
+      const footer = widgets.find(w => w.key === 'clock');
+      const haloLastIndex = widgets.findLastIndex(w => w.type === 'stroke_rect');
+      assert.ok(widgets.indexOf(footer) > haloLastIndex, 'Halo must stay behind the footer');
+      const outline = widgets.find(w => w.type === 'stroke_rect');
+      assert.equal(outline.w, device.width - 4, 'Perimeter uses raw device width');
+      assert.equal(outline.h, device.height - 4, 'Perimeter uses raw device height');
+      assert.equal(outline.radius, device.isRound ? Math.round(outline.w / 2) : Math.round(device.width * 0.12),
+        'Round devices get a circle; square devices get rounded corners');
+      assert.equal(footer.text, '12:59 PM | Synced', 'Time and status must both remain complete');
+      assert.equal(footer.normal_color, env.THEME.bg);
+      assert.equal(footer.press_color, env.THEME.bg);
+      assert.equal(footer.enabled, false, 'Footer must not intercept actions');
+      for (const x of [footer.x, footer.x + footer.w]) {
+        for (const y of [footer.y, footer.y + footer.h]) {
+          if (device.isRound) {
+            assert.ok(Math.hypot(x - device.width / 2, y - device.height / 2) <= device.width / 2,
+              `Footer corner ${x},${y} must fit ${device.width}px circle`);
+          } else {
+            assert.ok(x >= 0 && x <= device.width && y >= 0 && y <= device.height);
+          }
+        }
+      }
+    }
   });
 }

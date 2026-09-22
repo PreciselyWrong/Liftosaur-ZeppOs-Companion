@@ -6,6 +6,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createScreenLayout, DESIGN_BOX, DESIGN_CANVAS } from '../shared/screen-layout.js';
+import { EXTENSION_CLOCK_LAYOUT } from '../shared/watch-layout.js';
 
 const ROUND_480 = { width: 480, height: 480, isRound: true };
 const BIP_6 = { width: 390, height: 450, isRound: false };
@@ -46,8 +47,12 @@ test('a square screen fits the design box inside the panel', () => {
 });
 
 test('the clock row fits both panels', () => {
-  // The clock is the bottom row of the design box: x 160..320, y 442..462.
-  const box = { x: 160, y: 442, w: 160, h: 20 };
+  const box = {
+    x: EXTENSION_CLOCK_LAYOUT.x,
+    y: EXTENSION_CLOCK_LAYOUT.y,
+    w: EXTENSION_CLOCK_LAYOUT.width,
+    h: EXTENSION_CLOCK_LAYOUT.height,
+  };
   assert.equal(DESIGN_BOX.y + DESIGN_BOX.h, box.y + box.h, 'the box must end on the clock row');
 
   // Round: the far corners of that row stay inside the 480 circle.

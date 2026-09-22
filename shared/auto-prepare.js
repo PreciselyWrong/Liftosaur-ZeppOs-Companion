@@ -21,3 +21,22 @@ export function updateRestPresentation(previous, rest, autoPrepare) {
   if (restIdentity === previous?.restIdentity) return previous;
   return { restIdentity, isPrepared: normalizeAutoPrepare(autoPrepare) };
 }
+
+const AUTO_PREPARE_STORAGE_KEY = 'liftosaur.autoPrepare';
+
+// Restore presentation before the phone can reply, including while offline.
+export function readAutoPreparePreference(storage) {
+  try {
+    return normalizeAutoPrepare(storage?.getItem(AUTO_PREPARE_STORAGE_KEY));
+  } catch (error) {
+    return false;
+  }
+}
+
+export function saveAutoPreparePreference(storage, value) {
+  try {
+    storage?.setItem(AUTO_PREPARE_STORAGE_KEY, normalizeAutoPrepare(value));
+  } catch (error) {
+    // A display preference must never prevent local session recovery.
+  }
+}

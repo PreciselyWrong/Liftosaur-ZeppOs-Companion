@@ -9,7 +9,7 @@ function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
 
-test('release surfaces agree on version 0.5.8 and code 44', () => {
+test('release surfaces agree on version 0.5.9 and code 45', () => {
   const manifest = JSON.parse(read('package.json'));
   const app = JSON.parse(read('app.json'));
   const publicDocs = [
@@ -20,10 +20,10 @@ test('release surfaces agree on version 0.5.8 and code 44', () => {
     read('docs/workout-extension-hardware-test-plan.md'),
   ];
 
-  assert.equal(manifest.version, '0.5.8');
+  assert.equal(manifest.version, '0.5.9');
   assert.equal(app.app.version.name, manifest.version);
-  assert.equal(app.app.version.code, 44);
-  for (const document of publicDocs) assert.match(document, /0\.5\.8/);
+  assert.equal(app.app.version.code, 45);
+  for (const document of publicDocs) assert.match(document, /0\.5\.9/);
 });
 
 test('runtime logs contain no workout names or completed-set counts', () => {
