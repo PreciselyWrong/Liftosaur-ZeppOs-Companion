@@ -3748,7 +3748,7 @@ DataWidget(
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
-        maxCachedImages: 2,
+        maxCachedImages: OVERVIEW_PAGE_SIZE,
       });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');

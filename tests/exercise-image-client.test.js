@@ -1,10 +1,13 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import vm from 'node:vm';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
+import { OVERVIEW_PAGE_SIZE } from '../shared/watch-layout.js';
 
 const url = '/externalimages/exercises/single/small/squat.png';
 const flush = () => new Promise(resolve => setImmediate(resolve));
-function harness(response = 'queued', { receivedFileSize = 0 } = {}) {
+function harness(response = 'queued', { receivedFileSize = 0, maxCachedImages, onChange } = {}) {
   let receive;
   let incoming;
   let consumed = 0;
@@ -15,10 +18,48 @@ function harness(response = 'queued', { receivedFileSize = 0 } = {}) {
     request: async (_, payload) => { requests.push(payload); return { payload: { status: response } }; },
     removeFile(path) { removed.push(path); },
     fileSize: () => receivedFileSize,
+    maxCachedImages,
+    onChange,
   });
   client.setEnabled(true);
   return { client, requests, removed, receive: file => { incoming = file; receive(); }, consumed: () => consumed };
 }
+
+test('Workout image transfers settle after filling the visible overview page', async () => {
+  const source = readFileSync(new URL('../data-widget/common/index.js', import.meta.url), 'utf8');
+  const capacity = source.match(/maxCachedImages:\s*([^,\r\n]+)/)[1];
+  const urls = Array.from({ length: OVERVIEW_PAGE_SIZE }, (_, index) =>
+    `https://example.com/exercise-${index}.png`);
+  let h;
+  const renderOverview = () => {
+    for (const imageUrl of urls) {
+      h.client.load(imageUrl);
+      h.client.get(imageUrl);
+    }
+  };
+  h = harness('queued', {
+    maxCachedImages: vm.runInNewContext(capacity, { OVERVIEW_PAGE_SIZE }),
+    onChange: renderOverview,
+  });
+  try {
+    renderOverview();
+    for (let index = 0; index < urls.length; index++) {
+      await flush();
+      h.receive({
+        params: { type: 'exercise-image', ...h.requests[index] },
+        fileSize: 100, filePath: `data://download/overview-${index}.png`,
+        readyState: 'transferred', on() {}, cancel() {},
+      });
+    }
+    await flush();
+    assert.deepEqual(h.requests.map(request => request.imageUrl), urls);
+    assert.deepEqual(h.removed, []);
+    assert.deepEqual(urls.map(imageUrl => h.client.get(imageUrl).status),
+      Array(OVERVIEW_PAGE_SIZE).fill('ready'));
+  } finally {
+    h.client.dispose();
+  }
+});
 
 test('accepts a transferred watch file when native transfer metadata stays at zero', async () => {
   const h = harness('queued', { receivedFileSize: 100 });
