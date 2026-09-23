@@ -117,3 +117,38 @@ test('Workout no longer advances the prepared set when rest reaches zero', () =>
   assert.doesNotMatch(workoutSource, /shouldAutoStartPreparedSet/);
   assert.doesNotMatch(workoutSource, /remaining\s*<=\s*0[\s\S]{0,200}workoutController\.nextSet\(\)/);
 });
+
+for (const changed of [false, true]) {
+  test(`superset numeric highlights compare the same exercise only (changed=${changed})`, () => {
+    const a = { targetWeight: 100, targetReps: 5, targetRpe: 8, logRpe: true, restSeconds: 60 };
+    const b = { targetWeight: 50, targetReps: 8, targetRpe: 9, logRpe: true, restSeconds: 60 };
+    const session = createWorkoutSession({ plan: plan([
+      { index: 1, entryId: 'entry-a', name: 'Squat', supersetGroup: 'A', sets: [
+        { ...a, setId: 'a1' }, { ...(changed ? b : a), setId: 'a2' },
+      ] },
+      { index: 2, entryId: 'entry-b', name: 'Press', supersetGroup: 'A', sets: [
+        { ...b, setId: 'b1' }, { ...b, setId: 'b2' },
+      ] },
+    ]) });
+    session.startWorkout({ timestamp: 0 });
+    session.completeSet({ timestamp: 1_000 });
+    assert.equal(session.view(1_000).pending.exerciseName, 'Press');
+    assert.deepEqual(session.view(1_000).pending.changes, {
+      exercise: true, weight: false, reps: false, rpe: false,
+    }, 'The first set of another exercise has no numeric comparison baseline');
+
+    session.nextSet({ timestamp: 2_000 });
+    session.completeSet({ timestamp: 3_000 });
+    assert.equal(session.view(3_000).pending.exerciseName, 'Squat');
+    assert.deepEqual(session.view(3_000).pending.changes, {
+      exercise: true, weight: changed, reps: changed, rpe: changed,
+    }, 'Compare Squat to the previous Squat, even when the new targets match Press');
+
+    session.nextSet({ timestamp: 4_000 });
+    session.completeSet({ timestamp: 5_000 });
+    assert.equal(session.view(5_000).pending.exerciseName, 'Press');
+    assert.deepEqual(session.view(5_000).pending.changes, {
+      exercise: true, weight: false, reps: false, rpe: false,
+    }, 'Unchanged Press values stay unhighlighted after the next Squat');
+  });
+}

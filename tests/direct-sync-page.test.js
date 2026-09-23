@@ -19,7 +19,7 @@ test('imports workoutToDayPlan from shared workout-api-plan', () => {
 
 test('declares direct sync state variables', () => {
   const source = readWatchPage();
-  assert.match(source, /let\s+accountSettings\s*=\s*null/);
+  assert.match(source, /let\s+accountSettings\s*=\s*\{\s*autoPrepare:\s*readAutoPreparePreference\(deviceStorage\)\s*\}/);
   assert.match(source, /let\s+defaultWorkoutPlan\s*=\s*null/);
   assert.match(source, /let\s+directSync\s*=/);
 });
