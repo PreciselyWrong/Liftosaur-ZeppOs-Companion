@@ -2,7 +2,7 @@ import { recordingLabel, recordingDetails } from '../../shared/recording-status.
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
-import { createRestPresentationState, updateRestPresentation } from '../../shared/auto-prepare.js';
+import { createRestPresentationState, updateRestPresentation, readAutoPreparePreference, saveAutoPreparePreference } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -235,7 +235,7 @@ let outline = null;
 let selectedWeek = null;
 let dayPlan = null;
 
-let accountSettings = null;
+let accountSettings = { autoPrepare: readAutoPreparePreference(deviceStorage) };
 let defaultWorkoutPlan = null;
 let directSync = defaultDirectSync('LEGACY');
 let syncWarning = null;
@@ -322,6 +322,7 @@ function adoptAccountSettings(payload) {
   const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   const autoPrepareWasEnabled = accountSettings?.autoPrepare === true;
   accountSettings = payload || {};
+  saveAutoPreparePreference(deviceStorage, accountSettings.autoPrepare);
   const autoPrepareChanged = autoPrepareWasEnabled !== (accountSettings.autoPrepare === true);
   if (autoPrepareChanged) restPresentation = createRestPresentationState();
   exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
@@ -1673,7 +1674,8 @@ function renderClock() {
   if (canOpenSyncDetails()) {
     addLiveButton('clock', { ...props, click_func: openSyncDetailsModal });
   } else {
-    addLiveLabel('clock', props);
+    const clock = addLiveLabel('clock', { ...props, press_color: THEME.bg });
+    clock.setEnable(false);
   }
 }
 
@@ -2517,6 +2519,16 @@ function renderRestBezel(rest) {
 function updatePreparedRestVisuals(view) {
   if (!liveWidgets.restBezel || view.state !== SESSION_STATES.REST || !view.rest) return;
   updateRestBezelAndHalo(view.rest);
+  const action = liveWidgets.actionButton;
+  const actionColor = restStatusColor(view.rest);
+  if (action && action.props.normal_color !== actionColor) {
+    // BUTTON background updates are undocumented; replace only this action.
+    const previousWidget = action.widget;
+    action.props = { ...action.props, normal_color: actionColor, press_color: darkenColor(actionColor, 0.75) };
+    action.widget = addActionWidget(action.props);
+    deleteWidget(previousWidget);
+    activeWidgets = activeWidgets.filter(item => item !== previousWidget);
+  }
   for (const field of ['exercise', 'weight', 'reps', 'rpe']) {
     const key = field === 'exercise' ? 'exerciseTitle' : `${field}-value`;
     const color = getChangedFieldTextColor({
@@ -2970,9 +2982,9 @@ function renderActiveSetScreen(view) {
     w: px(ACTIVE_SET_ACTION_LAYOUT.width),
     h: px(controls.actionHeight),
     radius: px(controls.actionHeight / 2),
-    normal_color: THEME.success,
-    press_color: 0x1c9c6d,
-    color: 0x00281c,
+    normal_color: isResting ? restStatusColor(view.rest) : THEME.success,
+    press_color: isResting ? darkenColor(restStatusColor(view.rest), 0.75) : 0x1c9c6d,
+    color: isResting ? THEME.bg : 0x00281c,
     text: actionText,
     text_size: font('button'),
     click_func: () => {
@@ -3845,11 +3857,10 @@ function renderUI() {
   // whole panel, fitted content included.
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  // Decorative text is created first so Zepp never places it above a button's
-  // touch target, even on firmware whose widget hit testing ignores z-order.
   renderDemoBadge();
-  renderClock();
   renderScreen();
+  // Keep the opaque footer above perimeter effects and outside action targets.
+  renderClock();
   redraw();
 }
 
