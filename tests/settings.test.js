@@ -179,11 +179,11 @@ test('phone settings show watch diagnostic steps only after a sanitized report a
   };
   visit(tree);
   assert.equal(tree.children[0].length, 4);
-  assert.ok(text.includes('Workout diagnostics'));
+  assert.ok(text.includes('Watch diagnostics'));
   assert.ok(text.includes('1970-01-01T00:00:01.000Z SET_TAP'));
 });
 
-test('Workout diagnostics require an explicit phone toggle and clear the report when disabled', () => {
+test('watch diagnostics require an explicit phone toggle and clear the report when disabled', () => {
   assert.equal(loadSettings().state.workoutDiagnosticsEnabled, false);
   const initial = renderSettings();
   const toggles = [];
@@ -194,7 +194,7 @@ test('Workout diagnostics require an explicit phone toggle and clear the report 
     visit(node.children);
   };
   visit(initial.tree);
-  const diagnosticsToggle = toggles.find(({ props }) => props.label === 'Record Workout diagnostics');
+  const diagnosticsToggle = toggles.find(({ props }) => props.label === 'Record watch diagnostics');
   assert.ok(diagnosticsToggle);
   assert.equal(diagnosticsToggle.props.value, false);
   diagnosticsToggle.props.onChange(true);
@@ -208,7 +208,7 @@ test('Workout diagnostics require an explicit phone toggle and clear the report 
     collect(node.children);
   };
   collect(enabled.tree);
-  const enabledDiagnostics = enabledToggles.find(({ props }) => props.label === 'Record Workout diagnostics');
+  const enabledDiagnostics = enabledToggles.find(({ props }) => props.label === 'Record watch diagnostics');
   assert.equal(enabledDiagnostics.props.value, true);
   enabledDiagnostics.props.onChange(false);
   assert.deepEqual(enabled.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'false']]);
