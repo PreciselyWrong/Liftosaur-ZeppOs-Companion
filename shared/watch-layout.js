@@ -11,6 +11,7 @@ export const TYPOGRAPHY = Object.freeze({
 });
 
 export const LIST_PAGE_SIZE = 3;
+export const WORKOUT_PROGRESS_LAYOUT = Object.freeze({ x: 120, y: 38, width: 240, height: 4 });
 export const PREPARED_TOP_BAR_LAYOUT = Object.freeze({
   y: 48,
   height: 40,
@@ -23,8 +24,8 @@ export const ACTIVE_SET_ACTION_LAYOUT = Object.freeze({
   width: 312,
 });
 
-export function stepperRowLayout(rowHeight) {
-  const labelHeight = TYPOGRAPHY.micro + 2;
+export function stepperRowLayout(rowHeight, hasLabel = true) {
+  const labelHeight = hasLabel ? TYPOGRAPHY.micro + 2 : 0;
   const valueHeight = rowHeight - labelHeight;
   return {
     valueHeight,

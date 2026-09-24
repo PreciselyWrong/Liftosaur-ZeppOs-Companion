@@ -10,6 +10,7 @@ import { createWorkoutService } from './workout-service.js';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { createExerciseImageService } from './exercise-image-service.js';
 
 let sideServiceInstance = null;
@@ -66,6 +67,7 @@ function getEffectiveSettings() {
   let getReadySeconds = 5;
   let exerciseImages = false;
   let autoPrepare = false;
+  let displaySettings = normalizeWorkoutDisplaySettings();
 
   try {
     const storage = getEffectiveStorage();
@@ -77,6 +79,11 @@ function getEffectiveSettings() {
       getReadySeconds = normalizeGetReadySeconds(storage.getItem('getReadySeconds'));
       exerciseImages = normalizeExerciseImages(storage.getItem('exerciseImages'));
       autoPrepare = normalizeAutoPrepare(storage.getItem('autoPrepare'));
+      displaySettings = normalizeWorkoutDisplaySettings({
+        showWorkoutProgress: storage.getItem('showWorkoutProgress'),
+        showPlateBreakdown: storage.getItem('showPlateBreakdown'),
+        showRestInfo: storage.getItem('showRestInfo'),
+      });
       const rawScreenDuration = storage.getItem('screenOnDuration');
       let parsedScreenDuration = rawScreenDuration;
       if (typeof rawScreenDuration === 'string') {
@@ -106,6 +113,7 @@ function getEffectiveSettings() {
     getReadySeconds,
     exerciseImages,
     autoPrepare,
+    ...displaySettings,
   };
 }
 

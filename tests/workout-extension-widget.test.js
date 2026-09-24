@@ -4,6 +4,7 @@ import test from 'node:test';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as watchLayout from '../shared/watch-layout.js';
+import { normalizeWorkoutDisplaySettings, weightStepperDisplay } from '../shared/workout-display-settings.js';
 
 function readWidgetSource() {
   return fs.readFileSync(
@@ -257,14 +258,14 @@ test('top bar renders native BPM with a fixed heart even during sync warnings', 
     const widgets = [];
     const render = new Function('addWidget', 'addLiveLabel', 'addLiveButton', 'widget', 'sport_data',
       'edit_widget_group_type', 'EXTENSION_TOP_BAR_LAYOUT', 'px', 'font', 'THEME',
-      'align', 'text_style', 'formatSeconds', 'MENU_LABEL', 'syncWarning', 'openWorkoutTimerControls',
+      'align', 'text_style', 'formatSeconds', 'MENU_LABEL', 'syncWarning', 'openWorkoutTimerControls', 'renderWorkoutProgress',
       `${extractFunction(source, 'renderTopBar')}; return renderTopBar;`)(
       (type, props) => widgets.push({ type, ...props }),
       (key, props) => widgets.push({ key, ...props }),
       (key, props) => widgets.push({ key, ...props }),
       { BUTTON: 'button', SPORT_DATA: 'sport', TEXT: 'text' }, { HR: 123 }, { SPORTS: 456 },
       { y: 48, height: 40, menu: { x: 100, width: 82 }, elapsed: { x: 186, width: 96 }, metric: { x: 286, width: 96 } },
-      x => x, () => 20, {}, {}, { NONE: 789 }, String, '\u2261', syncWarning, () => {});
+      x => x, () => 20, {}, {}, { NONE: 789 }, String, '\u2261', syncWarning, () => {}, () => {});
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
     const heart = widgets.find(w => w.key === 'heart' && w.text === '\u2665');
@@ -347,6 +348,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
     let started = 0;
     const env = {
       ...watchLayout, renderTopBar() {}, addLiveLabel() {},
+      normalizeWorkoutDisplaySettings, accountSettings: {},
       addLiveButton: (key, props) => buttons.push({ key, ...props }),
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
@@ -502,6 +504,8 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
 
   const env = {
     ...watchLayout,
+    normalizeWorkoutDisplaySettings, weightStepperDisplay, accountSettings: {},
+    renderWorkoutProgress() {},
     isPurpleRestRing,
     darkenColor,
     updatePreparedRestVisuals() {},
