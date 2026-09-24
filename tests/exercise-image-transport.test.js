@@ -103,20 +103,19 @@ test('download without a returned file path never reaches conversion', async () 
   assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_PATH_INVALID' });
   assert.equal(h.convertOptions(), undefined);
 });
-test('image service transfers the converter output path but rebuilds it after a Side Service restart', async () => {
+test('image service transfers the converter output path and reuses it after a Side Service restart', async () => {
   const h = serviceHarness();
   h.setConvert(async () => ({ targetFilePath: 'data://download/native-image', options: { size: 100 } }));
   const first = h.service.load({ imageUrl });
   completeDownload(h);
   assert.equal((await first).status, 'queued');
   assert.equal(h.transfers[0].path, 'data://download/native-image');
-  h.setConvert(async (value) => ({ targetFilePath: value.targetFilePath, options: { size: 100 } }));
+  h.setConvert(async () => { throw new Error('cached image should not be converted'); });
   const restarted = createExerciseImageService(h.dependencies);
   const second = restarted.load({ imageUrl });
-  assert.ok(h.options(), 'a new service must not trust a path from the previous service');
-  completeDownload(h);
   assert.equal((await second).status, 'queued');
-  assert.notEqual(h.transfers[1].path, 'data://download/native-image');
+  assert.equal(h.transfers[1].path, 'data://download/native-image');
+  assert.equal(h.transfers[1].params.cached, true);
 });
 test('a legacy ready image without its converter path is rebuilt at a new path', async () => {
   const h = serviceHarness();
@@ -138,7 +137,7 @@ test('a stuck conversion from a prior service does not block the new service', a
   h.task.onSuccess({ statusCode: 200, tempFilePath: 'data://download/native-temp.png' });
   assert.equal((await result).status, 'queued');
   // Path carries the current generation, confirming stale slot was not reused.
-  assert.match(h.convertOptions().targetFilePath, /lifto-exercise-[^-]+-\d+-0-source\.png_converted$/);
+  assert.match(h.convertOptions().targetFilePath, /lifto-exercise-[^-]+-\d+-1-source\.png_converted$/);
 });
 test('invalid converted image reports a bounded reason in the image reply', async () => {
   const h = serviceHarness();
@@ -190,18 +189,45 @@ test('non-200 image downloads report the HTTP status without leaking the URL', a
   assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_HTTP_STATUS' });
   assert.deepEqual(h.failures, [{ stage: 'download', code: 'HTTP_STATUS', statusCode: 403 }]);
 });
-test('a Side Service restart redownloads into a distinct immutable path', async () => {
+test('a Side Service two weeks later reuses a converted image without downloading', async () => {
   const h = serviceHarness();
   const first = h.service.load({ imageUrl, requestId: 'first' });
   completeDownload(h);
   await first;
-  const restarted = createExerciseImageService(h.dependencies);
+  h.setDownload(() => { throw new Error('cached image should not be downloaded'); });
+  const restarted = createExerciseImageService({ ...h.dependencies, generation: 'two-weeks-later' });
   const second = restarted.load({ imageUrl, requestId: 'second' });
-  completeDownload(h);
   assert.equal((await second).status, 'queued');
-  assert.notEqual(h.transfers[0].path, h.transfers[1].path);
+  assert.equal(h.transfers[0].path, h.transfers[1].path);
   assert.equal(h.transfers[1].params.requestId, 'second');
   assert.equal(JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY))[0].ready, true);
+});
+test('an invalid saved converter path is rebuilt instead of transferred', async () => {
+  const h = serviceHarness();
+  h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify([{
+    url: `https://www.liftosaur.com${imageUrl}`, ready: true, targetPath: 'data://private/image',
+  }]));
+  const result = h.service.load({ imageUrl });
+  completeDownload(h);
+  assert.equal((await result).status, 'queued');
+  assert.match(h.transfers[0].path, /^data:\/\/download\//);
+});
+test('a missing cached file is rebuilt at a new path after enqueue rejects it', async () => {
+  const h = serviceHarness();
+  const first = h.service.load({ imageUrl });
+  completeDownload(h);
+  await first;
+  const oldPath = h.transfers[0].path;
+  h.dependencies.sendFile = (path, params) => {
+    if (params.cached) throw new Error('file missing');
+    h.transfers.push({ path, params });
+  };
+  const restarted = createExerciseImageService(h.dependencies);
+  const retry = restarted.load({ imageUrl });
+  completeDownload(h);
+  assert.equal((await retry).status, 'queued');
+  assert.notEqual(h.transfers[1].path, oldPath);
+  assert.equal(h.transfers[1].params.cached, false);
 });
 test('failed downloads retry their reserved slot and oversize downloads never transfer', async () => {
   const h = serviceHarness();
@@ -228,11 +254,20 @@ test('disabling during conversion suppresses transfer even when enabled again', 
   assert.equal((await result).status, 'disabled');
   assert.equal(h.transfers.length, 0);
 });
-test('full immutable slots refuse new URLs without network activity', async () => {
+test('full phone cache evicts its oldest entry and still loads a new image', async () => {
   const h = serviceHarness();
-  h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(Array.from({ length: 32 }, (_, i) => ({ url: `${imageUrl}${i}`, ready: true, generation: h.service.generation }))));
-  assert.equal((await h.service.load({ imageUrl })).status, 'unavailable');
-  assert.equal(h.options(), undefined);
+  const oldUrls = Array.from({ length: 32 }, (_, i) => `https://example.com/exercise-${i}.png`);
+  h.saved.set(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(oldUrls.map((url, i) => ({
+    url, ready: true, targetPath: `data://download/old-${i}.png`,
+  }))));
+  const result = h.service.load({ imageUrl });
+  completeDownload(h);
+  assert.equal((await result).status, 'queued');
+  const entries = JSON.parse(h.saved.get(EXERCISE_IMAGE_STORAGE_KEY));
+  assert.equal(entries.length, 32);
+  assert.equal(entries.some(entry => entry.url === oldUrls[0]), false);
+  assert.equal(entries.some(entry => entry.url === oldUrls[1]), true);
+  assert.equal(entries[31].url, `https://www.liftosaur.com${imageUrl}`);
 });
 test('conversion timeout protects unfinished output and retries at a fresh path', async (t) => {
   t.mock.timers.enable({ apis: ['setTimeout'] });

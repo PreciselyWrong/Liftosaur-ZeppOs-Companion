@@ -40,7 +40,7 @@
 - Rest uses absolute `restStartedAt`, `restDuration`, and `restEndsAt`; display intervals only repaint.
 - Timed sets journal preparation, effort, pauses, and partial left-side results. Send both unilateral durations together; expiry alerts but never auto-completes.
 - Get Ready is a local Off/3/5/10-second preference that preserves rest; never infer undocumented Liftoscript auto or timer modifiers.
-- Exercise images use API `imageUrl` only, require phone opt-in, and occupy 32 immutable phone slots; hardware display validation remains pending.
+- Exercise images use API `imageUrl` only and require phone opt-in. Cache the 32 most recently used converted phone images across Side Service restarts, keep transfer paths immutable, and rebuild missing files; hardware display validation remains pending.
 - Reads use a 10-second action floor, 2-minute passive checks, and 60/120/300-second failure backoff. Capability evidence is `CONFIRMED`, `TESTED`, `ASSUMED`, `UNKNOWN`, or `BLOCKED`; simulator evidence is never device evidence.
 
 ## Forbidden
