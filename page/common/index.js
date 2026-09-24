@@ -1,11 +1,12 @@
 import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
+import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { createRestPresentationState, updateRestPresentation, readAutoPreparePreference, saveAutoPreparePreference } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
+import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
@@ -330,7 +331,10 @@ function resetDisplayHold() {
 function adoptAccountSettings(payload) {
   const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
   const autoPrepareWasEnabled = accountSettings?.autoPrepare === true;
+  const previousDisplay = normalizeWorkoutDisplaySettings(accountSettings);
   accountSettings = payload || {};
+  const currentDisplay = normalizeWorkoutDisplaySettings(accountSettings);
+  const displayChanged = Object.keys(previousDisplay).some((key) => previousDisplay[key] !== currentDisplay[key]);
   saveAutoPreparePreference(deviceStorage, accountSettings.autoPrepare);
   const autoPrepareChanged = autoPrepareWasEnabled !== (accountSettings.autoPrepare === true);
   if (autoPrepareChanged) restPresentation = createRestPresentationState();
@@ -342,7 +346,7 @@ function adoptAccountSettings(payload) {
   }
   workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
   applyDisplayHold();
-  if (autoPrepareChanged && screen === SCREEN.SESSION && !isNotesModalOpen) renderUI();
+  if ((autoPrepareChanged || displayChanged) && screen === SCREEN.SESSION && !isNotesModalOpen) renderUI();
 }
 
 /**
@@ -2462,7 +2466,23 @@ function renderDirectConflictScreen() {
   });
 }
 
+function renderWorkoutProgress(view) {
+  if (!normalizeWorkoutDisplaySettings(accountSettings).showWorkoutProgress) return;
+  const { completed, total, fraction } = workoutProgress(view.overviewExercises);
+  if (!total) return;
+  const bar = WORKOUT_PROGRESS_LAYOUT;
+  addWidget(widget.FILL_RECT, {
+    x: px(bar.x), y: px(bar.y), w: px(bar.width), h: px(bar.height),
+    radius: px(bar.height / 2), color: THEME.card,
+  });
+  if (completed > 0) addWidget(widget.FILL_RECT, {
+    x: px(bar.x), y: px(bar.y), w: Math.max(px(bar.height), px(bar.width * fraction)), h: px(bar.height),
+    radius: px(bar.height / 2), color: THEME.primaryLight,
+  });
+}
+
 function renderTopBar(view, onBack) {
+  renderWorkoutProgress(view);
   addWidget(widget.BUTTON, {
     x: px(82),
     y: px(45),
@@ -2596,6 +2616,7 @@ function updatePreparedRestVisuals(view) {
 }
 
 function renderPreparedTopBar(view, onRest) {
+  renderWorkoutProgress(view);
   const topBar = PREPARED_TOP_BAR_LAYOUT;
   addWidget(widget.BUTTON, {
     x: px(topBar.menu.x), y: px(topBar.y), w: px(topBar.menu.width), h: px(topBar.height),
@@ -2994,12 +3015,15 @@ function renderActiveSetScreen(view) {
   }
 
   // Weight stepper
+  const weightDisplay = weightStepperDisplay(set.weight, view.unit,
+    formatLoadoutLabel(set.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight),
+    normalizeWorkoutDisplaySettings(accountSettings).showPlateBreakdown);
   renderStepper({
     key: 'weight',
     y: px(controls.rows[0].y),
     height: controls.rowHeight,
-    label: formatLoadoutLabel(set.weight, loadingEquipment, view.unit, set?.plates, set?.targetWeight) || view.unit.toUpperCase(),
-    value: set.weight === null ? '-' : String(set.weight),
+    label: weightDisplay.label,
+    value: weightDisplay.value,
     valueColor: (hasPurpleBezel && pending?.changes.weight) ? THEME.primaryLight : THEME.textPrimary,
     onMinus: () => persistAndRender(() => session.adjustWeight(-1)),
     onPlus: () => persistAndRender(() => session.adjustWeight(1)),
@@ -3067,7 +3091,7 @@ function renderActiveSetScreen(view) {
 
 function renderStepper({ key, y, height, label, value, valueColor = THEME.textPrimary, onMinus, onPlus }) {
   const buttonSize = px(height);
-  const row = stepperRowLayout(height);
+  const row = stepperRowLayout(height, Boolean(label));
   const valueHeight = px(row.valueHeight);
   const labelHeight = px(row.labelHeight);
 
@@ -3097,7 +3121,7 @@ function renderStepper({ key, y, height, label, value, valueColor = THEME.textPr
     text: value,
   });
 
-  addLiveLabel(`${key}-label`, {
+  if (label) addLiveLabel(`${key}-label`, {
     x: px(142),
     y: y + valueHeight,
     w: px(196),
@@ -3126,6 +3150,7 @@ function renderStepper({ key, y, height, label, value, valueColor = THEME.textPr
 
 function renderRestScreen(view) {
   const rest = view.rest;
+  const display = normalizeWorkoutDisplaySettings(accountSettings);
   renderTopBar(view, () => {
     isOverviewOpen = true;
     renderUI();
@@ -3259,7 +3284,7 @@ function renderRestScreen(view) {
       text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
     });
 
-    {
+    if (display.showRestInfo) {
       addWidget(widget.BUTTON, {
         x: px(342),
         y: px(238),
@@ -3292,16 +3317,16 @@ function renderRestScreen(view) {
       x: px(60),
       y: px(294),
       w: px(360),
-      h: px(32),
+      h: px(display.showPlateBreakdown ? 32 : 50),
       color: THEME.yellow,
-      text_size: font('title'),
+      text_size: font(display.showPlateBreakdown ? 'title' : 'value'),
       align_h: align.CENTER_H,
       align_v: align.CENTER_V,
       text_style: text_style.NONE,
       text: formatNextTargetSummary(rest),
     });
 
-    if (nextLoadoutLabel) {
+    if (display.showPlateBreakdown && nextLoadoutLabel) {
       addWidget(widget.TEXT, {
         x: px(60),
         y: px(326),

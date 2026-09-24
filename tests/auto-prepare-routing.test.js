@@ -3,6 +3,7 @@ import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
 import * as autoPrepareHelpers from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { createWorkoutSession, SESSION_STATES } from '../shared/workout-session.js';
 
 const { createRestPresentationState, updateRestPresentation } = autoPrepareHelpers;
@@ -94,6 +95,7 @@ for (const product of ['page', 'data-widget']) {
     const storage = { getItem: key => values.get(key), setItem: (key, value) => values.set(key, value) };
     const env = {
       ...autoPrepareHelpers, deviceStorage: storage,
+      normalizeWorkoutDisplaySettings,
       accountSettings: {}, restPresentation: createRestPresentationState(),
       normalizeExerciseImages: Boolean, normalizeGetReadySeconds: value => value,
       normalizeWorkoutDiagnosticsEnabled: Boolean, exerciseImages: null,

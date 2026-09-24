@@ -1,6 +1,7 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 function isDemoApiKey(value) {
@@ -49,6 +50,12 @@ function selectedOptionName(options, value) {
 
 function settingSummary(label, options, value) {
   return `${label}: ${selectedOptionName(options, value)}`;
+}
+
+function saveDisplaySetting(state, storage, key, value) {
+  const enabled = normalizeWorkoutDisplaySettings({ [key]: value })[key];
+  state[key] = enabled;
+  storage.setItem(key, String(enabled));
 }
 
 const CARD_STYLE = {
@@ -132,6 +139,9 @@ AppSettingsPage({
     getReadySeconds: 5,
     exerciseImages: false,
     autoPrepare: false,
+    showWorkoutProgress: false,
+    showPlateBreakdown: true,
+    showRestInfo: true,
     workoutDiagnosticsEnabled: false,
   },
 
@@ -314,6 +324,28 @@ AppSettingsPage({
                 props.settingsStorage.setItem('exerciseImages', String(this.state.exerciseImages));
               },
             }),
+            settingsHeading('Workout display', 'Choose what appears during a workout.'),
+            Toggle({
+              label: 'Workout progress',
+              value: this.state.showWorkoutProgress,
+              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showWorkoutProgress', value),
+            }),
+            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
+              'Show completed sets across the workout at the top of the watch.'),
+            Toggle({
+              label: 'Plate breakdown',
+              value: this.state.showPlateBreakdown,
+              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showPlateBreakdown', value),
+            }),
+            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
+              'Show plates during rest and while editing a set.'),
+            Toggle({
+              label: 'Rest Info button',
+              value: this.state.showRestInfo,
+              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showRestInfo', value),
+            }),
+            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
+              'Keep exercise details available from the rest preview.'),
             Select({
               label: settingSummary('Screen timeout', SCREEN_ON_OPTIONS, screenOnValue),
               value: screenOnValue,
@@ -427,6 +459,11 @@ AppSettingsPage({
   },
 
   getStorage(props) {
+    Object.assign(this.state, normalizeWorkoutDisplaySettings({
+      showWorkoutProgress: props.settingsStorage.getItem('showWorkoutProgress'),
+      showPlateBreakdown: props.settingsStorage.getItem('showPlateBreakdown'),
+      showRestInfo: props.settingsStorage.getItem('showRestInfo'),
+    }));
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
     this.state.autoPrepare = normalizeAutoPrepare(props.settingsStorage.getItem('autoPrepare'));
     this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(

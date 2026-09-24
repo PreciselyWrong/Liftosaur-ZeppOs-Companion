@@ -13,6 +13,7 @@ import { createWorkoutDetailsLoader } from './workout-details.js';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 
 export function createWorkoutService({ client, catalogService, getLocalSettings = null } = {}) {
   const enrichDetails = createWorkoutDetailsLoader({ client });
@@ -62,6 +63,7 @@ export function createWorkoutService({ client, catalogService, getLocalSettings 
         getReadySeconds: normalizeGetReadySeconds(local?.getReadySeconds),
         exerciseImages: normalizeExerciseImages(local?.exerciseImages),
         autoPrepare: normalizeAutoPrepare(local?.autoPrepare),
+        ...normalizeWorkoutDisplaySettings(local),
       };
     },
   };

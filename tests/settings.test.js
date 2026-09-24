@@ -5,6 +5,7 @@ import path from 'node:path';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTIC_CODES, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
@@ -16,6 +17,7 @@ new Function(
   'normalizeGetReadySeconds',
   'normalizeExerciseImages',
   'normalizeAutoPrepare',
+  'normalizeWorkoutDisplaySettings',
   'WORKOUT_DIAGNOSTICS_KEY',
   'WORKOUT_DIAGNOSTICS_ENABLED_KEY',
   'formatWorkoutDiagnostics',
@@ -32,6 +34,7 @@ new Function(
   normalizeGetReadySeconds,
   normalizeExerciseImages,
   normalizeAutoPrepare,
+  normalizeWorkoutDisplaySettings,
   WORKOUT_DIAGNOSTICS_KEY,
   WORKOUT_DIAGNOSTICS_ENABLED_KEY,
   formatWorkoutDiagnostics,
@@ -91,13 +94,38 @@ function renderSettings(initial = {}) {
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
-  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, autoPrepare: false, workoutDiagnosticsEnabled: false });
+  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, autoPrepare: false, workoutDiagnosticsEnabled: false,
+    showWorkoutProgress: false, showPlateBreakdown: true, showRestInfo: true });
   assert.deepEqual(writes, []);
 });
 
 test('exercise images are opt-in and preserve the saved preference', () => {
   assert.equal(loadSettings({ exerciseImages: 'true' }).state.exerciseImages, true);
   assert.equal(loadSettings({ exerciseImages: 'false' }).state.exerciseImages, false);
+});
+
+test('Workout display switches preserve defaults and save each independent choice', () => {
+  const initial = renderSettings();
+  const toggles = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'Toggle') toggles.push(node);
+    visit(node.children);
+  };
+  visit(initial.tree);
+  for (const [label, key, initialValue, nextValue] of [
+    ['Workout progress', 'showWorkoutProgress', false, true],
+    ['Plate breakdown', 'showPlateBreakdown', true, false],
+    ['Rest Info button', 'showRestInfo', true, false],
+  ]) {
+    const control = toggles.find(({ props }) => props.label === label);
+    assert.ok(control, label);
+    assert.equal(control.props.value, initialValue);
+    control.props.onChange(nextValue);
+    assert.deepEqual(initial.writes.at(-1), [key, String(nextValue)]);
+    assert.equal(loadSettings({ [key]: String(nextValue) }).state[key], nextValue);
+  }
 });
 
 test('Auto prepare is opt-in, persists On and Off, and explains its behavior', () => {
