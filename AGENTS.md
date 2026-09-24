@@ -13,6 +13,7 @@
 - Release work follows `.agents/skills/lifto-release/SKILL.md`; it owns audits, previews, GitHub release creation or refresh, and verification.
 - GitHub Releases are the only public history. Below `1.0.0` is pre-release; notes come from merged PRs. Never add `CHANGELOG.md` or `.github/release.yml`.
 - Pull requests contain exactly one commit and one subject; split independent changes into separate branches and PRs.
+- Every PR must include fresh, installable Zepp preview QR codes for physical-watch testing: at least one, and one per affected watch app. Put them and their expiry in the PR description or a comment. If previews cannot be generated, state why in the PR; never commit QR assets.
 
 ## Work tracking
 
