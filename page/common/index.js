@@ -28,6 +28,7 @@ import {
   VIBRATOR_SCENE_SHORT_LIGHT,
 } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
+import * as appApi from '@zos/app';
 import {
   onGesture,
   offGesture,
@@ -77,6 +78,7 @@ import {
   phoneConnectionMessage,
 } from '../../shared/connection-state.js';
 import { withRequestTimeout } from '../../shared/request-timeout.js';
+import { createWorkoutDiagnostics, readWorkoutMemory, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -206,6 +208,13 @@ const localStoreAdapter = createFallbackStorageAdapter(
   (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
 );
 const sessionStore = createSessionStore(localStoreAdapter);
+const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (code) => {
+  if (code !== WORKOUT_DIAGNOSTIC_CODES.BUILD &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.RESTORED &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.SET_TAP &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SAVED) return null;
+  return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
+});
 let controllerUiDirty = false;
 const workoutController = createWorkoutController({
   store: sessionStore,
@@ -380,10 +389,40 @@ function addRawWidget(type, props) {
   return w;
 }
 
+let isDispatchingClick = false;
+let renderTimer = null;
+
+function scheduleRenderUI() {
+  if (isTearingDown || renderTimer !== null) return;
+  renderTimer = setTimeout(() => {
+    renderTimer = null;
+    if (!isTearingDown) renderUI();
+  }, 0);
+}
+
+function cancelScheduledRender() {
+  if (renderTimer !== null) clearTimeout(renderTimer);
+  renderTimer = null;
+}
+
+function wrapNativeAction(handler) {
+  return (button) => {
+    if (isTearingDown) return;
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP);
+    isDispatchingClick = true;
+    try {
+      handler(button);
+    } finally {
+      isDispatchingClick = false;
+      if (controllerUiDirty) scheduleRenderUI();
+    }
+  };
+}
+
 function addActionWidget(props) {
   return addRawWidget(widget.BUTTON, {
     ...props,
-    click_func: props.click_func,
+    click_func: wrapNativeAction(props.click_func),
   });
 }
 
@@ -424,9 +463,9 @@ function ensureModalControls(totalPages) {
           press_color: THEME.card,
           text: '<',
           text_size: font('button'),
-          click_func: () => {
+          click_func: wrapNativeAction(() => {
             if (isNotesModalOpen) moveNotesPage(-1);
-          },
+          }),
         }),
       ),
       next: createWidget(
@@ -441,9 +480,9 @@ function ensureModalControls(totalPages) {
           press_color: THEME.card,
           text: '>',
           text_size: font('button'),
-          click_func: () => {
+          click_func: wrapNativeAction(() => {
             if (isNotesModalOpen) moveNotesPage(1);
-          },
+          }),
         }),
       ),
       close: createWidget(
@@ -458,9 +497,9 @@ function ensureModalControls(totalPages) {
           press_color: THEME.primaryDeep,
           text: 'Close',
           text_size: font('button'),
-          click_func: () => {
+          click_func: wrapNativeAction(() => {
             if (isNotesModalOpen) closeTextModal();
-          },
+          }),
         }),
       ),
     };
@@ -573,17 +612,28 @@ function updateLiveWidget(key, changes) {
 // ── Side Service calls ───────────────────────────────────────────────────────
 
 function send(type, payload = {}, options = {}) {
-  if (!pageInstance || typeof pageInstance.request !== 'function') {
+  if (isTearingDown || !pageInstance || typeof pageInstance.request !== 'function') {
     return Promise.reject(new Error('Phone not reachable'));
   }
   const timeoutMs = options.timeoutMs;
-  return withRequestTimeout(pageInstance.request(createMessage({ type, payload })), timeoutMs ? { timeoutMs } : {
+  const requestPayload = type === MESSAGE_TYPES.GET_SETTINGS && workoutDiagnostics.isEnabled()
+    ? { ...payload, diagnostics: workoutDiagnostics.read() }
+    : payload;
+  return withRequestTimeout(pageInstance.request(createMessage({ type, payload: requestPayload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
+    if (isTearingDown) throw new Error('Companion page closed');
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
       throw err;
+    }
+    if (type === MESSAGE_TYPES.GET_SETTINGS) {
+      const wasEnabled = workoutDiagnostics.isEnabled();
+      workoutDiagnostics.setEnabled(normalizeWorkoutDiagnosticsEnabled(res?.payload?.workoutDiagnosticsEnabled));
+      if (!wasEnabled && workoutDiagnostics.isEnabled()) {
+        workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.DIAGNOSTICS_ON);
+      }
     }
     return res;
   });
@@ -600,6 +650,8 @@ function beginRequest(message) {
 // ── Side Service calls ───────────────────────────────────────────────────────
 
 function failRequest(err) {
+  if (isTearingDown) return;
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED);
   isBusy = false;
   statusMessage = '';
   errorMessage = err?.message || 'Request failed';
@@ -903,11 +955,13 @@ function completeCurrentSet() {
   }
 
   syncWarning = null;
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
   persistAndRender(() =>
     session.completeSet({
       repsLeft: set?.isUnilateral ? set.reps : null,
     })
   );
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
   synchronizeDirectSets().catch(() => {});
   if (session.view().state === SESSION_STATES.FINISHED) submitWorkout();
 }
@@ -2792,7 +2846,9 @@ function renderTimedSetScreen(view) {
     if (current.isWorkoutPaused || current.isPaused) return;
     if (current.phase === 'GET_READY') workoutController.startTimedSet();
     else {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
       workoutController.stopTimedSide();
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_SAVED);
       workoutController.syncSets().catch(() => { controllerUiDirty = true; });
       if (workoutController.view().state === SESSION_STATES.FINISHED) submitWorkout();
     }
@@ -3851,6 +3907,13 @@ function handleExerciseImageChange(_imageUrl, status) {
 
 function renderUI() {
   if (isTearingDown) return;
+  if (isDispatchingClick) {
+    // The tapped native button must outlive its click callback.
+    scheduleRenderUI();
+    return;
+  }
+  cancelScheduledRender();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
   consumeControllerUiChange();
   preparationImageUrl = null;
   if (isNotesModalOpen) destroyModalControls();
@@ -3865,6 +3928,7 @@ function renderUI() {
   // Keep the opaque footer above perimeter effects and outside action targets.
   renderClock();
   redraw();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
 }
 
 function renderScreen() {
@@ -4069,6 +4133,7 @@ Page(
       lastSetDraft = null;
       lastSetEditError = null;
       isTearingDown = false;
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
       exerciseImages = createWatchExerciseImages({
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
         onChange: handleExerciseImageChange,
@@ -4080,6 +4145,7 @@ Page(
     },
 
     build() {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BUILD);
       hideSquareStatusBar();
       onGesture({ callback: handleGesture });
       applyDisplayHold();
@@ -4100,6 +4166,7 @@ Page(
       // An interrupted session wins over the launch flow: it is resumed exactly
       // where it stopped, including the history record it was already writing.
       const restoredState = restoreSession() ? session.view().state : null;
+      if (restoredState) workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RESTORED);
       if (!restoredState) {
         loadPrograms();
       } else {
@@ -4127,6 +4194,7 @@ Page(
 
     onDestroy() {
       isTearingDown = true;
+      cancelScheduledRender();
       if (clockTimer) clearInterval(clockTimer);
       clockTimer = null;
       if (flashTimer) clearTimeout(flashTimer);

@@ -168,7 +168,7 @@ test('button actions run in the native Zepp click callback', () => {
   const addWidget = source.slice(source.indexOf('function addActionWidget'), source.indexOf('function addLiveLabel'));
 
   assert.doesNotMatch(source, /function deferAction\(clickFunc\)/);
-  assert.match(addWidget, /click_func: props\.click_func/);
+  assert.match(addWidget, /click_func: wrapNativeAction\(props\.click_func\)/);
   assert.doesNotMatch(addWidget, /setEnable\(false\)/);
   assert.match(source, /function addLiveButton[\s\S]*?addActionWidget\(fitted\)/);
 });

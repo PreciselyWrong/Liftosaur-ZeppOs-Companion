@@ -24,7 +24,7 @@ the phone also contacts the image host; PNG images are requested through wsrv.nl
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
 | Optional exercise images | Downloaded on the phone, then stored locally on the watch | The phone requests images from their HTTPS host; PNG requests go through `https://wsrv.nl`, which receives the original image URL. Image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
-| Optional Lifto Workout diagnostics (up to 12 steps each from the current and previous runs: timestamps, action/lifecycle/drawing codes and available memory measurements) | Workout local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify the last steps and memory pressure before a crash when system logs cannot be exported |
+| Optional watch diagnostics for Lifto Companion and Lifto Workout (up to 12 steps each from the current and previous runs: timestamps, action/lifecycle/drawing codes and available memory measurements) | Each product's local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify the last steps and memory pressure before a crash when system logs cannot be exported |
 
 ## What the application never does
 
@@ -32,8 +32,8 @@ the phone also contacts the image host; PNG images are requested through wsrv.nl
 - Companion heart rate and Workout's native duration and calories are never sent to Liftosaur, logged, or stored between Lifto sessions.
 - The API key and diagnostics are not sent to image hosts or wsrv.nl. Optional image requests disclose the image URL to wsrv.nl for PNG conversion; that URL may identify an exercise image from your workout.
 - No advertising, tracking, third-party analytics, or remote crash reporters are included.
-- Workout diagnostics contain no API key, workout name, exercise name, weight, repetition count, heart-rate value, or details about other applications.
-- Workout diagnostics are off by default. Enable them in Lifto Workout phone settings; switching them off stops collection after the watch reconnects and clears the stored report.
+- Watch diagnostics contain no API key, workout name, exercise name, weight, repetition count, heart-rate value, or details about other applications.
+- Watch diagnostics are off by default and enabled separately in each product's phone settings; switching them off stops collection after the watch reconnects and clears that product's stored report.
 
 ## Third party
 

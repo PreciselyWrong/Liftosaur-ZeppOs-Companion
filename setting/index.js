@@ -325,7 +325,7 @@ AppSettingsPage({
               },
             }),
             Toggle({
-              label: 'Record Workout diagnostics',
+              label: 'Record watch diagnostics',
               value: this.state.workoutDiagnosticsEnabled,
               onChange: (value) => {
                 const enabled = normalizeWorkoutDiagnosticsEnabled(value);
@@ -340,7 +340,7 @@ AppSettingsPage({
                 align: 'center',
                 style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' },
               },
-              'Optional. Open the Lifto Workout page after changing this setting.'
+              'Optional. Open this Lifto app on the watch after changing this setting.'
             ),
             View(
               {
@@ -400,7 +400,7 @@ AppSettingsPage({
               { style: CARD_STYLE },
               [
                 settingsHeading(
-                  'Workout diagnostics',
+                  'Watch diagnostics',
                   'Recent watch steps after reconnection. The last step does not prove the crash cause.'
                 ),
                 ...(diagnosticLines.length > 0 ? diagnosticLines : ['No watch diagnostics yet']).map((line) => Text(
