@@ -32,7 +32,7 @@ export function createExerciseImageClient({
         for (const item of saved) {
           if (item?.url && item?.src) {
             const size = fileSize(item.src);
-            if (size === null || size > 0) {
+            if (size > 0) {
               entries.set(item.url, { url: item.url, status: 'ready', src: item.src });
             }
           }
@@ -156,26 +156,21 @@ export function createExerciseImageClient({
     scheduleNext();
   }
 
-  function processNext() {
-    if (active || disposed || !enabled) return;
-    const entry = queue.shift();
-    if (!entry) return;
-    if (entries.get(entry.url) !== entry || entry.status !== 'loading') {
-      scheduleNext();
-      return;
-    }
-    active = entry;
+  function requestActive(entry, forceRefresh = false) {
     entry.requestId = `${Date.now()}-${++requestSequence}`;
+    const requestId = entry.requestId;
     const fail = () => {
-      if (active === entry && entry.status === 'loading') finish(entry, 'unavailable');
+      if (active === entry && entry.requestId === requestId && entry.status === 'loading') finish(entry, 'unavailable');
     };
+    if (timer !== null) clearTimeout(timer);
     timer = setTimeout(fail, 45000);
     if (timer && typeof timer.unref === 'function') timer.unref();
     let response;
     try {
       response = request(MESSAGE_TYPES.GET_EXERCISE_IMAGE, {
         imageUrl: entry.url,
-        requestId: entry.requestId,
+        requestId,
+        forceRefresh,
       });
     } catch {
       fail();
@@ -186,6 +181,18 @@ export function createExerciseImageClient({
         if (response?.payload?.status !== 'queued') fail();
       })
       .catch(fail);
+  }
+
+  function processNext() {
+    if (active || disposed || !enabled) return;
+    const entry = queue.shift();
+    if (!entry) return;
+    if (entries.get(entry.url) !== entry || entry.status !== 'loading') {
+      scheduleNext();
+      return;
+    }
+    active = entry;
+    requestActive(entry);
   }
 
   function receive(file) {
@@ -203,6 +210,12 @@ export function createExerciseImageClient({
         && url === expected.url && file.params.requestId === expected.requestId;
       if (!matches) {
         if (state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
+        return;
+      }
+      if (state === 'error' && file.params.cached === true && !expected.cacheRetried) {
+        expected.cacheRetried = true;
+        transfer = null;
+        requestActive(expected, true);
         return;
       }
       const size = state === 'transferred' ? transferredFileSize(file) : 0;
@@ -231,6 +244,36 @@ export function createExerciseImageClient({
     if (inbox && typeof inbox.on === 'function') inbox.on('NEWFILE', () => receive());
   } catch { inbox = null; }
 
+  function load(imageUrl, { retry = false, priority = false } = {}) {
+    const url = normalizeExerciseImageUrl(imageUrl);
+    if (!enabled || disposed || !url) return;
+    const existing = entries.get(url);
+    if (existing && (existing.status !== 'unavailable' || !retry)) {
+      if (priority && existing.status === 'loading') {
+        const idx = queue.indexOf(existing);
+        if (idx > 0) {
+          queue.splice(idx, 1);
+          queue.unshift(existing);
+        }
+      }
+      return;
+    }
+    if (!existing && queue.length >= MAX_QUEUE_SIZE) return;
+    if (existing) {
+      const idx = queue.indexOf(existing);
+      if (idx >= 0) queue.splice(idx, 1);
+      entries.delete(url);
+    }
+    const entry = { url, requestId: null, status: 'loading', src: null };
+    entries.set(url, entry);
+    if (priority) {
+      queue.unshift(entry);
+    } else {
+      queue.push(entry);
+    }
+    scheduleNext();
+  }
+
   return {
     setEnabled(value) {
       enabled = value === true && !disposed;
@@ -243,35 +286,8 @@ export function createExerciseImageClient({
       if (entry.status === 'ready') touch(entry);
       return { status: entry.status, src: entry.src };
     },
-    load(imageUrl, { retry = false, priority = false } = {}) {
-      const url = normalizeExerciseImageUrl(imageUrl);
-      if (!enabled || disposed || !url) return;
-      const existing = entries.get(url);
-      if (existing && (existing.status !== 'unavailable' || !retry)) {
-        if (priority && existing.status === 'loading') {
-          const idx = queue.indexOf(existing);
-          if (idx > 0) {
-            queue.splice(idx, 1);
-            queue.unshift(existing);
-          }
-        }
-        return;
-      }
-      if (!existing && queue.length >= MAX_QUEUE_SIZE) return;
-      if (existing) {
-        const idx = queue.indexOf(existing);
-        if (idx >= 0) queue.splice(idx, 1);
-        entries.delete(url);
-      }
-      const entry = { url, requestId: null, status: 'loading', src: null };
-      entries.set(url, entry);
-      if (priority) {
-        queue.unshift(entry);
-      } else {
-        queue.push(entry);
-      }
-      scheduleNext();
-    },
+    load,
+    prefetch(imageUrl) { load(imageUrl, { priority: true }); },
     dispose() {
       disposed = true;
       enabled = false;
