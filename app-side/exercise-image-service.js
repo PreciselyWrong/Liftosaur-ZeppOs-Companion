@@ -11,17 +11,17 @@ const safeDetail = (value) => typeof value === 'string'
 export function createExerciseImageService({ download, convert, sendFile, isEnabled, storage, onFailure, generation = `${Date.now()}-${++serviceSequence}` }) {
   let operation = null;
   let queuePromise = Promise.resolve();
+  let fileSequence = 0;
 
   function records() {
     try {
       const value = JSON.parse(storage.getItem(EXERCISE_IMAGE_STORAGE_KEY) || '[]');
       return Array.isArray(value) && value.length <= MAX_EXERCISE_IMAGE_FILES
-        ? value.filter((entry) => entry.generation === generation) : null;
+        ? value : null;
     } catch { return null; }
   }
   function save(value) {
-    storage.setItem(EXERCISE_IMAGE_STORAGE_KEY,
-      JSON.stringify(value.map((entry) => ({ ...entry, generation }))));
+    storage.setItem(EXERCISE_IMAGE_STORAGE_KEY, JSON.stringify(value));
   }
   function cancel() {
     if (!operation) return;
@@ -30,7 +30,7 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
     if (operation.reject) operation.reject(new Error('Image download stopped'));
   }
 
-  async function performLoad({ imageUrl, requestId } = {}) {
+  async function performLoad({ imageUrl, requestId, forceRefresh = false } = {}) {
     if (!isEnabled()) return { status: 'disabled' };
     const url = normalizeExerciseImageUrl(imageUrl);
     if (!url) return unavailable('INVALID_URL');
@@ -48,16 +48,45 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           }
         }
         if (index < 0) {
-          if (files.length >= MAX_EXERCISE_IMAGE_FILES) return unavailable('STORAGE_FULL');
+          if (files.length >= MAX_EXERCISE_IMAGE_FILES) {
+            const oldest = files.findIndex((entry) => !entry.converting || entry.generation !== generation);
+            if (oldest < 0) return unavailable('STORAGE_FULL');
+            files.splice(oldest, 1);
+          }
           index = files.length;
           files.push({ url, ready: false });
           save(files);
         }
-        const source = `data://download/lifto-exercise-${generation}-${index}-source.${exerciseImageFileExtension(url)}`;
+        const source = `data://download/lifto-exercise-${generation}-${++fileSequence}-source.${exerciseImageFileExtension(url)}`;
         const target = `${source}_converted`;
         // Ready slots are immutable because transfers can survive Side Service teardown.
+        const cached = files[index].ready
+          && typeof files[index].targetPath === 'string'
+          && files[index].targetPath.startsWith('data://download/')
+          && !forceRefresh;
+        if (cached) {
+          stage = 'transfer';
+          let queued = false;
+          try {
+            sendFile(files[index].targetPath, { type: 'exercise-image', imageUrl: url, requestId, cached: true });
+            queued = true;
+          } catch {
+            // The phone may have removed the converted file since settingsStorage saved its path.
+          }
+          if (queued) {
+            files.push(files.splice(index, 1)[0]);
+            try { save(files); } catch {}
+            return { status: 'queued', imageUrl: url };
+          }
+        }
+        stage = 'download';
+        if (forceRefresh || cached || files[index].ready) {
+          files[index].ready = false;
+          files[index].targetPath = null;
+          save(files);
+        }
         if (!files[index].ready || !files[index].targetPath) {
-          if (files[index].converting) return unavailable('CONVERSION_IN_PROGRESS');
+          if (files[index].converting && files[index].generation === generation) return unavailable('CONVERSION_IN_PROGRESS');
           const downloadUrl = exerciseDownloadUrl(url) || url;
           const downloadFile = (options) => new Promise((resolve, reject) => {
             active.reject = reject;
@@ -81,16 +110,28 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           if (!allowed()) return { status: 'disabled' };
           if (typeof inputPath !== 'string' || !inputPath.startsWith('data://download/')) return unavailable('DOWNLOAD_PATH_INVALID');
           files[index].converting = true;
+          files[index].generation = generation;
+          files[index].pendingPath = target;
           save(files);
           stage = 'conversion';
           let timeout;
           const conversion = (async () => convert({ filePath: inputPath, targetFilePath: target }))();
           conversion.then(() => {
             const latest = records();
-            if (latest?.[index]?.url === url) { latest[index].converting = false; save(latest); }
+            const pending = latest?.find((entry) => entry.url === url && entry.pendingPath === target);
+            if (pending) {
+              pending.converting = false;
+              delete pending.pendingPath;
+              save(latest);
+            }
           }, () => {
             const latest = records();
-            if (latest?.[index]?.url === url) { latest[index].converting = false; save(latest); }
+            const pending = latest?.find((entry) => entry.url === url && entry.pendingPath === target);
+            if (pending) {
+              pending.converting = false;
+              delete pending.pendingPath;
+              save(latest);
+            }
           });
           let converted;
           try {
@@ -105,11 +146,14 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           files[index].ready = true;
           files[index].targetPath = converted.targetFilePath;
           files[index].converting = false;
+          delete files[index].pendingPath;
           save(files);
         }
         if (!allowed()) return { status: 'disabled' };
         stage = 'transfer';
-        sendFile(files[index].targetPath, { type: 'exercise-image', imageUrl: url, requestId });
+        sendFile(files[index].targetPath, { type: 'exercise-image', imageUrl: url, requestId, cached: false });
+        files.push(files.splice(index, 1)[0]);
+        try { save(files); } catch {}
         return { status: 'queued', imageUrl: url };
       } catch (error) {
         if (!active.canceled && onFailure) {

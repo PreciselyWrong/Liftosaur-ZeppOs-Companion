@@ -704,6 +704,7 @@ function openNotes(title, content, imageUrl = null) {
 }
 
 function renderExerciseInfo(exerciseName, details, y, height, imageUrl) {
+  exerciseImages?.prefetch(imageUrl);
   addWidget(widget.BUTTON, {
     x: px(356),
     y: px(y),
