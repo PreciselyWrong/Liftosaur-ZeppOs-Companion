@@ -25,13 +25,6 @@ test('publishes only documentation useful to users, testers, and maintainers', (
     'workout-extension-hardware-test-plan.md',
     'workout-extension-manual-actions.md',
   ]);
-
-  const agentInstructions = read('AGENTS.md');
-  assert.match(
-    agentInstructions,
-    /Pull requests contain exactly one commit and one subject; split independent changes into separate branches and PRs\./,
-  );
-  assert.ok(agentInstructions.split(/\r?\n/).length <= 120, 'AGENTS.md must stay within 120 lines');
 });
 
 test('README explains the two products and links their public guides', () => {
@@ -60,12 +53,6 @@ test('README gives the verified Active 2 path for adding Lifto to Strength Train
 
 test('GitHub Issues and Project own the work backlog', () => {
   assert.equal(fs.existsSync(path.join(root, 'TODO.md')), false);
-
-  const agents = read('AGENTS.md');
-  assert.match(agents, /github\.com\/users\/PreciselyWrong\/projects\/1/i);
-  assert.match(agents, /only backlog/i);
-  assert.match(agents, /set `In Progress` when work starts/i);
-  assert.match(agents, /link the PR and close as `Done`/i);
 
   const forms = [
     ['bug.yml', 'bug'],

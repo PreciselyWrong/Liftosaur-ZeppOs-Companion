@@ -2,12 +2,22 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
+import { execFileSync } from 'node:child_process';
 
 const root = process.cwd();
 
 function read(relativePath) {
   return fs.readFileSync(path.join(root, relativePath), 'utf8');
 }
+
+test('local agent instructions cannot enter a published Git tree', () => {
+  const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0');
+  assert.equal(tracked.some((file) => /(^|\/)(AGENTS|CLAUDE)\.md$/i.test(file)), false);
+
+  const gitignore = read('.gitignore');
+  assert.match(gitignore, /^AGENTS\.md$/m);
+  assert.match(gitignore, /^CLAUDE\.md$/m);
+});
 
 test('release surfaces agree on version 0.5.10 and code 46', () => {
   const manifest = JSON.parse(read('package.json'));
