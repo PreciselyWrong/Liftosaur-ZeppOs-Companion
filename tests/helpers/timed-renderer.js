@@ -18,6 +18,7 @@ export function captureTimedScreen(product, timer) {
     addLiveShape: (key, props) => widgets.push({ key, type: 'FILL_RECT', ...props }),
     addWidget: (type, props) => widgets.push({ type, ...props }),
     renderTopBar: () => {}, renderExerciseInfo: () => {}, openTextModal: () => {},
+    exerciseImages: null,
     isOverviewOpen: false, controllerUiDirty: false,
     renderUI: () => actions.push('render'),
     triggerVibration: () => actions.push('buzz'), triggerRestVibration: () => actions.push('buzz'),

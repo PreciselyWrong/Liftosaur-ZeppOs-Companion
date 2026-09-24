@@ -98,6 +98,26 @@ test('accepts the file supplied by the page callback without a second inbox', as
   client.dispose();
 });
 
+test('a failed cached transfer requests one fresh conversion before showing unavailable', async () => {
+  const h = harness();
+  h.client.load(url);
+  await flush();
+  let fail;
+  h.receive({ params: { type: 'exercise-image', ...h.requests[0], cached: true },
+    filePath: 'data://download/old.png', on(_, callback) { fail = callback; }, cancel() {} });
+  fail({ data: { readyState: 'error' } });
+  await flush();
+  assert.equal(h.client.get(url).status, 'loading');
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].forceRefresh, true);
+  assert.notEqual(h.requests[1].requestId, h.requests[0].requestId);
+  h.receive({ params: { type: 'exercise-image', ...h.requests[1], cached: false },
+    fileSize: 100, filePath: 'data://download/new.png', readyState: 'transferred',
+    on() {}, cancel() {} });
+  assert.equal(h.client.get(url).status, 'ready');
+  h.client.dispose();
+});
+
 test('disable before the deferred request prevents all transport work', async () => {
   const h = harness();
   h.client.load(url);
@@ -142,6 +162,29 @@ test('serializes distinct image requests and keeps completed images available to
     filePath: 'data://download/deadlift.png', readyState: 'transferred', on() {}, cancel() {} });
   assert.equal(h.client.get(url).src, 'data://download/squat.png');
   assert.equal(h.client.get(secondUrl).src, 'data://download/deadlift.png');
+  h.client.dispose();
+});
+
+test('prefetches the current exercise before queued thumbnails without interrupting a transfer', async () => {
+  const h = harness();
+  const queuedUrl = '/externalimages/exercises/single/small/deadlift.png';
+  const currentUrl = '/externalimages/exercises/single/small/row.png';
+  h.client.load(url);
+  await flush();
+  h.client.load(queuedUrl);
+  h.client.prefetch(currentUrl);
+  h.client.prefetch(currentUrl);
+
+  assert.equal(h.requests.length, 1);
+  h.receive({ params: { type: 'exercise-image', ...h.requests[0] }, fileSize: 100,
+    filePath: 'data://download/squat.png', readyState: 'transferred', on() {}, cancel() {} });
+  await flush();
+  assert.equal(h.requests[1].imageUrl, `https://www.liftosaur.com${currentUrl}`);
+
+  h.receive({ params: { type: 'exercise-image', ...h.requests[1] }, fileSize: 100,
+    filePath: 'data://download/row.png', readyState: 'transferred', on() {}, cancel() {} });
+  await flush();
+  assert.equal(h.requests[2].imageUrl, `https://www.liftosaur.com${queuedUrl}`);
   h.client.dispose();
 });
 
@@ -287,5 +330,22 @@ test('persists completed images to storage and restores them on next launch with
   await flush();
   assert.equal(newRequests.length, 0);
   restoredClient.dispose();
+});
+
+test('a missing watch image file is requested again after restart', async () => {
+  const saved = JSON.stringify([{ url: `https://www.liftosaur.com${url}`, src: 'data://download/gone.png' }]);
+  const requests = [];
+  const client = createExerciseImageClient({
+    storage: { getItem: () => saved, setItem() {} },
+    fileSize: () => null,
+    request: async (_, payload) => { requests.push(payload); return { payload: { status: 'queued' } }; },
+    removeFile() {},
+  });
+  client.setEnabled(true);
+  assert.equal(client.get(url).status, 'unavailable');
+  client.load(url);
+  await flush();
+  assert.equal(requests.length, 1);
+  client.dispose();
 });
 

@@ -179,6 +179,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
     liveWidgets,
     setPropertyCalls,
     renderPreparationImage: () => false,
+    exerciseImages: null,
     renderTopBar() {},
     openNotes: () => {},
     openExerciseInfo: () => {},

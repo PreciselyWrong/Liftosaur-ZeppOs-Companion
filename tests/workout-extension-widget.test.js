@@ -322,10 +322,10 @@ test('exercise Info stays available with missing details and explains the empty 
     let button;
     let opened;
     let openedTitle;
-    const render = new Function('addWidget', 'widget', 'px', 'font', 'THEME', 'openNotes',
+    const render = new Function('addWidget', 'widget', 'px', 'font', 'THEME', 'openNotes', 'exerciseImages',
       `${extractFunction(source, 'renderExerciseInfo')}; return renderExerciseInfo;`)(
       (type, props) => { button = props; }, { BUTTON: 'button' }, x => x,
-      () => 20, {}, (title, content) => { opened = content; openedTitle = title; });
+      () => 20, {}, (title, content) => { opened = content; openedTitle = title; }, null);
     render('Bench Press', details, 88, 36);
     assert.equal(button.text, 'Info');
     button.click_func();
@@ -533,6 +533,7 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
     SESSION_STATES: { REST: 'REST', FINISHED: 'FINISHED' },
     renderRestBezel: () => {},
     renderPreparationImage: () => false,
+    exerciseImages: null,
     openNotes: () => {},
     openWorkoutTimerControls: () => {},
     checkRequiredPhoneInput: () => null,

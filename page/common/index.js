@@ -2749,6 +2749,7 @@ function renderTimedSetScreen(view) {
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
   renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
+  exerciseImages?.prefetch(view.exerciseImageUrl);
   addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.', view.exerciseImageUrl) });
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
@@ -2838,6 +2839,7 @@ function renderActiveSetScreen(view) {
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
   const canSkipWarmup = Boolean(set?.isWarmup && (!view.timedSet || view.timedSet.phase === 'READY'));
   const controls = activeSetLayout(set);
+  exerciseImages?.prefetch(isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
 
   if (isResting) {
     renderRestBezel(view.rest);
@@ -3165,6 +3167,7 @@ function renderRestScreen(view) {
 
   // Next Set Preview Card
   if (rest.nextExerciseName) {
+    exerciseImages?.prefetch(rest.nextExerciseImageUrl);
     const ssColor = supersetColor(rest.nextSupersetGroup);
     const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
     const nextLoadoutLabel = formatLoadoutLabel(
