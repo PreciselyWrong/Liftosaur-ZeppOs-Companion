@@ -1,6 +1,7 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
+import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 
 function clone(value) {
   return value === null || value === undefined ? value : JSON.parse(JSON.stringify(value));
@@ -165,6 +166,7 @@ export function createDummyWorkoutService({ catalogService, now = Date.now, getL
         getReadySeconds: normalizeGetReadySeconds(local?.getReadySeconds),
         exerciseImages: normalizeExerciseImages(local?.exerciseImages),
         autoPrepare: normalizeAutoPrepare(local?.autoPrepare),
+        ...normalizeWorkoutDisplaySettings(local),
       };
     },
   };
