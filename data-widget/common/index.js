@@ -30,6 +30,7 @@ import {
 } from '@zos/sensor';
 import { LocalStorage } from '@zos/storage';
 import * as appApi from '@zos/app';
+import { getSystemInfo } from '@zos/settings';
 import { getSportData } from '@zos/app-access';
 import {
   setPageBrightTime,
@@ -46,7 +47,7 @@ import { createMessage, MESSAGE_TYPES } from '../../shared/protocol.js';
 import { SESSION_STATES } from '../../shared/workout-session.js';
 import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
 import { createFallbackStorageAdapter, createSessionStore } from '../../shared/session-storage.js';
-import { createWorkoutDiagnostics, readWorkoutMemory, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
+import { createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import {
@@ -167,8 +168,23 @@ const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (c
       code !== WORKOUT_DIAGNOSTIC_CODES.SET_TAP &&
       code !== WORKOUT_DIAGNOSTIC_CODES.SET_SAVED &&
       code !== WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP) return null;
+      code !== WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT &&
+      code !== WORKOUT_DIAGNOSTIC_CODES.RENDER_END) return null;
   return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
+}, {
+  runtime: () => readWorkoutRuntimeInfo('workout', appApi.getPackageInfo, deviceInfo, getSystemInfo),
+  context: () => {
+    let state;
+    try { state = workoutController?.view?.().state; } catch {}
+    if (!['NO_PLAN', 'IDLE', 'READY', 'ACTIVE_SET', 'REST', 'PAUSED', 'FINISHED'].includes(state)) state = 'UNKNOWN';
+    return {
+      screen, state, widgets: activeWidgets.length,
+      modal: Boolean(isNotesModalOpen || isSyncDetailsOpen || isWorkoutTimerControlsOpen || isEditLastSetOpen),
+      overview: Boolean(isOverviewOpen), preparation: Boolean(restPresentation?.isPrepared),
+      imagesEnabled: normalizeExerciseImages(accountSettings?.exerciseImages),
+    };
+  },
 });
 
 let timeSensor = null;
@@ -187,7 +203,13 @@ function stopVibration() {
     vibrationTimer = null;
   }
   try {
-    if (vibrator) vibrator.stop();
+    if (vibrator && !isTearingDown) {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_START);
+      workoutDiagnostics.trace('VIBRATION', () => vibrator.stop());
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_END);
+    } else if (vibrator) {
+      vibrator.stop();
+    }
   } catch (err) {
     console.log('[lifto-ext] vibrator error');
   }
@@ -230,7 +252,9 @@ function triggerRestVibration() {
       vibrator = new Vibrator();
     }
     setRestVibrationMode();
-    vibrator.start();
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_START);
+    workoutDiagnostics.trace('VIBRATION', () => vibrator.start());
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_END);
     vibrationTimer = setTimeout(() => {
       if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
       vibrationTimer = null;
@@ -250,7 +274,9 @@ function triggerLightVibration() {
       vibrator = new Vibrator();
     }
     setLightVibrationMode();
-    vibrator.start();
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_START);
+    workoutDiagnostics.trace('VIBRATION', () => vibrator.start());
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.VIBRATION_END);
     vibrationTimer = setTimeout(() => {
       if (isTearingDown || isPaused || generation !== lifecycleGeneration) return;
       vibrationTimer = null;
@@ -575,15 +601,15 @@ function addRawWidget(type, props) {
 }
 
 function addActionWidget(props) {
-  const handler = props.click_func;
+  const { diagnosticAction = 'BUTTON', click_func: handler, ...nativeProps } = props;
   return addRawWidget(widget.BUTTON, {
-    ...props,
+    ...nativeProps,
     click_func: typeof handler === 'function' ? (w) => {
       if (isTearingDown || isPaused || !hasBuilt) return;
-      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP);
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
       isDispatchingClick = true;
       try {
-        handler(w);
+        workoutDiagnostics.trace('ACTION', () => handler(w));
       } finally {
         isDispatchingClick = false;
       }
@@ -760,6 +786,7 @@ function renderExerciseInfo(exerciseName, details, y, height, imageUrl) {
     color: THEME.primaryLight,
     text: 'Info',
     text_size: font('micro'),
+    diagnosticAction: 'OPEN_INFO',
     click_func: () => openNotes(exerciseName,
       details || 'No exercise notes or description available.', imageUrl),
   });
@@ -835,6 +862,7 @@ function renderTopBar(view, onBack) {
     text: syncWarning ? 'Sync!' : MENU_LABEL,
     color: syncWarning ? THEME.orange : THEME.textPrimary,
     text_size: font('button'),
+    diagnosticAction: 'OPEN_MENU',
     click_func: onBack,
   });
 
@@ -1685,6 +1713,7 @@ function renderReadyScreen(view) {
 
 function renderStepper({ key, y, height, label, value, valueColor = THEME.textPrimary, onMinus, onPlus }) {
   const buttonSize = px(height);
+  const actionKey = ['weight', 'reps', 'rpe'].includes(key) ? key.toUpperCase() : null;
   const row = stepperRowLayout(height, Boolean(label));
   const valueHeight = px(row.valueHeight);
   const labelHeight = px(row.labelHeight);
@@ -1699,6 +1728,7 @@ function renderStepper({ key, y, height, label, value, valueColor = THEME.textPr
     press_color: THEME.cardActive,
     text: '-',
     text_size: font('value'),
+    ...(actionKey ? { diagnosticAction: `DECREASE_${actionKey}` } : {}),
     click_func: onMinus,
   });
 
@@ -1738,6 +1768,7 @@ function renderStepper({ key, y, height, label, value, valueColor = THEME.textPr
     press_color: THEME.cardActive,
     text: '+',
     text_size: font('value'),
+    ...(actionKey ? { diagnosticAction: `INCREASE_${actionKey}` } : {}),
     click_func: onPlus,
   });
 }
@@ -1793,7 +1824,10 @@ function renderTimedSetScreen(view) {
   const ui = timedSetPresentation(timer);
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
-  renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
+  renderTopBar(view, () => {
+    isOverviewOpen = true;
+    renderUI();
+  });
   renderExerciseInfo(view.exerciseName, view.exerciseDetails, 88, 36, view.exerciseImageUrl);
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
@@ -1816,10 +1850,11 @@ function renderTimedSetScreen(view) {
     text: ui.value, text_size: font(ui.valueFont), color: ui.color, normal_color: THEME.bg, press_color: THEME.bg });
   label('timedLabel', layout.labelY, 30, ui.label, 'title', ui.color);
   label('timedDetail', layout.detailY, 28, ui.detail, 'caption', THEME.textSecondary);
-  const action = (index, text, callback) => addWidget(widget.BUTTON, {
+  const action = (index, text, callback, diagnosticAction) => addWidget(widget.BUTTON, {
     x: px(layout.actionX + index * (layout.actionWidth + layout.actionGap)), y: px(layout.actionY),
     w: px(layout.actionWidth), h: px(layout.actionHeight), radius: px(layout.actionHeight / 2),
     normal_color: THEME.card, press_color: THEME.cardActive, text, text_size: font('button'),
+    diagnosticAction,
     click_func: () => {
       const currentView = workoutController.view();
       if (timedSetIdentity(currentView) !== identity) return;
@@ -1831,10 +1866,12 @@ function renderTimedSetScreen(view) {
     if (current.isWorkoutPaused) return;
     if (current.isPaused) workoutController.resumeTimedSet();
     else workoutController.pauseTimedSet();
-  });
+  }, timer.isPaused ? 'RESUME' : 'PAUSE');
   action(1, ui.action, (current) => {
     if (current.isWorkoutPaused || current.isPaused) return;
-    if (current.phase === 'GET_READY') workoutController.startTimedSet();
+    if (current.phase === 'GET_READY') {
+      workoutController.startTimedSet();
+    }
     else {
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
       workoutController.stopTimedSide();
@@ -1842,7 +1879,7 @@ function renderTimedSetScreen(view) {
       syncCompletedSets();
       if (workoutController.view().state === SESSION_STATES.FINISHED) submitWorkout();
     }
-  });
+  }, timer.phase === 'GET_READY' ? 'START_SET' : 'COMPLETE_SET');
 }
 
 function updateTimedSetScreen(view) {
@@ -1928,6 +1965,7 @@ function renderActiveSetScreen(view) {
       color: 0xffb544,
       text: 'Skip',
       text_size: font('caption'),
+      diagnosticAction: 'SKIP_WARMUP',
       click_func: () => {
         const skipped = workoutController.skipWarmup();
         controllerUiDirty = true;
@@ -2040,6 +2078,7 @@ function renderActiveSetScreen(view) {
     color: isResting ? THEME.bg : 0x00281c,
     text: actionText,
     text_size: font('button'),
+    diagnosticAction: isResting || view.timedSet ? 'START_SET' : 'COMPLETE_SET',
     click_func: () => {
       if (!isResting && view.timedSet) {
         const reason = checkRequiredPhoneInput(set);
@@ -2292,6 +2331,7 @@ function renderRestScreen(view) {
     press_color: THEME.primaryDeep,
     text: view.timedSet?.phase === 'REST' ? 'Armed' : 'Start set',
     text_size: font('button'),
+    diagnosticAction: 'START_SET',
     click_func: () => {
       const reason = view.timedSet && checkRequiredPhoneInput(view.pending?.set || view.currentSet);
       if (reason) { phoneRequiredReason = reason; controllerUiDirty = true; return; }
@@ -2406,6 +2446,7 @@ function renderWorkoutTimerControlsModal(view) {
       ? 'Zepp paused'
       : (view.isManualWorkoutPaused ? 'Resume' : 'Pause'),
     text_size: font('button'),
+    diagnosticAction: view.isManualWorkoutPaused ? 'RESUME' : 'PAUSE',
     click_func: () => {
       const current = workoutController.view();
       if (current.isNativeWorkoutPaused && !current.isManualWorkoutPaused) return;
@@ -2772,6 +2813,7 @@ function renderOverviewScreen(view) {
       normal_color: isCurrent ? THEME.primaryDark : THEME.card,
       press_color: THEME.cardActive,
       text: '',
+      diagnosticAction: 'SELECT_EXERCISE',
       click_func: () => {
         workoutController.selectExercise(idx);
         isOverviewOpen = false;
@@ -2826,6 +2868,7 @@ function renderOverviewScreen(view) {
     press_color: THEME.primaryDeep,
     text: 'Finish',
     text_size: font('button'),
+    diagnosticAction: 'FINISH_WORKOUT',
     click_func: () => {
       isOverviewOpen = false;
       workoutController.finishWorkout();
@@ -2844,6 +2887,7 @@ function renderOverviewScreen(view) {
     color: THEME.error,
     text: 'Discard',
     text_size: font('button'),
+    diagnosticAction: 'DISCARD_WORKOUT',
     click_func: () => {
       isOverviewOpen = false;
       handleDiscardWorkout();
@@ -3135,6 +3179,7 @@ function renderDiscardConfirmation() {
     color: THEME.error,
     text: 'Discard',
     text_size: font('button'),
+    diagnosticAction: 'DISCARD_WORKOUT',
     click_func: () => {
       discardConfirmationRequested = false;
       returnAfterDiscard();
@@ -3230,6 +3275,7 @@ function renderFinishedScreen(view) {
         color: THEME.error,
         text: 'Discard',
         text_size: font('button'),
+        diagnosticAction: 'DISCARD_WORKOUT',
         click_func: handleDiscardWorkout,
       });
 
@@ -3310,6 +3356,9 @@ function renderConflictScreen() {
 
 function handleExerciseImageChange(_imageUrl, status) {
   if (isTearingDown) return;
+  if (status === 'ready' || status === 'unavailable') {
+    workoutDiagnostics.record(status === 'ready' ? WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY : WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE);
+  }
   if (isPaused || !hasBuilt) {
     controllerUiDirty = true;
     return;
@@ -3354,15 +3403,21 @@ function renderUI() {
   consumeControllerUiChange();
   preparationImageUrl = null;
   updateSyncWarning();
-  clearWidgets();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_START);
+  workoutDiagnostics.trace('CLEAR', clearWidgets);
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_END);
 
   // Full-screen background
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
 
-  renderScreen();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
+  workoutDiagnostics.trace('SCREEN', renderScreen);
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_END);
   // Keep the transparent footer above perimeter effects and outside action targets.
   renderClock();
-  redraw();
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_START);
+  workoutDiagnostics.trace('REDRAW', redraw);
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_END);
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
 }
 
@@ -3717,6 +3772,7 @@ function adoptCurrentWorkout() {
 
 function tick() {
   if (isTearingDown || isPaused || !hasBuilt) return;
+  workoutDiagnostics.heartbeat();
   updateClock();
   if (liveWidgets.finishSwipe) updateFinishSwipeHint();
 

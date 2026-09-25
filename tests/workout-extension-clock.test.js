@@ -32,7 +32,7 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
     restoredDisplaySettingsPending: false, terminalActionPending: null, initialLoadPending: false,
     lifecycleGeneration: 0, lastPendingSyncRetryAt: 0,
     W: 480, H: 480, THEME: { bg: 0 }, widget: { FILL_RECT: 1 },
-    workoutDiagnostics: { record() {} }, WORKOUT_DIAGNOSTIC_CODES: {},
+    workoutDiagnostics: { record() {}, heartbeat() {}, trace(_phase, operation) { return operation(); } }, WORKOUT_DIAGNOSTIC_CODES: {},
     nativePauseReconciler: { loseFocus() {} }, console: { log() {} },
     workoutController: {
       pollCurrent: () => Promise.resolve(false), requestRefresh: () => Promise.resolve(false),

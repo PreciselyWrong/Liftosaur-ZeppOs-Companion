@@ -140,7 +140,17 @@ test('navigation records action and render boundaries without deleting the click
   assert.equal(calls.includes('deleteWidget'), false);
   [...timers.values()][0]();
   assert.deepEqual(diagnostics.read().events.map(event => event.code),
-    ['ACTION_TAP', 'RENDER_START', 'RENDER_END']);
+    ['ACTION_TAP', 'ACTION_DONE', 'RENDER_START', 'CLEAR_START', 'CLEAR_END', 'SCREEN_START', 'SCREEN_END', 'REDRAW_START', 'REDRAW_END', 'RENDER_END']);
+});
+
+test('Workout action metadata is semantic, persisted, and removed before native widget creation', () => {
+  const { env, diagnostics } = fixture();
+  let nativeProps;
+  env.createWidget = (_type, props) => { nativeProps = props; return {}; };
+  env.addActionWidget({ diagnosticAction: 'START_SET', click_func() {} });
+  assert.equal(Object.hasOwn(nativeProps, 'diagnosticAction'), false);
+  nativeProps.click_func();
+  assert.equal(diagnostics.read().details.lastAction.context.action, 'START_SET');
 });
 
 test('destroy abandons controller work without saving or clearing the local journal', () => {

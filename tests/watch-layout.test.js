@@ -160,7 +160,7 @@ test('ready-screen actions render above the demo badge and below the disabled fo
     'utf8',
   );
   const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
-  assert.ok(renderUi.indexOf('renderClock()') > renderUi.indexOf('renderScreen()'));
+  assert.ok(renderUi.indexOf('renderClock()') > renderUi.indexOf("trace('SCREEN', renderScreen)"));
   assert.match(source, /function renderReadyScreen[\s\S]*?text_size:\s*font\('body'\)/);
 });
 
@@ -169,7 +169,7 @@ test('button actions run in the native Zepp click callback', () => {
   const addWidget = source.slice(source.indexOf('function addActionWidget'), source.indexOf('function addLiveLabel'));
 
   assert.doesNotMatch(source, /function deferAction\(clickFunc\)/);
-  assert.match(addWidget, /click_func: wrapNativeAction\(props\.click_func\)/);
+  assert.match(addWidget, /click_func: wrapNativeAction\(nativeProps\.click_func, diagnosticAction \|\| 'BUTTON'\)/);
   assert.doesNotMatch(addWidget, /setEnable\(false\)/);
   assert.match(source, /function addLiveButton[\s\S]*?addActionWidget\(fitted\)/);
 });
@@ -182,7 +182,7 @@ test('the Zepp view is redrawn after the replacement tree is complete', () => {
   assert.match(source, /import \{[^}]*redraw[^}]*\} from '@zos\/ui'/);
   assert.match(clearWidgets, /deleteWidget\(w\)/);
   assert.doesNotMatch(clearWidgets, /redraw\(\)/);
-  assert.ok(renderUi.indexOf('renderScreen()') < renderUi.indexOf('redraw()'));
+  assert.ok(renderUi.indexOf("trace('SCREEN', renderScreen)") < renderUi.indexOf("trace('REDRAW', redraw)"));
 });
 
 test('live labels use mutable buttons so timer ticks cannot recreate action targets', () => {
