@@ -24,6 +24,14 @@ export function isPurpleRestRing({ isResting, rest, hasRing = true } = {}) {
   return true;
 }
 
+/** The gap in the rest arc grows clockwise from 12 o'clock. */
+export function getRestRingStartAngle(rest) {
+  const duration = Number(rest?.duration);
+  const remaining = Number(rest?.remaining);
+  if (!Number.isFinite(duration) || duration <= 0 || !Number.isFinite(remaining)) return -90;
+  return 270 - 360 * Math.max(0, Math.min(1, remaining / duration));
+}
+
 /**
  * Gating changed-field text color: purple only at same time as purple rest perimeter ring.
  * When ring is absent or non-purple (paused, overtime, or inactive), returns normal text color.

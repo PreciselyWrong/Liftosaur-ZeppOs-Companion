@@ -7,6 +7,7 @@ import {
   REST_HALO_CONFIG,
   darkenColor,
   createRestHaloLayers,
+  getRestRingStartAngle,
   isPurpleRestRing,
   getChangedFieldTextColor,
   createRestPulseAnimationParams,
@@ -14,6 +15,7 @@ import {
 import * as restVisual from '../shared/rest-visual.js';
 import * as watchLayout from '../shared/watch-layout.js';
 import { normalizeWorkoutDisplaySettings, weightStepperDisplay } from '../shared/workout-display-settings.js';
+import { EXTENSION_TOP_BAR_LAYOUT, MENU_LABEL } from '../shared/workout-extension-nav.js';
 import { createScreenLayout } from '../shared/screen-layout.js';
 
 const root = process.cwd();
@@ -46,6 +48,14 @@ test('shared rest-visual helper: isPurpleRestRing and getChangedFieldTextColor',
   assert.equal(getChangedFieldTextColor({ isChanged: true, isResting: true, rest: { isPaused: true, isOvertime: false, remaining: 30 }, hasRing: true, primaryColor: primary, normalColor: normal }), normal);
   assert.equal(getChangedFieldTextColor({ isChanged: true, isResting: true, rest: { isPaused: false, isOvertime: true, remaining: -5 }, hasRing: true, primaryColor: primary, normalColor: normal }), normal);
   assert.equal(getChangedFieldTextColor({ isChanged: false, isResting: true, rest: { isPaused: false, isOvertime: false, remaining: 30 }, hasRing: true, primaryColor: primary, normalColor: normal }), normal);
+});
+
+test('rest ring shrinks clockwise from the top as rest counts down', () => {
+  assert.equal(getRestRingStartAngle({ duration: 60, remaining: 60 }), -90);
+  assert.equal(getRestRingStartAngle({ duration: 60, remaining: 30 }), 90);
+  assert.equal(getRestRingStartAngle({ duration: 60, remaining: 0 }), 270);
+  assert.equal(getRestRingStartAngle({ duration: 60, remaining: -5 }), 270);
+  assert.equal(getRestRingStartAngle({ duration: 60, remaining: 90 }), -90);
 });
 
 test('shared rest-visual helper: halo geometry is bounded and fade is nonincreasing', () => {
@@ -100,7 +110,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
 
   const view = {
     state: 'REST',
-    rest: { remaining: 59, isPaused: false, isOvertime: false },
+    rest: { duration: 60, remaining: 59, isPaused: false, isOvertime: false },
     pending: {
       setIndex: 0,
       totalSets: 3,
@@ -141,6 +151,8 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
   const env = {
     ...watchLayout,
     ...restVisual,
+    EXTENSION_TOP_BAR_LAYOUT,
+    MENU_LABEL,
     restHaloWidgets: [],
     restPulseAnimHandles: [],
     restPulseAttempted: false,
@@ -171,7 +183,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
     sport_data: { HEART_RATE: 1 },
     supersetColor: () => 0xffffff,
     SESSION_STATES: { REST: 'REST', FINISHED: 'FINISHED' },
-    widget: { BUTTON: 'button', TEXT: 'text', STROKE_RECT: 'stroke_rect', FILL_RECT: 'fill_rect' },
+    widget: { BUTTON: 'button', TEXT: 'text', STROKE_RECT: 'stroke_rect', ARC: 'arc', FILL_RECT: 'fill_rect' },
     prop: { MORE: 1, ANIM: 2, ANIM_STATUS: 3, ALPHA: 4 },
     anim_status: { START: 1, STOP: 2, PAUSE: 3, RESUME: 4 },
     align: { CENTER_H: 1, CENTER_V: 2 },
@@ -222,6 +234,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
       const entry = {
         type,
         ...props,
+        setEnable: enabled => { entry.enabled = enabled; },
         setProperty: (p, val) => {
           setPropertyCalls.push({ type, prop: p, val });
           if (p === 1 && typeof val === 'object') Object.assign(entry, val);
@@ -251,6 +264,14 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
       return entry;
     },
     addLiveButton: (key, props) => env.addLiveLabel(key, props),
+    addTransparentLabel: (key, props) => {
+      const entry = env.addWidget(env.widget.TEXT, props);
+      entry.key = key;
+      entry.setEnable = enabled => { entry.enabled = enabled; };
+      liveWidgets[key] = { widget: entry, props: { ...props } };
+      return entry;
+    },
+    updateTransparentLabel: (key, props) => env.updateLiveWidget(key, props),
     updateLiveWidget: (key, props) => {
       if (liveWidgets[key]) {
         Object.assign(liveWidgets[key].props, props);
@@ -368,8 +389,15 @@ for (const [name, source, isCompanion] of [
     api.tick();
     assert.equal(animStarts(), initialStarts, 'Ticks must not restart animations');
     assert.equal(setPropertyCalls.length, nativeCalls, 'Stable ticks should not redraw the halo or colors');
+    assert.equal(liveWidgets.restBezel.props.start_angle, -84);
+    assert.equal(liveWidgets.restBezel.props.end_angle, 270);
+    view.rest.remaining = 30;
+    api.tick();
+    assert.equal(liveWidgets.restBezel.props.start_angle, 90, 'Arc tracks remaining rest');
+    assert.equal(widgets.length, count, 'Countdown updates the existing arc');
     view.rest.isPaused = true;
     api.tick();
+    assert.equal(liveWidgets.restBezel.props.start_angle, 90, 'Pause freezes the arc');
     assert.equal(liveWidgets.restBezel.props.color, THEME.yellow);
     assert.equal(liveWidgets.actionButton.props.normal_color, THEME.yellow);
     assert.equal(liveWidgets.actionButton.widget.normal_color, THEME.yellow);
@@ -386,6 +414,7 @@ for (const [name, source, isCompanion] of [
     view.rest.isOvertime = true;
     view.rest.remaining = -1;
     api.tick();
+    assert.equal(liveWidgets.restBezel.props.start_angle, -90, 'Overtime restores the red perimeter');
     assert.equal(liveWidgets.restBezel.props.color, THEME.error);
     assert.equal(liveWidgets.actionButton.props.normal_color, THEME.error);
     assert.equal(liveWidgets.actionButton.widget.normal_color, THEME.error);
@@ -407,6 +436,85 @@ for (const [name, source, isCompanion] of [
   });
 }
 
+test('Companion sync-details clock remains clickable while its label updates', () => {
+  const { env, liveWidgets } = createMockEnv({ source: companionSource });
+  const click = () => {};
+  Object.assign(env, {
+    px: value => value,
+    font: () => 12,
+    currentClockLabel: () => '12:59 PM',
+    recordingLabel: () => 'Pending sync',
+    workoutController: {
+      sync: () => ({}),
+      getWorkoutSetWrites: () => [1],
+      getPendingSetCount: () => 1,
+    },
+    lastRenderedClock: '',
+    renderCount: 0,
+    renderUI: () => { env.renderCount++; },
+    THEME: env.THEME,
+    EXTENSION_CLOCK_LAYOUT: watchLayout.EXTENSION_CLOCK_LAYOUT,
+    align: { CENTER_H: 1, CENTER_V: 2 },
+    text_style: { NONE: 0 },
+    canOpenSyncDetails: () => true,
+    openSyncDetailsModal: click,
+    addLiveButton: (key, props) => env.addLiveLabel(key, props),
+    updateLiveWidget: (key, changes) => {
+      Object.assign(liveWidgets[key].props, changes);
+      liveWidgets[key].widget.setProperty(env.prop.MORE, changes);
+      return true;
+    },
+  });
+  const api = new Function('env', `with (env) {
+    ${extractFunction(companionSource, 'renderClock')}
+    ${extractFunction(companionSource, 'updateClock')}
+    return { render: renderClock, update: updateClock };
+  }`)(env);
+  api.render();
+  assert.equal(liveWidgets.clock.widget.click_func, click);
+  env.currentClockLabel = () => '13:00 PM';
+  api.update();
+  assert.equal(liveWidgets.clock.widget.click_func, click, 'Clock refresh keeps the sync-details action');
+  assert.equal(liveWidgets.clock.props.text, '13:00 PM | Pending sync');
+  env.canOpenSyncDetails = () => false;
+  env.currentClockLabel = () => '13:01 PM';
+  api.update();
+  assert.equal(env.renderCount, 1, 'Sync-state changes rebuild the clock in its new interaction mode');
+});
+for (const [name, source, isCompanion] of [
+  ['Companion', companionSource, true],
+  ['Workout', extensionSource, false],
+]) {
+  test(`${name}: rest countdown sends start_angle to native perimeter widgets`, () => {
+    const { env, view, setPropertyCalls, liveWidgets } = createMockEnv({ source });
+    Object.assign(env, {
+      isTearingDown: false,
+      isPaused: false,
+      hasBuilt: true,
+      liveWidgets,
+    });
+    const names = [
+      extractFunction(source, 'stopRestBezelAnimation'),
+      extractFunction(source, 'restStatusColor'),
+      extractFunction(source, 'updateRestBezelAndHalo'),
+      extractFunction(source, 'renderRestBezel'),
+      "const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width', 'start_angle', 'end_angle'];",
+      extractFunction(source, 'updateLiveWidget'),
+    ];
+    const api = new Function('env', `with (env) {
+      ${names.join('\n')}
+      return { render: renderRestBezel, update: updateRestBezelAndHalo };
+    }`)(env);
+    api.render(view.rest);
+    view.rest.remaining = 30;
+    api.update(view.rest);
+    const perimeter = setPropertyCalls.filter(call =>
+      call.prop === env.prop.MORE && Object.hasOwn(call.val, 'start_angle'));
+    assert.equal(perimeter.length, 5, 'Each halo arc receives the changed start angle');
+    assert.ok(perimeter.every(call => call.val.start_angle === 90));
+    assert.equal(liveWidgets.restBezel.props.start_angle, 90);
+  });
+}
 test('native pulse accepts animation ID zero and restores opacity on stop', () => {
   const calls = [];
   const widget = { setProperty: (key, value) => { calls.push({ key, value }); return 0; } };
@@ -466,7 +574,28 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
 }
 
 for (const [name, source] of [['Companion', companionSource], ['Workout', extensionSource]]) {
-  test(`${name}: footer is above the halo with an opaque disabled backing and fits the panel`, () => {
+  test(`${name}: transparent changing labels replace only their text widget`, () => {
+    const { env, widgets, liveWidgets } = createMockEnv({ source });
+    env.LAYOUT = { fit: props => props };
+    const labels = new Function('env', `with (env) {
+      ${extractFunction(source, 'addTransparentLabel')}
+      ${extractFunction(source, 'updateTransparentLabel')}
+      return { add: addTransparentLabel, update: updateTransparentLabel };
+    }`)(env);
+    const first = labels.add('clock', { x: 10, y: 20, w: 100, h: 30, text: '12:59 | Synced' });
+    assert.equal(first.type, 'text');
+    assert.equal(first.enabled, false);
+    assert.equal(first.normal_color, undefined);
+    assert.equal(labels.update('clock', { text: '13:00 | Synced' }), true);
+    assert.equal(liveWidgets.clock.props.text, '13:00 | Synced');
+    assert.equal(widgets.length, 1);
+    assert.equal(env.activeWidgets.length, 1);
+    assert.notEqual(liveWidgets.clock.widget, first);
+    assert.equal(labels.update('clock', { text: '13:00 | Synced' }), true);
+    assert.equal(widgets.length, 1, 'Unchanged text does not create a widget');
+  });
+
+  test(`${name}: transparent footer is above the halo and fits the panel`, () => {
     for (const device of [
       { width: 480, height: 480, isRound: true },
       { width: 390, height: 390, isRound: true },
@@ -489,11 +618,13 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       });
       env.workoutController.sync = () => ({});
       env.workoutController.getWorkoutSetWrites = () => [1];
-      env.addLiveLabel = (key, props) => {
-        const entry = { key, ...env.LAYOUT.fit(props), setEnable: enabled => { entry.enabled = enabled; } };
+      const addFooter = (key, props) => {
+        const entry = { type: 'text', key, enabled: false, ...env.LAYOUT.fit(props), setEnable: enabled => { entry.enabled = enabled; } };
         widgets.push(entry);
         return entry;
       };
+      env.addLiveLabel = addFooter;
+      env.addTransparentLabel = addFooter;
       const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClock', 'renderUI'];
       const render = new Function('env', `with (env) {
         ${names.map(name => extractFunction(source, name)).join('\n')}
@@ -502,16 +633,19 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       }`)(env);
       render();
       const footer = widgets.find(w => w.key === 'clock');
-      const haloLastIndex = widgets.findLastIndex(w => w.type === 'stroke_rect');
+      const haloType = device.isRound ? 'arc' : 'stroke_rect';
+      const haloLastIndex = widgets.findLastIndex(w => w.type === haloType);
       assert.ok(widgets.indexOf(footer) > haloLastIndex, 'Halo must stay behind the footer');
-      const outline = widgets.find(w => w.type === 'stroke_rect');
+      const outline = widgets.find(w => w.type === haloType);
       assert.equal(outline.w, device.width - 4, 'Perimeter uses raw device width');
       assert.equal(outline.h, device.height - 4, 'Perimeter uses raw device height');
       assert.equal(outline.radius, device.isRound ? Math.round(outline.w / 2) : Math.round(device.width * 0.12),
         'Round devices get a circle; square devices get rounded corners');
+      if (device.isRound) assert.equal(outline.end_angle, 270, 'Round rest ends at 12 oclock');
       assert.equal(footer.text, '12:59 PM | Synced', 'Time and status must both remain complete');
-      assert.equal(footer.normal_color, env.THEME.bg);
-      assert.equal(footer.press_color, env.THEME.bg);
+      assert.equal(footer.type, 'text');
+      assert.equal(footer.normal_color, undefined);
+      assert.equal(footer.press_color, undefined);
       assert.equal(footer.enabled, false, 'Footer must not intercept actions');
       for (const x of [footer.x, footer.x + footer.w]) {
         for (const y of [footer.y, footer.y + footer.h]) {
@@ -523,6 +657,26 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
           }
         }
       }
+    }
+  });
+}
+
+for (const [name, source] of [['Companion', companionSource], ['Workout', extensionSource]]) {
+  test(`${name}: heart label has no button background in both session top bars`, () => {
+    for (const functionName of ['renderTopBar', 'renderPreparedTopBar']) {
+      const { env, view, widgets, liveWidgets } = createMockEnv({ source });
+      const render = new Function('env', `with (env) {
+        ${extractFunction(source, functionName)}
+        return ${functionName};
+      }`)(env);
+      render(view, () => {});
+      const heart = name === 'Companion'
+        ? liveWidgets.hr?.widget
+        : widgets.find(w => w.text === '\u2665');
+      assert.ok(heart, `${functionName} has a heart label`);
+      assert.equal(heart.type, 'text');
+      assert.equal(heart.normal_color, undefined);
+      assert.equal(heart.press_color, undefined);
     }
   });
 }

@@ -268,13 +268,15 @@ test('top bar renders native BPM with a fixed heart even during sync warnings', 
       x => x, () => 20, {}, {}, { NONE: 789 }, String, '\u2261', syncWarning, () => {}, () => {});
     render({ elapsedSeconds: 12 }, () => {});
     const hr = widgets.find(w => w.type === 'sport');
-    const heart = widgets.find(w => w.key === 'heart' && w.text === '\u2665');
+    const heart = widgets.find(w => w.type === 'text' && w.text === '\u2665');
     assert.ok(hr, 'BPM must be a native sport widget');
     assert.ok(heart, 'BPM must have a fixed heart icon');
     assert.equal(hr.default_type, 123);
     assert.equal(hr.category, 456);
     assert.equal(hr.sub_text_visible, false);
     assert.equal(heart.text_style, 789);
+    assert.equal(heart.normal_color, undefined);
+    assert.equal(heart.press_color, undefined);
     assert.ok(heart.w >= 32, 'Heart glyph needs enough fixed width to avoid clipping');
     assert.ok(hr.x > heart.x);
     assert.ok(hr.x + hr.w <= 286 + 96);

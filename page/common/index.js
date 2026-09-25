@@ -11,6 +11,7 @@ import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
+  getRestRingStartAngle,
   darkenColor,
   isPurpleRestRing,
   getChangedFieldTextColor,
@@ -593,7 +594,32 @@ function addLiveButton(key, props) {
   return w;
 }
 
-const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width'];
+function addTransparentLabel(key, props) {
+  const fitted = LAYOUT.fit(props);
+  const w = addRawWidget(widget.TEXT, fitted);
+  w.setEnable(false);
+  liveWidgets[key] = { widget: w, props: { ...fitted } };
+  return w;
+}
+
+function updateTransparentLabel(key, changes) {
+  const entry = liveWidgets[key];
+  if (!entry || Object.keys(changes).every(key => entry.props[key] === changes[key])) return true;
+  const nextProps = { ...entry.props, ...changes };
+  try {
+    // This runtime does not reliably repaint TEXT after setProperty.
+    const nextWidget = addRawWidget(widget.TEXT, nextProps);
+    nextWidget.setEnable(false);
+    deleteWidget(entry.widget);
+    activeWidgets = activeWidgets.filter(w => w !== entry.widget);
+    liveWidgets[key] = { widget: nextWidget, props: nextProps };
+    return true;
+  } catch (err) {
+    return false;
+  }
+}
+
+const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width', 'start_angle', 'end_angle'];
 
 /** Returns false when the runtime refused the in-place update, so the caller can fall back. */
 function updateLiveWidget(key, changes) {
@@ -1719,9 +1745,6 @@ function renderClock() {
     y: px(EXTENSION_CLOCK_LAYOUT.y),
     w: px(EXTENSION_CLOCK_LAYOUT.width),
     h: px(EXTENSION_CLOCK_LAYOUT.height),
-    radius: px(4),
-    normal_color: THEME.bg,
-    press_color: THEME.card,
     color: THEME.textSecondary,
     text_size: font('micro'),
     align_h: align.CENTER_H,
@@ -1730,10 +1753,16 @@ function renderClock() {
     text: label,
   };
   if (canOpenSyncDetails()) {
-    addLiveButton('clock', { ...props, click_func: openSyncDetailsModal });
+    addLiveButton('clock', {
+      ...props,
+      radius: px(4),
+      normal_color: THEME.bg,
+      press_color: THEME.card,
+      click_func: openSyncDetailsModal,
+    });
+    if (typeof liveWidgets !== 'undefined' && liveWidgets.clock) liveWidgets.clock.syncButton = true;
   } else {
-    const clock = addLiveLabel('clock', { ...props, press_color: THEME.bg });
-    clock.setEnable(false);
+    addTransparentLabel('clock', props);
   }
 }
 
@@ -2513,7 +2542,7 @@ function renderTopBar(view, onBack) {
     click_func: openWorkoutTimerControls,
   });
 
-  addLiveLabel('hr', {
+  addTransparentLabel('hr', {
     x: px(252),
     y: px(45),
     w: px(120),
@@ -2535,13 +2564,21 @@ function restStatusColor(rest) {
 
 function updateRestBezelAndHalo(rest) {
   const baseColor = restStatusColor(rest);
-  if (liveWidgets.restBezel?.props.color !== baseColor) {
-    if (!updateLiveWidget('restBezel', { color: baseColor })) controllerUiDirty = true;
+  const startAngle = rest?.isOvertime ? -90 : getRestRingStartAngle(rest);
+  const bezel = liveWidgets.restBezel;
+  const bezelChanges = {};
+  if (bezel?.props.color !== baseColor) bezelChanges.color = baseColor;
+  if (!LAYOUT.isFitted && bezel?.props.start_angle !== startAngle) bezelChanges.start_angle = startAngle;
+  if (Object.keys(bezelChanges).length && !updateLiveWidget('restBezel', bezelChanges)) {
+    controllerUiDirty = true;
   }
   for (let i = 1; i < restHaloWidgets.length; i++) {
     const h = restHaloWidgets[i];
     const color = darkenColor(baseColor, h.factor);
-    if (h.props.color !== color && !updateLiveWidget(`restHalo_${i}`, { color })) {
+    const changes = {};
+    if (h.props.color !== color) changes.color = color;
+    if (!LAYOUT.isFitted && h.props.start_angle !== startAngle) changes.start_angle = startAngle;
+    if (Object.keys(changes).length && !updateLiveWidget(`restHalo_${i}`, changes)) {
       controllerUiDirty = true;
     }
   }
@@ -2563,6 +2600,7 @@ function renderRestBezel(rest) {
     isFitted: LAYOUT.isFitted,
   });
   const baseColor = restStatusColor(rest);
+  const startAngle = rest?.isOvertime ? -90 : getRestRingStartAngle(rest);
 
   for (const layer of layers) {
     const layerColor = darkenColor(baseColor, layer.factor);
@@ -2575,7 +2613,11 @@ function renderRestBezel(rest) {
       line_width: layer.line_width,
       color: layerColor,
     };
-    const nativeWidget = addRawWidget(widget.STROKE_RECT, props);
+    if (!LAYOUT.isFitted) {
+      props.start_angle = startAngle;
+      props.end_angle = 270;
+    }
+    const nativeWidget = addRawWidget(LAYOUT.isFitted ? widget.STROKE_RECT : widget.ARC, props);
     restHaloWidgets.push({ widget: nativeWidget, props, factor: layer.factor });
     if (layer.index === 0) {
       liveWidgets.restBezel = { widget: nativeWidget, props };
@@ -2631,7 +2673,7 @@ function renderPreparedTopBar(view, onRest) {
     text_style: text_style.NONE,
     text: elapsedLabel(view), click_func: openWorkoutTimerControls,
   });
-  addLiveLabel('hr', {
+  addTransparentLabel('hr', {
     x: px(topBar.metric.x), y: px(topBar.y), w: px(topBar.metric.width), h: px(topBar.height),
     color: syncWarning ? THEME.orange : heartRateColor(liveHr), text_size: font('button'),
     align_h: align.CENTER_H, align_v: align.CENTER_V, text_style: text_style.NONE,
@@ -3950,7 +3992,7 @@ function renderUI() {
 
   renderDemoBadge();
   renderScreen();
-  // Keep the opaque footer above perimeter effects and outside action targets.
+  // Keep the transparent footer above perimeter effects and outside action targets.
   renderClock();
   redraw();
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
@@ -4028,7 +4070,16 @@ function updateClock() {
   ].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
-  if (!updateLiveWidget('clock', { text: label })) renderUI();
+  const hasSyncButton = liveWidgets.clock?.syncButton === true;
+  const shouldHaveSyncButton = canOpenSyncDetails();
+  if (hasSyncButton !== shouldHaveSyncButton) {
+    renderUI();
+    return;
+  }
+  const updated = hasSyncButton
+    ? updateLiveWidget('clock', { text: label })
+    : updateTransparentLabel('clock', { text: label });
+  if (!updated) renderUI();
 }
 
 /**
@@ -4077,7 +4128,7 @@ function tick() {
     text: elapsedLabel(view),
     color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryLight,
   });
-  patched = updateLiveWidget('hr', { text: formatHeartRate(liveHr), color: heartRateColor(liveHr) }) && patched;
+  patched = updateTransparentLabel('hr', { text: formatHeartRate(liveHr), color: heartRateColor(liveHr) }) && patched;
 
   if (liveWidgets.workoutTimerModalValue) {
     patched = updateLiveWidget('workoutTimerModalValue', {
