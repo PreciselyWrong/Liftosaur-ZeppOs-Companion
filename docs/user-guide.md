@@ -1,6 +1,6 @@
 # Lifto user guide
 
-Lifto is an unofficial Liftosaur client for Amazfit watches. It is currently a beta. Start in demo mode if you want to try the controls before connecting an account.
+Lifto is an unofficial Liftosaur client for Amazfit watches. The current release is 0.5.11 beta. Start in demo mode if you want to try the controls before connecting an account.
 
 ## Choose your app
 
@@ -29,6 +29,16 @@ The [installation guide](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Comp
 5. Repeat for the remaining sets. Finish in Lifto and wait for Cloud saving to complete. In Workout, also open the native Zepp workout controls and finish that activity so both histories are saved.
 
 For timed exercises, **Stop** records the held duration; expiry alerts but does not complete the set. Unilateral exercises record left and right durations together after both sides. See [timed sets and recovery](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/blob/main/docs/timed-sets.md).
+
+## Customize the display
+
+In the selected Lifto app's phone Settings, open **Workout display**:
+
+- **Workout progress** adds a bar showing completed sets across the workout. It starts off.
+- **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible.
+- **Rest Info button** starts on. Turn it off to hide Info on the detailed rest screen; Info elsewhere is retained.
+
+Preferences are configured separately for Companion and Workout. Reopen the watch app while connected to receive the latest settings. These options do not change the workout prescription or rest deadline.
 
 ## Pause, correct and synchronize
 
