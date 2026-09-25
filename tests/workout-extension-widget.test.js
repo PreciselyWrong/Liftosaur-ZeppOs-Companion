@@ -355,6 +355,7 @@ test('expired rest replaces Prepare and Start set with one full-width Start set 
       addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
       px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
       restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
+      workoutDiagnostics: { record() {} }, WORKOUT_DIAGNOSTIC_CODES: { ACTION_TAP: 'ACTION_TAP' },
       setRestPrepared(value) { env.isRestMinimized = value; },
       workoutController: { nextSet: () => { started++; } }, renderUI() {}, scheduleRenderUI() {}, openWorkoutTimerControls() {},
     };
@@ -389,6 +390,7 @@ test('timer expiry redraws the rest actions once without starting an unprepared 
     updatePreparedRestVisuals() {},
     updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
     isTearingDown: false, isPaused: false, hasBuilt: true,
+    workoutDiagnostics: { heartbeat() {} },
     SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
     refreshSportMetrics() {}, retryPendingWrites() {},
     workoutController: { view: () => view, advanceTimedSet() {}, pollCurrent: async () => false, nextSet: () => { starts++; } },
@@ -472,7 +474,7 @@ test('skipping a warmup defers the Workout redraw until after the native callbac
   const source = readWidgetSource();
   const activeSet = extractFunction(source, 'renderActiveSetScreen');
   const skipStart = activeSet.indexOf("text: 'Skip'");
-  const skipButton = activeSet.slice(activeSet.lastIndexOf('addWidget(widget.BUTTON', skipStart), activeSet.indexOf('});', skipStart) + 3);
+  const skipButton = activeSet.slice(activeSet.lastIndexOf('addWidget(widget.BUTTON', skipStart), activeSet.indexOf('\n    });', skipStart) + 7);
   assert.match(skipButton, /workoutController\.skipWarmup\(/);
   assert.match(skipButton, /controllerUiDirty\s*=\s*true/);
   assert.doesNotMatch(skipButton, /renderUI\(\)/);
@@ -694,6 +696,7 @@ test('tick updates prepared Start set action in place across zero, overtime, and
     isTearingDown: false,
     isPaused: false,
     hasBuilt: true,
+    workoutDiagnostics: { heartbeat() {} },
     screen: 'SESSION',
     EXTENSION_SCREENS: { SESSION: 'SESSION' },
     SESSION_STATES: { REST: 'REST', FINISHED: 'FINISHED' },

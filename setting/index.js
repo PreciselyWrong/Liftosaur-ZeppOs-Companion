@@ -433,7 +433,7 @@ AppSettingsPage({
               [
                 settingsHeading(
                   'Watch diagnostics',
-                  'Recent watch steps after reconnection. The last step does not prove the crash cause.'
+                  'Recent watch steps received when Lifto connects or resumes. All times are UTC.'
                 ),
                 ...(diagnosticLines.length > 0 ? diagnosticLines : ['No watch diagnostics yet']).map((line) => Text(
                   {
@@ -447,10 +447,54 @@ AppSettingsPage({
                       fontSize: '15px',
                       lineHeight: '18px',
                       textAlign: 'left',
+                      userSelect: 'text',
+                      WebkitUserSelect: 'text',
                     },
                   },
                   line
                 )),
+                ...(diagnosticLines.length > 0
+                  ? [
+                      Text(
+                        {
+                          paragraph: true,
+                          align: 'left',
+                          style: {
+                            display: 'block',
+                            width: '100%',
+                            marginTop: '12px',
+                            marginBottom: '6px',
+                            color: '#6B7280',
+                            fontSize: '15px',
+                            lineHeight: '18px',
+                            textAlign: 'left',
+                            userSelect: 'text',
+                            WebkitUserSelect: 'text',
+                          },
+                        },
+                        'Open the text field, then long-press, Select all and Copy.'
+                      ),
+                      TextInput({
+                        label: 'Select and copy logs',
+                        multiline: true,
+                        value: diagnosticText,
+                        rows: 12,
+                        labelStyle: {
+                          width: '100%',
+                          color: '#111827',
+                          fontSize: '16px',
+                          fontWeight: '600',
+                          textAlign: 'left',
+                        },
+                        subStyle: {
+                          width: '100%',
+                        },
+                        onChange: () => {
+                          // Keep selection enabled without saving edits to the diagnostic report.
+                        },
+                      }),
+                    ]
+                  : []),
               ]
             )
           : null,

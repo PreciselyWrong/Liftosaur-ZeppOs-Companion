@@ -208,7 +208,7 @@ test('phone settings show watch diagnostic steps only after a sanitized report a
   visit(tree);
   assert.equal(tree.children[0].length, 4);
   assert.ok(text.includes('Watch diagnostics'));
-  assert.ok(text.includes('1970-01-01T00:00:01.000Z SET_TAP'));
+  assert.ok(text.includes('1970-01-01T00:00:01.000Z UTC SET_TAP'));
 });
 
 test('watch diagnostics require an explicit phone toggle and clear the report when disabled', () => {
@@ -241,6 +241,97 @@ test('watch diagnostics require an explicit phone toggle and clear the report wh
   enabledDiagnostics.props.onChange(false);
   assert.deepEqual(enabled.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'false']]);
   assert.equal(enabled.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
+});
+
+test('diagnostics card provides multiline enabled TextInput for copying logs with full report value and copy instructions', () => {
+  const report = JSON.stringify({
+    version: 1,
+    previousEvents: [{ at: 100, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_END, secret: "private detail" }],
+    events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
+  });
+  const { tree } = renderSettings({
+    apiKey: 'test-api-key-placeholder',
+    [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
+    [WORKOUT_DIAGNOSTICS_KEY]: report,
+  });
+  const inputs = [];
+  const text = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'TextInput') inputs.push(node);
+    if (node.type === 'Text') text.push(...node.children.filter((value) => typeof value === 'string'));
+    visit(node.children);
+  };
+  visit(tree);
+
+  const copyInput = inputs.find(({ props }) => props.label === 'Select and copy logs');
+  assert.ok(copyInput, 'export TextInput should be rendered');
+  assert.equal(copyInput.props.multiline, true);
+  assert.equal(copyInput.props.rows, 12);
+  assert.equal(copyInput.props.settingsKey, undefined);
+  assert.notEqual(copyInput.props.disabled, true);
+  assert.equal(copyInput.props.value, formatWorkoutDiagnostics(report));
+  assert.doesNotMatch(copyInput.props.value, /secret_12345|private detail/);
+  for (const line of copyInput.props.value.split('\n')) assert.ok(text.includes(line));
+  assert.ok(text.includes('Open the text field, then long-press, Select all and Copy.'));
+});
+
+test('diagnostics export TextInput onChange cannot modify storage or overwrite canonical report', () => {
+  const report = JSON.stringify({
+    version: 1,
+    events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
+  });
+  const { tree, writes, values } = renderSettings({
+    [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
+    [WORKOUT_DIAGNOSTICS_KEY]: report,
+  });
+  const inputs = [];
+  const visit = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visit);
+    if (node.type === 'TextInput') inputs.push(node);
+    visit(node.children);
+  };
+  visit(tree);
+
+  const copyInput = inputs.find(({ props }) => props.label === 'Select and copy logs');
+  assert.ok(copyInput);
+  const writeCountBefore = writes.length;
+  copyInput.props.onChange('malicious edit');
+  assert.equal(writes.length, writeCountBefore);
+  assert.equal(values.get(WORKOUT_DIAGNOSTICS_KEY), report);
+});
+
+test('diagnostics export control is hidden when there are no valid diagnostics or when disabled', () => {
+  const empty = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true' });
+  const emptyInputs = [];
+  const emptyTexts = [];
+  const visitEmpty = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visitEmpty);
+    if (node.type === 'TextInput') emptyInputs.push(node);
+    if (node.type === 'Text') emptyTexts.push(...node.children.filter((value) => typeof value === 'string'));
+    visitEmpty(node.children);
+  };
+  visitEmpty(empty.tree);
+  assert.equal(emptyInputs.some(({ props }) => props.label === 'Select and copy logs'), false);
+  assert.ok(emptyTexts.includes('No watch diagnostics yet'));
+  assert.equal(emptyTexts.includes('Open the text field, then long-press, Select all and Copy.'), false);
+
+  const disabled = renderSettings({
+    [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'false',
+    [WORKOUT_DIAGNOSTICS_KEY]: JSON.stringify({ version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT }] }),
+  });
+  const disabledInputs = [];
+  const visitDisabled = (node) => {
+    if (!node) return;
+    if (Array.isArray(node)) return node.forEach(visitDisabled);
+    if (node.type === 'TextInput') disabledInputs.push(node);
+    visitDisabled(node.children);
+  };
+  visitDisabled(disabled.tree);
+  assert.equal(disabledInputs.some(({ props }) => props.label === 'Select and copy logs'), false);
 });
 
 test('account status uses separate centered lines instead of ignored newline characters', () => {

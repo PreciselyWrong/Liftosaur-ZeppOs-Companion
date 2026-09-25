@@ -1,3 +1,4 @@
+import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -60,7 +61,7 @@ test('Info fits every text page above navigation beside a separate image page', 
 test('Companion rebuilds modal controls above the panel after a full redraw', () => {
   const source = fs.readFileSync('page/common/index.js', 'utf8');
   const render = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
-  assert.match(render, /if \(isNotesModalOpen\) destroyModalControls\(\);[\s\S]*clearWidgets\(\)/);
+  assert.match(render, /if \(isNotesModalOpen\) destroyModalControls\(\);[\s\S]*trace\('CLEAR', clearWidgets\)/);
 });
 
 test('both variants leave room for a double-digit page label and reachable actions', () => {
@@ -336,7 +337,7 @@ for (const product of ['page', 'data-widget']) {
     const renderName = product === 'page' ? 'renderNotesModal' : 'renderNotesScreen';
     const renderStart = source.indexOf(`function ${renderName}()`);
     const renderSource = source.slice(renderStart, source.indexOf('\nfunction ', renderStart + 1));
-    const env = new Function('calls', 'imageWidget', 'realExerciseInfoPages', 'INFO_TEXT_LAYOUT', 'INFO_NAV', 'WORKOUT_INFO_PANEL', `
+    const env = new Function('calls', 'imageWidget', 'realExerciseInfoPages', 'INFO_TEXT_LAYOUT', 'INFO_NAV', 'WORKOUT_INFO_PANEL', 'workoutDiagnostics', 'WORKOUT_DIAGNOSTIC_CODES', `
       let isTearingDown = false;
       let isPaused = false;
       let hasBuilt = true;
@@ -390,7 +391,7 @@ for (const product of ['page', 'data-widget']) {
         handleImageChange: handleExerciseImageChange,
         updateImage: updateNotesImage,
       };
-    `)(calls, imageWidget, exerciseInfoPages, INFO_TEXT_LAYOUT, INFO_NAV, WORKOUT_INFO_PANEL);
+    `)(calls, imageWidget, exerciseInfoPages, INFO_TEXT_LAYOUT, INFO_NAV, WORKOUT_INFO_PANEL, createWorkoutDiagnostics(), WORKOUT_DIAGNOSTIC_CODES);
 
     // Initial state: loading, notesPage = 0
     // User is reading Page 0: Description
