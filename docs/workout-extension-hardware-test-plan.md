@@ -5,6 +5,17 @@ Target devices must be on Zepp's documented Workout Extension support list (e.g.
 
 An Amazfit Active 2 running firmware 7.23.0.1 and API level 400 has loaded the extension in Strength Training. Free Training support and the 0.5.10 integration changes still require physical validation through [the Active 2 checklist](active-2-workout-integration-test.md); this observation does not claim compatibility for other firmware builds.
 
+## Recorded evidence and remaining work
+
+| Evidence | Scope | Remaining validation |
+| --- | --- | --- |
+| Active 2, firmware 7.23.0.1, API 400 | Workout loaded in Strength Training | Current-build full lifecycle and Free Training |
+| Active 3 Premium, Zepp OS 6, firmware 6.3.13.5 | Tester-reported Workout installation, documented in README | Current-build full lifecycle |
+| PR #83 requester confirmation, 2026-09-24 | Companion lifecycle change accepted; model, firmware and detailed result not recorded | Native reboot cause and repeatable recovery evidence (#50) |
+| PR #87 requester confirmation, 2026-09-24 | Image-cache build worked on a physical watch; model and firmware not recorded | One-to-two-week retention and other devices |
+
+These observations do not mark the test rows below as passed. For the next beta, prioritize one complete session with pause/resume, offline set synchronization, restoration after interruption, rest transitions and both finish orders. Attach actual outcomes to #50, #77 and #23. Keep #50 open until the reported reboots have evidence-backed resolution.
+
 Every test row records:
 - `Model`: specific watch model name
 - `Firmware`: watch firmware build string
