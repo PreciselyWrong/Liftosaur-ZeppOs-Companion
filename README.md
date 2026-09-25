@@ -10,9 +10,9 @@ Unofficial [Liftosaur](https://www.liftosaur.com) clients for round and square A
 
 **[Open GitHub Releases and scan the install QR codes](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/releases)**
 
-**Version:** Lifto Companion 0.5.11 beta.
+**Version:** Lifto Companion 0.5.12 beta.
 
-**Workout version:** Lifto Workout 0.5.11 beta.
+**Workout version:** Lifto Workout 0.5.12 beta.
 
 Developer Mode must be enabled in the Zepp mobile app. Demo mode needs no Liftosaur account; Cloud synchronization requires an account and API key.
 

@@ -1,6 +1,6 @@
 # Lifto user guide
 
-Lifto is an unofficial Liftosaur client for Amazfit watches. The current release is 0.5.11 beta. Start in demo mode if you want to try the controls before connecting an account.
+Lifto is an unofficial Liftosaur client for Amazfit watches. The current release is 0.5.12 beta. Start in demo mode if you want to try the controls before connecting an account.
 
 ## Choose your app
 
