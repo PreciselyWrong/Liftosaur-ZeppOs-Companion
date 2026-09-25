@@ -29,21 +29,6 @@ The two apps are complementary and can be installed together. Liftosaur Cloud is
 
 Lifto for Zepp OS is built together with [u/silent_jacob](https://www.reddit.com/user/silent_jacob/), lead tester and main contributor.
 
-<p align="center">
-  <img src="docs/screenshots/home-screen.png" width="19%" alt="Workout Home" />
-  <img src="docs/screenshots/workout-preview.png" width="19%" alt="Day Preview" />
-  <img src="docs/screenshots/active-set.png" width="19%" alt="Active Set" />
-  <img src="docs/screenshots/rest-timer.png" width="19%" alt="Rest Timer" />
-  <img src="docs/screenshots/workout-overview.png" width="19%" alt="Workout Overview" />
-</p>
-<p align="center">
-  <img src="docs/screenshots/workout-summary.png" width="19%" alt="Workout Summary" />
-  <img src="docs/screenshots/exercise-details.png" width="19%" alt="Exercise Details" />
-  <img src="docs/screenshots/companion-settings.png" width="19%" alt="Companion Settings" />
-</p>
-
-These screenshots show an earlier demo build. Current preview QR codes are attached to each GitHub release.
-
 ## Features
 
 - Direct Liftosaur Cloud synchronization with official next-workout preview and explicit program, week, and day selection.
@@ -115,6 +100,9 @@ npm run clean
 CI runs `npm ci`, `npm test`, and synthetic Workout Extension generation on Node.js 24.
 
 ## Documentation
+
+- [User guide](docs/user-guide.md)
+- [User wiki](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/wiki)
 
 - [Tester Guide](docs/tester-guide.md)
 - [Timed Sets](docs/timed-sets.md)
