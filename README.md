@@ -10,9 +10,9 @@ Unofficial [Liftosaur](https://www.liftosaur.com) clients for round and square A
 
 **[Open GitHub Releases and scan the install QR codes](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/releases)**
 
-**Version:** Lifto Companion 0.5.10 beta.
+**Version:** Lifto Companion 0.5.11 beta.
 
-**Workout version:** Lifto Workout 0.5.10 beta.
+**Workout version:** Lifto Workout 0.5.11 beta.
 
 Developer Mode must be enabled in the Zepp mobile app. Demo mode needs no Liftosaur account; Cloud synchronization requires an account and API key.
 
@@ -40,6 +40,7 @@ Lifto for Zepp OS is built together with [u/silent_jacob](https://www.reddit.com
 - Timed and unilateral holds with Get Ready, side transitions, pause, overtime, and durable duration recording.
 - Separate Info pages for recent sessions, exercise notes, and program instructions.
 - Optional exercise images in workout lists, Info, and Prepare.
+- Configurable workout progress bar, plate breakdown and rest Info button in phone settings.
 - Live heart rate from Companion or native activity BPM in Lifto Workout.
 - Phone-only API key storage; credentials are never sent to or stored on the watch.
 
