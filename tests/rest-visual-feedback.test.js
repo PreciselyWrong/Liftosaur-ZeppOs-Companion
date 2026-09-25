@@ -1,3 +1,4 @@
+import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
@@ -149,6 +150,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
   };
 
   const env = {
+    workoutDiagnostics: createWorkoutDiagnostics(), WORKOUT_DIAGNOSTIC_CODES,
     ...watchLayout,
     ...restVisual,
     EXTENSION_TOP_BAR_LAYOUT,
@@ -612,7 +614,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
         recordingLabel: () => 'Synced', isTearingDown: false, hasBuilt: true,
         isPaused: false, isDispatchingClick: false, isNotesModalOpen: false,
         preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
-        workoutDiagnostics: { record() {} }, cancelScheduledRender() {},
+        workoutDiagnostics: createWorkoutDiagnostics(), cancelScheduledRender() {},
         updateSyncWarning() {}, clearWidgets() {}, hideModalControls() {},
         renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => false,
       });

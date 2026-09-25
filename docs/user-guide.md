@@ -58,7 +58,7 @@ Preferences are configured separately for Companion and Workout. Reopen the watc
 | Workout does not alert while hidden | Return to Lifto. An expired rest has a catch-up alert; background alert delivery is not confirmed on every device. |
 | The Workout page is missing | Follow the model-specific installation path. Installation package coverage does not prove native Workout support. |
 
-For a recurring restart, enable **Record watch diagnostics** in the affected app's phone Settings and open that app once while connected. After a recurrence, reopen it and inspect **Watch diagnostics** in the phone settings. Share the report with the exact watch model, firmware, app build and the action that preceded the restart. Never share your API key. The [tester guide](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/blob/main/docs/tester-guide.md#reporting-a-problem) explains the report's limits.
+For a recurring restart, enable **Record watch diagnostics** in the affected app's phone Settings and use that app normally. After a restart, reopen it and copy **Watch diagnostics** from the phone settings. Include the exact watch model and the action that preceded the restart; firmware and app build are captured automatically when available. Never share your API key. The [tester guide](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/blob/main/docs/tester-guide.md#reporting-a-problem) explains the report's limits.
 
 ## Compatibility and current limits
 

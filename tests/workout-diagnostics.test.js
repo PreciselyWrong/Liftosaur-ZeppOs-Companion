@@ -78,7 +78,11 @@ test('phone report contains only timestamps and known codes', () => {
   assert.equal(formatWorkoutDiagnostics({
     version: 1,
     events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP, secret: 'do not show' }],
-  }), '1970-01-01T00:00:01.000Z SET_TAP');
+  }), [
+    'Latest snapshot received from the watch. The last event does not prove the crash cause.',
+    'Current run (1 event, latest 12 retained):',
+    '1970-01-01T00:00:01.000Z UTC SET_TAP',
+  ].join('\n'));
   assert.doesNotMatch(formatWorkoutDiagnostics({
     version: 1,
     events: [{ at: 1_000, code: 'PRIVATE_WORKOUT' }],
@@ -110,7 +114,7 @@ test('captures only this app and aggregate system memory at a watch checkpoint',
   const diagnostics = createWorkoutDiagnostics(storage, () => 1_000, () => sample);
   diagnostics.setEnabled(true);
   diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SET_TAP);
-  assert.match(formatWorkoutDiagnostics(storage.values.get(WORKOUT_DIAGNOSTICS_KEY)), /app 2\.0 MiB \(peak 3\.0\) \| system free 16\.0\/64\.0 MiB/);
+  assert.match(formatWorkoutDiagnostics(storage.values.get(WORKOUT_DIAGNOSTICS_KEY)), /app 2\.0 MiB \(peak 3\.0 MiB\) \| system free 16\.0\/64\.0 MiB/);
   assert.doesNotMatch(storage.values.get(WORKOUT_DIAGNOSTICS_KEY), /"appid"|"modules"|42/);
 });
 
@@ -206,7 +210,10 @@ test('sanitizes, copies, formats, and bounds both diagnostics runs', () => {
   assert.deepEqual(report.previousEvents[0], { at: 103, code: WORKOUT_DIAGNOSTIC_CODES.RESUME });
   report.previousEvents[0].code = WORKOUT_DIAGNOSTIC_CODES.BOOT;
   assert.equal(diagnostics.read().previousEvents[0].code, WORKOUT_DIAGNOSTIC_CODES.RESUME);
-  assert.match(formatWorkoutDiagnostics(diagnostics.read()), /Previous run: 1970-01-01T00:00:00.103Z RESUME/);
+  const formattedReport = formatWorkoutDiagnostics(diagnostics.read());
+  assert.match(formattedReport, /Previous run \(12 events, latest 12 retained\):/);
+  assert.match(formattedReport, /1970-01-01T00:00:00\.103Z UTC RESUME/);
+  assert.doesNotMatch(formattedReport, /Previous run: 1970/);
   assert.doesNotMatch(storage.values.get(WORKOUT_DIAGNOSTICS_KEY), /secret|token/);
 });
 
@@ -218,4 +225,56 @@ test('disabling diagnostics clears both runs', () => {
   diagnostics.setEnabled(false);
   assert.deepEqual(diagnostics.read(), { version: 1, events: [] });
   assert.equal(storage.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
+});
+
+test('formats Previous run and Current run into readable sections with UTC, event counts, and explicit MiB units', () => {
+  const report = {
+    version: 1,
+    previousEvents: [
+      {
+        at: 1_000,
+        code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP,
+        memory: { appUsed: 2 * 1024 * 1024, appPeak: 4 * 1024 * 1024, systemUsed: 48 * 1024 * 1024, systemTotal: 64 * 1024 * 1024 },
+      },
+    ],
+    events: [
+      { at: 50_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT },
+      { at: 50_250, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_START },
+    ],
+  };
+
+  const formatted = formatWorkoutDiagnostics(report);
+  assert.ok(formatted.includes('Latest snapshot received from the watch. The last event does not prove the crash cause.'));
+  assert.ok(formatted.includes('Previous run (1 event, latest 12 retained):'));
+  assert.ok(formatted.includes('Current run (2 events, latest 12 retained):'));
+  assert.ok(formatted.includes('1970-01-01T00:00:01.000Z UTC SET_TAP | app 2.0 MiB (peak 4.0 MiB) | system free 16.0/64.0 MiB'));
+  assert.ok(formatted.includes('1970-01-01T00:00:50.000Z UTC BOOT'));
+  assert.ok(formatted.includes('1970-01-01T00:00:50.250Z UTC RENDER_START (+250ms)'));
+  assert.doesNotMatch(formatted, /Previous run: 1970/);
+});
+
+test('calculates per-run elapsed milliseconds without bridging runs and handles same timestamps or clock skew', () => {
+  const report = {
+    version: 1,
+    previousEvents: [
+      { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP },
+      { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_SAVED },
+      { at: 9_500, code: WORKOUT_DIAGNOSTIC_CODES.PAUSE },
+    ],
+    events: [
+      { at: 60_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT },
+      { at: 61_200, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_START },
+    ],
+  };
+
+  const formatted = formatWorkoutDiagnostics(report);
+  assert.ok(formatted.includes('1970-01-01T00:00:10.000Z UTC SET_TAP'));
+  assert.ok(formatted.includes('1970-01-01T00:00:10.000Z UTC SET_SAVED (+0ms)'));
+  assert.ok(formatted.includes('1970-01-01T00:00:09.500Z UTC PAUSE (clock moved backwards)'));
+  // No elapsed interval can be inferred before the first retained event.
+  assert.ok(formatted.includes('1970-01-01T00:01:00.000Z UTC BOOT'));
+  assert.ok(formatted.includes('1970-01-01T00:01:01.200Z UTC RENDER_START (+1200ms)'));
+  assert.doesNotMatch(formatted, /SET_TAP \(\+|BOOT \(\+/);
+  assert.doesNotMatch(formatted, /\+50500ms/);
+  assert.doesNotMatch(formatted, /-\d+ms/);
 });
