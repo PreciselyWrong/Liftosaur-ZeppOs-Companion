@@ -13,6 +13,7 @@ import {
 } from '../shared/rest-visual.js';
 import * as restVisual from '../shared/rest-visual.js';
 import * as watchLayout from '../shared/watch-layout.js';
+import { normalizeWorkoutDisplaySettings, weightStepperDisplay } from '../shared/workout-display-settings.js';
 import { createScreenLayout } from '../shared/screen-layout.js';
 
 const root = process.cwd();
@@ -181,6 +182,10 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
     renderPreparationImage: () => false,
     exerciseImages: null,
     renderTopBar() {},
+    renderWorkoutProgress() {},
+    normalizeWorkoutDisplaySettings,
+    weightStepperDisplay,
+    accountSettings: {},
     openNotes: () => {},
     openExerciseInfo: () => {},
     renderExerciseInfo: () => {},
@@ -266,6 +271,22 @@ for (const [name, source, isCompanion] of [
   ['Companion', companionSource, true],
   ['Workout', extensionSource, false],
 ]) {
+  test(`${name}: hiding plates gives the weight and unit the full stepper row`, () => {
+    const { env, liveWidgets, view } = createMockEnv({
+      source, isCompanion, viewOverride: { state: 'ACTIVE_SET', rest: null },
+    });
+    env.accountSettings = { showPlateBreakdown: false };
+    const render = new Function('env', `with (env) {
+      ${extractFunction(source, 'renderStepper')}
+      ${extractFunction(source, 'renderActiveSetScreen')}
+      return renderActiveSetScreen;
+    }`)(env);
+    render(view);
+    assert.equal(liveWidgets['weight-value'].props.text, '60 KG');
+    assert.equal(liveWidgets['weight-value'].props.h, watchLayout.ACTIVE_SET_LAYOUT.withRpe.rowHeight);
+    assert.equal(liveWidgets['weight-label'], undefined);
+  });
+
   test(`${name}: paused rest does NOT color changed fields purple (must be textPrimary)`, () => {
     const { env, widgets, liveWidgets, view, THEME } = createMockEnv({
       source,

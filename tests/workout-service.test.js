@@ -168,11 +168,17 @@ describe('Workout Service', () => {
     const service = createWorkoutService({
       client,
       catalogService: createMockCatalogService(),
-      getLocalSettings: () => ({ screenOnDuration: 'always' }),
+      getLocalSettings: () => ({ screenOnDuration: 'always', showWorkoutProgress: true,
+        showPlateBreakdown: false, showRestInfo: false }),
     });
 
     const settings = await service.getSettings();
     assert.equal(settings.screenOnDuration, 'always');
+    assert.deepEqual({
+      showWorkoutProgress: settings.showWorkoutProgress,
+      showPlateBreakdown: settings.showPlateBreakdown,
+      showRestInfo: settings.showRestInfo,
+    }, { showWorkoutProgress: true, showPlateBreakdown: false, showRestInfo: false });
   });
 
   test('is stateless and propagates client errors directly without retries', async () => {

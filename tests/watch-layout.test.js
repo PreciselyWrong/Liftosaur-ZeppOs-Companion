@@ -11,6 +11,7 @@ import {
   ACTIVE_SET_ACTION_LAYOUT,
   EXTENSION_CLOCK_LAYOUT,
   PREPARED_TOP_BAR_LAYOUT,
+  WORKOUT_PROGRESS_LAYOUT,
   activeSetLayout,
   extensionActiveSetLayout,
   stepperRowLayout,
@@ -408,6 +409,23 @@ test('sets without RPE get two larger controls and a larger action', () => {
   assert.deepEqual(compact.rows.map((row) => row.key), ['weight', 'reps']);
   assert.ok(compact.rowHeight > ACTIVE_SET_LAYOUT.withRpe.rowHeight);
   assert.ok(compact.actionHeight > ACTIVE_SET_LAYOUT.withRpe.actionHeight);
+});
+
+test('the optional progress bar fits inside the round Active 2 top chord', () => {
+  const { x, y, width, height } = WORKOUT_PROGRESS_LAYOUT;
+  for (const cornerX of [x, x + width]) {
+    for (const cornerY of [y, y + height]) {
+      assert.ok((cornerX - 240) ** 2 + (cornerY - 240) ** 2 < 240 ** 2);
+    }
+  }
+  assert.ok(y + height < 45, 'clear the Companion top controls');
+  assert.ok(y + height < PREPARED_TOP_BAR_LAYOUT.y, 'clear prepared controls');
+});
+
+test('an unlabeled weight row gives its full height to the value and unit', () => {
+  assert.deepEqual(stepperRowLayout(72, false), {
+    valueHeight: 72, labelHeight: 0, labelOffsetY: 72,
+  });
 });
 
 test('sets with RPE keep all three controls inside the design box', () => {
