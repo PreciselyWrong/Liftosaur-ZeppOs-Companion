@@ -458,7 +458,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       Object.assign(env, {
         W: device.width, H: device.height, LAYOUT: createScreenLayout(device),
         px: value => value * scale, font: () => 20 * scale,
-        lastRenderedClock: '', currentClockLabel: () => '12:59 PM',
+        clockTimer: null, lastRenderedClock: '', currentClockLabel: () => '12:59 PM',
         recordingLabel: () => 'Synced', isTearingDown: false, hasBuilt: true,
         isPaused: false, isDispatchingClick: false, isNotesModalOpen: false,
         preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
