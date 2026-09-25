@@ -33,7 +33,7 @@ service. Connect directly to Liftosaur Cloud with shared active-workout synchron
 - Seamless cross-device continuity: continue the same active session on watch or in the official Liftosaur phone app.
 - Full prescriptions: warmups, calculated plate combinations, rep targets, weights, and supersets pre-resolved from your account.
 - One tap per set, with live heart rate and Liftosaur rest timers with haptic vibration alerts.
-- Crash-proof durability: the plan and journal are stored locally on the watch after every set, resuming seamlessly if interrupted.
+- Local recovery: the plan and journal are stored on the watch after critical actions so an interrupted workout can be restored. Recovery remains subject to physical-watch validation.
 - Atomic finish: finishing on the watch automatically updates your history, progression rules, 1RM records, and advances to the next workout day.
 
 Try it without an account: with no API key the application runs in demo mode on sample
@@ -51,6 +51,8 @@ Liftosaur or its author.
 The interface and store listing are available in English only.
 
 ## Assets
+
+Existing `docs/screenshots/` images show an older demo build. They are not approved submission assets. Capture the final release on each target screen shape after physical validation. Store publication remains blocked by the hardware gate; a beta release does not clear it.
 
 | Asset | State |
 | --- | --- |

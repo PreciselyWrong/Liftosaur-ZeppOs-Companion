@@ -9,7 +9,7 @@ Allow about five minutes.
 
 You need:
 
-- A supported Amazfit watch running Zepp OS 3.6 or later (28 models supported):
+- An Amazfit watch running Zepp OS 3.6 or later. Preview packages include these 28 targets; package coverage is not confirmed compatibility:
   - **Round**: Active 2 (Round), Active 2 NFC (Round), Active 3 Premium, Active Edge, Active Max, Balance, Balance 2, Balance 2 XT, Balance 3, Balance 3 Ti, Balance Ultra, Cheetah (Round), Cheetah 2 Pro, Cheetah 2 Ultra, Cheetah Pro, Cheetah Pro Kelvin Kiptum, Falcon, T-Rex 3, T-Rex 3 Pro (44mm), T-Rex 3 Pro (48mm), T-Rex Ultra, T-Rex Ultra 2.
   - **Square**: Active, Active 2 (Square), Active 2 NFC (Square), Bip 6, Bip Max, Cheetah (Square).
 - The **Zepp** app installed and signed in to your account with your watch paired.
@@ -63,7 +63,7 @@ The settings save automatically on your phone.
 
 Under Workout Display, enable **Exercise images** to show the picture supplied by Liftosaur in the workout list, **Info** and **Prepare**. This option is off by default and is configured separately for each app. Images need the phone connection to load; exercise notes remain available if a picture cannot load. Image transfer and display still need physical-watch validation.
 
-This experimental 0.5.10 build keeps up to 32 distinct exercise pictures per app on the phone. Additional pictures show as unavailable. Reopen Info to retry an interrupted download.
+This experimental 0.5.10 development build reuses the 32 most recently used converted pictures across phone Side Service restarts; a missing file is rebuilt. Long-term file retention depends on Zepp and remains under physical validation. Reopen Info to retry an interrupted download.
 
 ### How Direct Sync works
 
@@ -71,7 +71,7 @@ Once configured, the watch connects directly to Liftosaur Cloud:
 - **Live Sync**: Workouts start on Liftosaur Cloud. Completed sets synchronize after workout actions or during the passive refresh window.
 - **Cross-device Continuity**: You can view or continue the same workout on your watch or in the official Liftosaur phone app.
 - **Automatic Progression**: Finishing on the watch automatically updates your history, progression rules, 1RM records, and advances to the next scheduled day.
-- **Special Sets**: For timed sets (countdown timer) or custom prompted variables, the watch prompts you to log that set on the phone app; the watch then automatically adopts the result.
+- **Special Sets**: Timed and unilateral holds run on the watch; see [Timed Sets](timed-sets.md). Custom prompted variables and separate unilateral AMRAP repetitions still require the phone.
 
 ## Step 4: start the application
 

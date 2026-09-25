@@ -22,6 +22,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
     'store-listing.md',
     'tester-guide.md',
     'timed-sets.md',
+    'user-guide.md',
     'workout-extension-hardware-test-plan.md',
     'workout-extension-manual-actions.md',
   ]);
