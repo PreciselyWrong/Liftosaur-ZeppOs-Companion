@@ -173,10 +173,11 @@ const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (c
       code !== WORKOUT_DIAGNOSTIC_CODES.RENDER_END) return null;
   return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
 }, {
+  flushDelayMs: 250,
   runtime: () => readWorkoutRuntimeInfo('workout', appApi.getPackageInfo, deviceInfo, getSystemInfo),
   context: () => {
     let state;
-    try { state = workoutController?.view?.().state; } catch {}
+    try { state = workoutController?.state(); } catch {}
     if (!['NO_PLAN', 'IDLE', 'READY', 'ACTIVE_SET', 'REST', 'PAUSED', 'FINISHED'].includes(state)) state = 'UNKNOWN';
     return {
       screen, state, widgets: activeWidgets.length,
@@ -602,10 +603,10 @@ function addRawWidget(type, props) {
 
 function addActionWidget(props) {
   const { diagnosticAction = 'BUTTON', click_func: handler, ...nativeProps } = props;
-  return addRawWidget(widget.BUTTON, {
+  const actionWidget = addRawWidget(widget.BUTTON, {
     ...nativeProps,
     click_func: typeof handler === 'function' ? (w) => {
-      if (isTearingDown || isPaused || !hasBuilt) return;
+      if (isTearingDown || isPaused || !hasBuilt || isDispatchingClick || !activeWidgets.includes(actionWidget)) return;
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
       isDispatchingClick = true;
       try {
@@ -618,6 +619,7 @@ function addActionWidget(props) {
       }
     } : undefined,
   });
+  return actionWidget;
 }
 
 function addWidget(type, props) {
@@ -1701,6 +1703,7 @@ function renderReadyScreen(view) {
     normal_color: view.totalExercises > 0 ? THEME.primary : THEME.card,
     press_color: THEME.primaryDeep,
     text: 'Start',
+    diagnosticAction: 'START_WORKOUT',
     text_size: font('title'),
     click_func: () => {
       if (view.totalExercises === 0) return;
@@ -2195,6 +2198,7 @@ function renderRestScreen(view) {
     normal_color: rest.isPaused ? THEME.yellow : THEME.card,
     press_color: THEME.cardActive,
     color: rest.isPaused ? 0x000000 : THEME.textPrimary,
+    diagnosticAction: rest.isPaused ? 'RESUME' : 'PAUSE',
     text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
     text_size: font('caption'),
     click_func: () => {
@@ -4016,6 +4020,7 @@ DataWidget(
       hasBuilt = false;
       lifecycleGeneration += 1;
       cancelScheduledRender();
+      workoutDiagnostics.cancel();
       resetConnectionRetry();
       workoutController?.dispose();
       stopClock();

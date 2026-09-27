@@ -220,10 +220,11 @@ const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (c
       code !== WORKOUT_DIAGNOSTIC_CODES.RENDER_END) return null;
   return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
 }, {
+  flushDelayMs: 250,
   runtime: () => readWorkoutRuntimeInfo('companion', appApi.getPackageInfo, deviceInfo, getSystemInfo),
   context: () => ({
     screen,
-    state: session?.view?.().state,
+    state: session?.state(),
     widgets: activeWidgets.length,
     modal: Boolean(isNotesModalOpen || isSyncDetailsOpen || isWorkoutTimerControlsOpen || isEditLastSetOpen),
     overview: Boolean(isOverviewOpen),
@@ -426,7 +427,7 @@ function cancelScheduledRender() {
 
 function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
   return (button) => {
-    if (isTearingDown) return;
+    if (isTearingDown || isDispatchingClick) return;
     workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
     isDispatchingClick = true;
     try {
@@ -440,10 +441,15 @@ function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
 
 function addActionWidget(props) {
   const { diagnosticAction, ...nativeProps } = props;
-  return addRawWidget(widget.BUTTON, {
+  const onClick = wrapNativeAction(nativeProps.click_func, diagnosticAction || 'BUTTON');
+  const actionWidget = addRawWidget(widget.BUTTON, {
     ...nativeProps,
-    click_func: wrapNativeAction(nativeProps.click_func, diagnosticAction || 'BUTTON'),
+    click_func: (button) => {
+      if (!activeWidgets.includes(actionWidget)) return;
+      onClick(button);
+    },
   });
+  return actionWidget;
 }
 
 function addWidget(type, props) {
@@ -2456,6 +2462,7 @@ function renderReadyScreen(view) {
     normal_color: view.totalExercises > 0 ? THEME.primary : THEME.card,
     press_color: THEME.primaryDeep,
     text: 'Start',
+    diagnosticAction: 'START_WORKOUT',
     text_size: font('title'),
     click_func: handleStartWorkout,
   });
@@ -3300,6 +3307,7 @@ function renderRestScreen(view) {
     normal_color: rest.isPaused ? THEME.yellow : THEME.card,
     press_color: THEME.cardActive,
     color: rest.isPaused ? 0x000000 : THEME.textPrimary,
+    diagnosticAction: rest.isPaused ? 'RESUME' : 'PAUSE',
     text: rest.isPaused ? 'Resume' : 'Pause',
     text_size: font('caption'),
     click_func: () => {
@@ -3449,6 +3457,7 @@ function renderRestScreen(view) {
     radius: px(29),
     normal_color: THEME.primary,
     press_color: THEME.primaryDeep,
+    diagnosticAction: 'START_SET',
     text: view.timedSet?.phase === 'REST' ? 'Armed' : 'Start set',
     text_size: font('button'),
     click_func: () => {
@@ -4324,6 +4333,7 @@ Page(
     onDestroy() {
       isTearingDown = true;
       cancelScheduledRender();
+      workoutDiagnostics.cancel();
       if (clockTimer) clearInterval(clockTimer);
       clockTimer = null;
       if (flashTimer) clearTimeout(flashTimer);
