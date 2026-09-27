@@ -1077,6 +1077,7 @@ export function createWorkoutSession({
   }
 
   return {
+    state: () => state,
     view(now = Date.now()) {
       const exercise = currentExercise();
       const prog = currentProgress();

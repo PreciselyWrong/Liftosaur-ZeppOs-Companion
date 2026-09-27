@@ -19,6 +19,7 @@ function fixture() {
       getCurrent() { reads += 1; return 80; }
       onCurrentChange(callback) { callbacks.push(callback); }
     },
+    workoutDiagnostics: { cancel() {} },
     cancelScheduledRender() {}, clockTimer: null, flashTimer: null,
     vibrationTimer: null, connectionRetryTimer: null, exerciseImages: null,
     console: { log() {} },

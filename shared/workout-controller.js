@@ -1088,6 +1088,7 @@ export function createWorkoutController({
     },
     loadPlan,
     restore,
+    state: () => session.state(),
     view: (nowTimestamp = now()) => session.view(nowTimestamp),
     plan: () => dayPlan,
     sync: () => ({
