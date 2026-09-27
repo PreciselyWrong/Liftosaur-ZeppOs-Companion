@@ -57,6 +57,25 @@ const VALID_SCREENS = new Set(['LOADING', 'CONNECTION', 'SETUP', 'EMPTY', 'HOME'
 const VALID_STATES = new Set(['NO_PLAN', 'IDLE', 'READY', 'ACTIVE_SET', 'REST', 'PAUSED', 'FINISHED', 'UNKNOWN']);
 const VALID_PHASES = new Set(['CLEAR', 'SCREEN', 'REDRAW', 'ACTION', 'VIBRATION', 'IMAGE', 'UNKNOWN']);
 
+// Intermediate drawing markers must not rebuild the full session view.
+const CONTEXT_FREE_CODES = new Set([
+  WORKOUT_DIAGNOSTIC_CODES.CLEAR_START,
+  WORKOUT_DIAGNOSTIC_CODES.CLEAR_END,
+  WORKOUT_DIAGNOSTIC_CODES.SCREEN_START,
+  WORKOUT_DIAGNOSTIC_CODES.SCREEN_END,
+  WORKOUT_DIAGNOSTIC_CODES.REDRAW_START,
+  WORKOUT_DIAGNOSTIC_CODES.REDRAW_END,
+  WORKOUT_DIAGNOSTIC_CODES.ACTION_DONE,
+  WORKOUT_DIAGNOSTIC_CODES.JS_ERROR,
+]);
+
+const SYNCHRONOUS_WRITE_CODES = new Set([
+  WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP,
+  WORKOUT_DIAGNOSTIC_CODES.JS_ERROR,
+  WORKOUT_DIAGNOSTIC_CODES.BOOT,
+  WORKOUT_DIAGNOSTIC_CODES.PAUSE,
+]);
+
 function safeEnum(value, allowed) {
   return typeof value === 'string' && allowed.has(value) ? value : undefined;
 }
@@ -215,6 +234,13 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
   let runtimeReadAttempted = false;
   let lastHeartbeatAt = -Infinity;
   let lastMemoryAttemptAt = -Infinity;
+  const flushDelayMs = Number.isSafeInteger(providers?.flushDelayMs) && providers.flushDelayMs >= 0 ? providers.flushDelayMs : 0;
+  const setTimer = typeof providers?.setTimeout === 'function' ? providers.setTimeout : setTimeout;
+  const clearTimer = typeof providers?.clearTimeout === 'function' ? providers.clearTimeout : clearTimeout;
+  let flushTimer = null;
+  let flushGeneration = 0;
+  let isDirty = false;
+
   try {
     enabled = normalizeWorkoutDiagnosticsEnabled(storage?.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY));
     if (enabled) memory = sanitizeReport(storage.getItem(WORKOUT_DIAGNOSTICS_KEY)) || memory;
@@ -222,7 +248,8 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     // Diagnostics must never interfere with the durable workout journal.
   }
 
-  function write(report) {
+  function writeStorage(report) {
+    cancelFlush();
     memory = sanitizeReport(report) || { version: VERSION, events: [] };
     try {
       if (!storage || typeof storage.setItem !== 'function') return false;
@@ -231,6 +258,38 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     } catch {
       return false;
     }
+  }
+
+  function scheduleFlush() {
+    if (!enabled || flushTimer !== null) return;
+    const generation = ++flushGeneration;
+    flushTimer = setTimer(() => {
+      if (generation !== flushGeneration || !enabled) return;
+      flushTimer = null;
+      if (isDirty) {
+        writeStorage(memory);
+      }
+    }, flushDelayMs);
+  }
+
+  function write(report, synchronous = false) {
+    // Each new event and detail is sanitized before entering this bounded buffer.
+    memory = report;
+    isDirty = true;
+    if (synchronous || flushDelayMs === 0) {
+      return writeStorage(memory);
+    }
+    scheduleFlush();
+    return true;
+  }
+
+  function cancelFlush() {
+    flushGeneration += 1;
+    if (flushTimer !== null) {
+      clearTimer(flushTimer);
+      flushTimer = null;
+    }
+    isDirty = false;
   }
 
   let recorder;
@@ -246,7 +305,10 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
       const next = normalizeWorkoutDiagnosticsEnabled(value);
       const wasEnabled = enabled;
       enabled = next;
-      if (!next) memory = { version: VERSION, events: [] };
+      if (!next) {
+        cancelFlush();
+        memory = { version: VERSION, events: [] };
+      }
       if (next !== wasEnabled) {
         runtimeReadAttempted = false;
         lastHeartbeatAt = -Infinity;
@@ -274,7 +336,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
         const at = Math.trunc(now());
         if (!Number.isSafeInteger(at) || at < 0 || at > MAX_DATE_MILLISECONDS) return false;
         let baseContext = null;
-        if (code !== WORKOUT_DIAGNOSTIC_CODES.JS_ERROR) {
+        if (!CONTEXT_FREE_CODES.has(code)) {
           try { baseContext = typeof providers.context === 'function' ? providers.context() : null; } catch {}
         }
         const context = sanitizeContext({ ...(baseContext || {}), ...(rawContext || {}) });
@@ -299,8 +361,9 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
         const events = code === WORKOUT_DIAGNOSTIC_CODES.BOOT
           ? [event]
           : [...memory.events, event].slice(-MAX_EVENTS);
+        const shouldWriteSync = SYNCHRONOUS_WRITE_CODES.has(code) || flushDelayMs === 0;
         let report = reportWithPrevious(events, previousEvents, details, previousDetails);
-        write(report);
+        write(report, shouldWriteSync);
         if ((code === WORKOUT_DIAGNOSTIC_CODES.BUILD || code === WORKOUT_DIAGNOSTIC_CODES.RESTORED || code === WORKOUT_DIAGNOSTIC_CODES.SET_TAP || code === WORKOUT_DIAGNOSTIC_CODES.SET_SAVED || code === WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT || code === WORKOUT_DIAGNOSTIC_CODES.RENDER_END) && at - lastMemoryAttemptAt >= MEMORY_INTERVAL_MS) {
           lastMemoryAttemptAt = at;
           let sampled = null;
@@ -309,7 +372,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
             details = { ...details, lastMemory: { at, memory: sampled } };
             event.memory = sampled;
             report = reportWithPrevious(events, previousEvents, details, previousDetails);
-            write(report);
+            write(report, shouldWriteSync);
           }
         }
         return true;
@@ -323,7 +386,10 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     replace(report) {
       if (!enabled) return false;
       const sanitized = sanitizeReport(report);
-      return sanitized ? write(sanitized) : false;
+      return sanitized ? writeStorage(sanitized) : false;
+    },
+    cancel() {
+      cancelFlush();
     },
     heartbeat() {
       if (!enabled) return false;

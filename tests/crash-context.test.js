@@ -208,14 +208,14 @@ for (const product of ['companion', 'workout']) {
     assert.ok(start >= 0 && end > start);
     const f = fixture();
     const nativeCalls = [];
-    const view = () => ({ state: 'REST' });
+    const state = () => 'REST';
     const env = {
       createWorkoutDiagnostics, readWorkoutRuntimeInfo: diagnostics.readWorkoutRuntimeInfo,
       readWorkoutMemory: diagnostics.readWorkoutMemory, WORKOUT_DIAGNOSTIC_CODES: diagnostics.WORKOUT_DIAGNOSTIC_CODES,
       deviceStorage: f.storage, deviceInfo: { deviceSource: 123, width: 480, height: 480, screenShape: 1 },
       appApi: { getPackageInfo: () => { nativeCalls.push('package'); return { version: { name: '0.5.12', code: 48 } }; } },
       getSystemInfo: () => { nativeCalls.push('system'); return { firmwareVersion: '7.23.0.1', osVersion: '4.0', minAPI: '4.0' }; },
-      screen: 'SESSION', session: { view }, workoutController: { view }, activeWidgets: Array(36).fill({}),
+      screen: 'SESSION', session: { state }, workoutController: { state }, activeWidgets: Array(36).fill({}),
       isNotesModalOpen: true, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false, isEditLastSetOpen: false,
       isOverviewOpen: false, restPresentation: { isPrepared: true }, accountSettings: { exerciseImages: true },
       normalizeExerciseImages: value => value === true,
