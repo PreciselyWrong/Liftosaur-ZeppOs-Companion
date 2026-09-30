@@ -78,6 +78,30 @@ export function normalizeDirectSync(sync, defaultMode = 'LEGACY') {
   };
 }
 
+/**
+ * Merge a list of [start, end] activity intervals into the minimal set of
+ * non-overlapping spans, sorted by start. Adjacent or overlapping intervals are
+ * fused. This keeps `preservedIntervals` bounded to the number of distinct
+ * pauses in a session rather than growing on every poll/adopt.
+ */
+export function coalesceIntervals(intervals) {
+  const valid = (Array.isArray(intervals) ? intervals : [])
+    .filter((iv) => Array.isArray(iv) && iv.length === 2 && Number.isFinite(iv[0]) && Number.isFinite(iv[1]) && iv[1] > iv[0])
+    .map(([start, end]) => [start, end])
+    .sort((a, b) => a[0] - b[0]);
+
+  const merged = [];
+  for (const [start, end] of valid) {
+    const last = merged[merged.length - 1];
+    if (last && start <= last[1]) {
+      if (end > last[1]) last[1] = end;
+    } else {
+      merged.push([start, end]);
+    }
+  }
+  return merged;
+}
+
 export function createWorkoutController({
   store = null,
   now = () => Date.now(),
@@ -182,10 +206,13 @@ export function createWorkoutController({
       .map(([start, end]) => [through === null ? start : Math.max(start, through), end])
       .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start);
 
-    directSync.preservedIntervals = [
+    // Every adoption preserves up to now, so appending alone added one fragment per synced set
+    // for the whole session, each persisted again on every save. Merging keeps one span per
+    // stretch between real pauses.
+    directSync.preservedIntervals = coalesceIntervals([
       ...(Array.isArray(directSync.preservedIntervals) ? directSync.preservedIntervals : []),
       ...nextIntervals,
-    ];
+    ]);
     directSync.intervalsPreservedThrough = capturedAt;
     persist();
   }
@@ -198,10 +225,10 @@ export function createWorkoutController({
       .map(([start, end]) => [through === null ? start : Math.max(start, through), end])
       .filter(([start, end]) => Number.isFinite(start) && Number.isFinite(end) && end > start);
 
-    return [
+    return coalesceIntervals([
       ...(Array.isArray(directSync.preservedIntervals) ? directSync.preservedIntervals : []),
       ...currentIntervals,
-    ];
+    ]);
   }
 
   function preserveLocalExerciseMetadata(serverPlan) {
