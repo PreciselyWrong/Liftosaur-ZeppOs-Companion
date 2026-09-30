@@ -2,7 +2,7 @@ import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
-import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
+import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTICS_EMPTY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 function isDemoApiKey(value) {
   const key = String(value || '').trim().toLowerCase();
@@ -26,15 +26,15 @@ function normalizeScreenOnDuration(value) {
   return [60, 120, 240].includes(seconds) ? seconds : 120;
 }
 
+function normalizeDisplaySetting(key) {
+  return (value) => normalizeWorkoutDisplaySettings({ [key]: value })[key];
+}
+
 const GET_READY_OPTIONS = [
   { name: 'Off', value: '0' },
   { name: '3 sec', value: '3' },
   { name: '5 sec', value: '5' },
   { name: '10 sec', value: '10' },
-];
-const EXERCISE_IMAGE_OPTIONS = [
-  { name: 'Off', value: 'false' },
-  { name: 'On', value: 'true' },
 ];
 const SCREEN_ON_OPTIONS = [
   { name: '60 sec', value: '60' },
@@ -42,20 +42,17 @@ const SCREEN_ON_OPTIONS = [
   { name: '240 sec', value: '240' },
   { name: 'Always', value: 'always' },
 ];
+const API_KEY_STEPS = [
+  '1. Open Liftosaur.',
+  '2. Go to Settings > API Keys.',
+  '3. Copy your personal key.',
+  '4. Paste it above and tap Save key.',
+];
 
-function selectedOptionName(options, value) {
-  const selected = options.find((option) => option.value === String(value));
-  return selected ? selected.name : options[0].name;
-}
-
+// Zepp Select shows no current choice on its own, so the label carries it.
 function settingSummary(label, options, value) {
-  return `${label}: ${selectedOptionName(options, value)}`;
-}
-
-function saveDisplaySetting(state, storage, key, value) {
-  const enabled = normalizeWorkoutDisplaySettings({ [key]: value })[key];
-  state[key] = enabled;
-  storage.setItem(key, String(enabled));
+  const selected = options.find((option) => option.value === String(value)) || options[0];
+  return `${label}: ${selected.name}`;
 }
 
 const CARD_STYLE = {
@@ -83,53 +80,87 @@ const STATUS_STYLE = {
   textAlign: 'center',
 };
 
-function settingsHeading(title, description) {
-  return View(
-    {
-      style: {
-        width: '100%',
-        display: 'flex',
-        flexDirection: 'column',
-        alignItems: 'center',
-        textAlign: 'center',
-        marginBottom: '12px',
-      },
-    },
-    [
-      Text(
-        {
-          paragraph: true,
-          align: 'center',
-          style: {
-            display: 'block',
-            width: '100%',
-            marginBottom: '4px',
-            color: '#6D4AE8',
-            fontSize: '20px',
-            fontWeight: 'bold',
-            textAlign: 'center',
+const SECTION_TITLE_STYLE = {
+  display: 'block',
+  width: '100%',
+  marginBottom: '8px',
+  color: '#6D4AE8',
+  fontSize: '20px',
+  fontWeight: 'bold',
+  textAlign: 'center',
+};
+
+const LABEL_STYLE = {
+  display: 'block',
+  width: '100%',
+  color: '#111827',
+  fontSize: '16px',
+  fontWeight: '600',
+  textAlign: 'center',
+};
+
+const HELPER_STYLE = {
+  display: 'block',
+  width: '100%',
+  marginBottom: '12px',
+  color: '#6B7280',
+  fontSize: '15px',
+  lineHeight: '20px',
+  textAlign: 'center',
+};
+
+const BODY_STYLE = {
+  display: 'block',
+  width: '100%',
+  marginBottom: '4px',
+  color: '#374151',
+  fontSize: '15px',
+  lineHeight: '20px',
+  textAlign: 'left',
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
+};
+
+function helperText(text) {
+  return Text({ paragraph: true, align: 'center', style: HELPER_STYLE }, text);
+}
+
+function bodyText(text) {
+  return Text({ paragraph: true, align: 'left', style: BODY_STYLE }, text);
+}
+
+function withHelper(control, helper) {
+  return helper ? [control, helperText(helper)] : [control];
+}
+
+function section(title, description, children) {
+  return View({ style: CARD_STYLE }, [
+    Text({ paragraph: true, align: 'center', style: SECTION_TITLE_STYLE }, title),
+    ...(description ? [helperText(description)] : []),
+    ...children,
+  ]);
+}
+
+function diagnosticsReport(stored) {
+  const report = formatWorkoutDiagnostics(stored);
+  return [
+    Text({ paragraph: true, align: 'center', style: LABEL_STYLE }, 'Recent watch steps'),
+    helperText('Sent when Lifto connects or resumes.'),
+    ...report.split('\n').map(bodyText),
+    ...(report !== WORKOUT_DIAGNOSTICS_EMPTY
+      ? withHelper(TextInput({
+          label: 'Select and copy logs',
+          multiline: true,
+          value: report,
+          rows: 12,
+          labelStyle: LABEL_STYLE,
+          subStyle: { width: '100%' },
+          onChange: () => {
+            // Keep selection enabled without saving edits to the diagnostic report.
           },
-        },
-        title
-      ),
-      Text(
-        {
-          paragraph: true,
-          align: 'center',
-          style: {
-            display: 'block',
-            width: '100%',
-            maxWidth: '360px',
-            color: '#6B7280',
-            fontSize: '15px',
-            lineHeight: '20px',
-            textAlign: 'center',
-          },
-        },
-        description
-      ),
-    ]
-  );
+        }), 'Open the field, then long-press, Select all and Copy.')
+      : []),
+  ];
 }
 
 AppSettingsPage({
@@ -147,17 +178,40 @@ AppSettingsPage({
 
   build(props) {
     this.getStorage(props);
+    const storage = props.settingsStorage;
 
     const trimmedKey = (this.state.apiKey || '').trim();
     const hasKey = !isDemoApiKey(trimmedKey) && trimmedKey.length > 5;
     const maskedKey = hasKey
       ? `${trimmedKey.slice(0, 8)}****${trimmedKey.slice(-4)}`
       : 'None';
-    const getReadyValue = String(this.state.getReadySeconds);
-    const exerciseImagesValue = String(this.state.exerciseImages);
-    const screenOnValue = String(this.state.screenOnDuration);
-    const diagnosticText = formatWorkoutDiagnostics(props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_KEY));
-    const diagnosticLines = diagnosticText === 'No watch diagnostics yet' ? [] : diagnosticText.split('\n');
+
+    // Every control saves its normalized value as a string, the shape all phone and watch readers accept.
+    const save = (key, storageKey, value) => {
+      this.state[key] = value;
+      storage.setItem(storageKey, String(value));
+      return value;
+    };
+    const toggleSetting = ({ label, key, storageKey = key, normalize, helper, onSaved = () => {} }) => withHelper(
+      Toggle({
+        label,
+        value: this.state[key],
+        onChange: (value) => onSaved(save(key, storageKey, normalize(value))),
+      }),
+      helper
+    );
+    const selectSetting = ({ label, key, options, normalize, helper }) => {
+      const value = String(this.state[key]);
+      return withHelper(
+        Select({
+          label: settingSummary(label, options, value),
+          value,
+          options,
+          onChange: (next) => save(key, key, normalize(next)),
+        }),
+        helper
+      );
+    };
 
     return View(
       {
@@ -168,337 +222,173 @@ AppSettingsPage({
         },
       },
       [
-        View(
-          {
-            style: CARD_STYLE,
-          },
-          [
-            settingsHeading('Lifto Companion', 'Liftosaur workouts on your Amazfit.'),
-            View(
-              {
-                style: {
-                  ...STATUS_STYLE,
-                  backgroundColor: hasKey ? '#ECFDF5' : '#F5F3FF',
-                  border: `1px solid ${hasKey ? '#A7F3D0' : '#DDD6FE'}`,
-                },
-              },
-              [
-                Text(
-                  {
-                    paragraph: true,
-                    align: 'center',
-                    style: {
-                      display: 'block',
-                      width: '100%',
-                      marginBottom: '2px',
-                      fontSize: '16px',
-                      fontWeight: 'bold',
-                      color: hasKey ? '#065F46' : '#5B43B5',
-                      textAlign: 'center',
-                    },
-                  },
-                  hasKey ? 'Connected to Liftosaur' : 'Demo mode'
-                ),
-                Text(
-                  {
-                    paragraph: true,
-                    align: 'center',
-                    style: {
-                      display: 'block',
-                      width: '100%',
-                      fontSize: '15px',
-                      color: hasKey ? '#047857' : '#6D4AE8',
-                      textAlign: 'center',
-                    },
-                  },
-                  hasKey ? maskedKey : 'Add an API key to sync your workouts.'
-                ),
-              ]
-            ),
-            TextInput({
-              label: 'Liftosaur API key',
-              labelStyle: {
-                width: '100%',
-                color: '#111827',
-                fontSize: '16px',
-                fontWeight: '600',
-                textAlign: 'center',
-              },
-              placeholder: 'Paste lftsk_... here',
-              value: this.state.apiKey,
-              settingsKey: 'apiKey',
-              subStyle: {
-                color: '#6B7280',
-                fontSize: '15px',
-                textAlign: 'center',
-              },
-              description: hasKey ? 'Tap to replace your key' : 'Tap to add your key',
-              onChange: (val) => {
-                const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
-                this.state.apiKey = clean;
-                props.settingsStorage.setItem('apiKey', clean);
-              },
-            }),
-            Button({
-              label: 'Save key',
+        section('Connection', null, [
+          View(
+            {
               style: {
-                width: '100%',
-                marginTop: '12px',
-                padding: '12px',
-                backgroundColor: '#6D4AE8',
-                color: '#FFFFFF',
-                borderRadius: '10px',
-                fontSize: '17px',
-                fontWeight: 'bold',
-                textAlign: 'center',
+                ...STATUS_STYLE,
+                backgroundColor: hasKey ? '#ECFDF5' : '#F5F3FF',
+                border: `1px solid ${hasKey ? '#A7F3D0' : '#DDD6FE'}`,
               },
-              onClick: () => {
-                if (this.state.apiKey) {
-                  props.settingsStorage.setItem('apiKey', this.state.apiKey.trim());
-                }
-              },
-            }),
-            hasKey
-              ? Button({
-                  label: 'Disconnect',
-                  style: {
-                    width: '100%',
-                    marginTop: '8px',
-                    padding: '10px',
-                    backgroundColor: '#FEF2F2',
-                    color: '#B91C1C',
-                    border: '1px solid #FECACA',
-                    borderRadius: '10px',
-                    fontSize: '16px',
-                    fontWeight: '600',
-                    textAlign: 'center',
-                  },
-                  onClick: () => {
-                    this.state.apiKey = '';
-                    props.settingsStorage.removeItem('apiKey');
-                  },
-                })
-              : null,
-          ].filter(Boolean)
-        ),
-
-        View(
-          {
-            style: CARD_STYLE,
-          },
-          [
-            settingsHeading('Workout settings', 'Tune what happens on your watch.'),
-            Select({
-              label: settingSummary('Ready countdown', GET_READY_OPTIONS, getReadyValue),
-              value: getReadyValue,
-              options: GET_READY_OPTIONS,
-              onChange: (value) => {
-                const seconds = normalizeGetReadySeconds(value);
-                this.state.getReadySeconds = seconds;
-                props.settingsStorage.setItem('getReadySeconds', String(seconds));
-              },
-            }),
-            Toggle({
-              label: 'Auto prepare',
-              value: this.state.autoPrepare,
-              onChange: (value) => {
-                const enabled = normalizeAutoPrepare(value);
-                this.state.autoPrepare = enabled;
-                props.settingsStorage.setItem('autoPrepare', String(enabled));
-              },
-            }),
-            Text(
-              {
-                paragraph: true,
-                align: 'center',
-                style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' },
-              },
-              'Open the next set while rest runs.'
-            ),
-            Select({
-              label: settingSummary('Exercise images', EXERCISE_IMAGE_OPTIONS, exerciseImagesValue),
-              value: exerciseImagesValue,
-              options: EXERCISE_IMAGE_OPTIONS,
-              onChange: (value) => {
-                this.state.exerciseImages = normalizeExerciseImages(value);
-                props.settingsStorage.setItem('exerciseImages', String(this.state.exerciseImages));
-              },
-            }),
-            settingsHeading('Workout display', 'Choose what appears during a workout.'),
-            Toggle({
-              label: 'Workout progress',
-              value: this.state.showWorkoutProgress,
-              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showWorkoutProgress', value),
-            }),
-            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
-              'Show completed sets across the workout at the top of the watch.'),
-            Toggle({
-              label: 'Plate breakdown',
-              value: this.state.showPlateBreakdown,
-              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showPlateBreakdown', value),
-            }),
-            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
-              'Show plates during rest and while editing a set.'),
-            Toggle({
-              label: 'Rest Info button',
-              value: this.state.showRestInfo,
-              onChange: (value) => saveDisplaySetting(this.state, props.settingsStorage, 'showRestInfo', value),
-            }),
-            Text({ paragraph: true, align: 'center', style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' } },
-              'Keep exercise details available from the rest preview.'),
-            Select({
-              label: settingSummary('Screen timeout', SCREEN_ON_OPTIONS, screenOnValue),
-              value: screenOnValue,
-              options: SCREEN_ON_OPTIONS,
-              onChange: (value) => {
-                const duration = normalizeScreenOnDuration(value);
-                this.state.screenOnDuration = duration;
-                props.settingsStorage.setItem('screenOnDuration', String(duration));
-              },
-            }),
-            Toggle({
-              label: 'Record watch diagnostics',
-              value: this.state.workoutDiagnosticsEnabled,
-              onChange: (value) => {
-                const enabled = normalizeWorkoutDiagnosticsEnabled(value);
-                this.state.workoutDiagnosticsEnabled = enabled;
-                props.settingsStorage.setItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY, String(enabled));
-                if (!enabled) props.settingsStorage.removeItem(WORKOUT_DIAGNOSTICS_KEY);
-              },
-            }),
-            Text(
-              {
-                paragraph: true,
-                align: 'center',
-                style: { width: '100%', color: '#6B7280', fontSize: '15px', textAlign: 'center' },
-              },
-              'Optional. Open this Lifto app on the watch after changing this setting.'
-            ),
-            View(
-              {
-                style: {
-                  width: '100%',
-                  marginTop: '10px',
-                  padding: '10px 12px',
-                  backgroundColor: '#F5F3FF',
-                  borderRadius: '10px',
-                  boxSizing: 'border-box',
-                },
-              },
+            },
+            [
               Text(
                 {
                   paragraph: true,
                   align: 'center',
                   style: {
+                    display: 'block',
                     width: '100%',
-                    color: '#5B43B5',
-                    fontSize: '15px',
-                    lineHeight: '18px',
+                    marginBottom: '2px',
+                    fontSize: '16px',
+                    fontWeight: 'bold',
+                    color: hasKey ? '#065F46' : '#5B43B5',
                     textAlign: 'center',
                   },
                 },
-                'Rest timers follow your Liftosaur settings.'
-              )
-            ),
-          ]
-        ),
-
-        View(
-          {
-            style: CARD_STYLE,
-          },
-          [
-            settingsHeading('Account help', 'Find your API key in Liftosaur.'),
-            Text(
-              {
-                paragraph: true,
-                align: 'left',
-                style: {
-                  display: 'block',
-                  width: '100%',
-                  fontSize: '16px',
-                  color: '#374151',
-                  lineHeight: '24px',
-                  textAlign: 'left',
-                  whiteSpace: 'pre-line',
-                },
-              },
-              '1. Open Liftosaur.\n2. Go to Settings > API Keys.\n3. Copy your personal key.\n4. Paste it above and tap Save key.'
-            ),
-          ]
-        ),
-        this.state.workoutDiagnosticsEnabled
-          ? View(
-              { style: CARD_STYLE },
-              [
-                settingsHeading(
-                  'Watch diagnostics',
-                  'Recent watch steps received when Lifto connects or resumes. All times are UTC.'
-                ),
-                ...(diagnosticLines.length > 0 ? diagnosticLines : ['No watch diagnostics yet']).map((line) => Text(
-                  {
-                    paragraph: true,
-                    align: 'left',
-                    style: {
-                      display: 'block',
-                      width: '100%',
-                      marginBottom: '4px',
-                      color: '#374151',
-                      fontSize: '15px',
-                      lineHeight: '18px',
-                      textAlign: 'left',
-                      userSelect: 'text',
-                      WebkitUserSelect: 'text',
-                    },
+                hasKey ? 'Connected to Liftosaur' : 'Demo mode'
+              ),
+              Text(
+                {
+                  paragraph: true,
+                  align: 'center',
+                  style: {
+                    display: 'block',
+                    width: '100%',
+                    fontSize: '15px',
+                    color: hasKey ? '#047857' : '#6D4AE8',
+                    textAlign: 'center',
                   },
-                  line
-                )),
-                ...(diagnosticLines.length > 0
-                  ? [
-                      Text(
-                        {
-                          paragraph: true,
-                          align: 'left',
-                          style: {
-                            display: 'block',
-                            width: '100%',
-                            marginTop: '12px',
-                            marginBottom: '6px',
-                            color: '#6B7280',
-                            fontSize: '15px',
-                            lineHeight: '18px',
-                            textAlign: 'left',
-                            userSelect: 'text',
-                            WebkitUserSelect: 'text',
-                          },
-                        },
-                        'Open the text field, then long-press, Select all and Copy.'
-                      ),
-                      TextInput({
-                        label: 'Select and copy logs',
-                        multiline: true,
-                        value: diagnosticText,
-                        rows: 12,
-                        labelStyle: {
-                          width: '100%',
-                          color: '#111827',
-                          fontSize: '16px',
-                          fontWeight: '600',
-                          textAlign: 'left',
-                        },
-                        subStyle: {
-                          width: '100%',
-                        },
-                        onChange: () => {
-                          // Keep selection enabled without saving edits to the diagnostic report.
-                        },
-                      }),
-                    ]
-                  : []),
-              ]
-            )
-          : null,
-      ].filter(Boolean)
+                },
+                hasKey ? maskedKey : 'Add an API key to sync your workouts.'
+              ),
+            ]
+          ),
+          TextInput({
+            label: 'Liftosaur API key',
+            labelStyle: LABEL_STYLE,
+            placeholder: 'Paste lftsk_... here',
+            value: this.state.apiKey,
+            settingsKey: 'apiKey',
+            subStyle: {
+              color: '#6B7280',
+              fontSize: '15px',
+              textAlign: 'center',
+            },
+            description: hasKey ? 'Tap to replace your key' : 'Tap to add your key',
+            onChange: (val) => {
+              const clean = typeof val === 'object' && val !== null ? (val.value || '') : String(val || '');
+              this.state.apiKey = clean;
+              storage.setItem('apiKey', clean);
+            },
+          }),
+          Button({
+            label: 'Save key',
+            style: {
+              width: '100%',
+              marginTop: '12px',
+              padding: '12px',
+              backgroundColor: '#6D4AE8',
+              color: '#FFFFFF',
+              borderRadius: '10px',
+              fontSize: '17px',
+              fontWeight: 'bold',
+              textAlign: 'center',
+            },
+            onClick: () => {
+              if (this.state.apiKey) {
+                storage.setItem('apiKey', this.state.apiKey.trim());
+              }
+            },
+          }),
+          ...(hasKey
+            ? [Button({
+                label: 'Disconnect',
+                style: {
+                  width: '100%',
+                  marginTop: '8px',
+                  padding: '10px',
+                  backgroundColor: '#FEF2F2',
+                  color: '#B91C1C',
+                  border: '1px solid #FECACA',
+                  borderRadius: '10px',
+                  fontSize: '16px',
+                  fontWeight: '600',
+                  textAlign: 'center',
+                },
+                onClick: () => {
+                  this.state.apiKey = '';
+                  storage.removeItem('apiKey');
+                },
+              })]
+            : []),
+        ]),
+
+        section('Sets and rest', 'Rest timers follow your Liftosaur settings.', [
+          ...toggleSetting({
+            label: 'Auto prepare',
+            key: 'autoPrepare',
+            normalize: normalizeAutoPrepare,
+            helper: 'Open the next set while rest runs.',
+          }),
+          ...selectSetting({
+            label: 'Ready countdown',
+            key: 'getReadySeconds',
+            options: GET_READY_OPTIONS,
+            normalize: normalizeGetReadySeconds,
+            helper: 'Counts down before a timed set starts.',
+          }),
+        ]),
+
+        section('Workout display', null, [
+          ...selectSetting({
+            label: 'Screen timeout',
+            key: 'screenOnDuration',
+            options: SCREEN_ON_OPTIONS,
+            normalize: normalizeScreenOnDuration,
+          }),
+          ...toggleSetting({
+            label: 'Exercise images',
+            key: 'exerciseImages',
+            normalize: normalizeExerciseImages,
+            helper: 'Show pictures in the list, Info and Prepare.',
+          }),
+          ...toggleSetting({
+            label: 'Workout progress',
+            key: 'showWorkoutProgress',
+            normalize: normalizeDisplaySetting('showWorkoutProgress'),
+            helper: 'Show completed sets at the top of the watch.',
+          }),
+          ...toggleSetting({
+            label: 'Plate breakdown',
+            key: 'showPlateBreakdown',
+            normalize: normalizeDisplaySetting('showPlateBreakdown'),
+            helper: 'Show plates during rest and while editing a set.',
+          }),
+          ...toggleSetting({
+            label: 'Rest Info button',
+            key: 'showRestInfo',
+            normalize: normalizeDisplaySetting('showRestInfo'),
+            helper: 'Keep exercise details available from the rest preview.',
+          }),
+        ]),
+
+        section('Diagnostics', null, [
+          ...toggleSetting({
+            label: 'Record watch diagnostics',
+            key: 'workoutDiagnosticsEnabled',
+            storageKey: WORKOUT_DIAGNOSTICS_ENABLED_KEY,
+            normalize: normalizeWorkoutDiagnosticsEnabled,
+            helper: 'Open this Lifto app on the watch to apply the change.',
+            onSaved: (enabled) => {
+              if (!enabled) storage.removeItem(WORKOUT_DIAGNOSTICS_KEY);
+            },
+          }),
+          ...(this.state.workoutDiagnosticsEnabled ? diagnosticsReport(storage.getItem(WORKOUT_DIAGNOSTICS_KEY)) : []),
+        ]),
+
+        section('Help', 'Find your API key in Liftosaur.', API_KEY_STEPS.map(bodyText)),
+      ]
     );
   },
 

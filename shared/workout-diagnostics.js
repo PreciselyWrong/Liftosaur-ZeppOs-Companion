@@ -634,9 +634,11 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
   return recorder;
 }
 
+export const WORKOUT_DIAGNOSTICS_EMPTY = 'No watch diagnostics yet';
+
 export function formatWorkoutDiagnostics(raw) {
   const report = sanitizeReport(raw);
-  if (!report || (report.events.length === 0 && !report.previousRuns?.length)) return 'No watch diagnostics yet';
+  if (!report || (report.events.length === 0 && !report.previousRuns?.length)) return WORKOUT_DIAGNOSTICS_EMPTY;
   const mib = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
   const formatEvent = (event, index, runEvents) => {
     const elapsedMs = index === 0 ? null : event.at - runEvents[index - 1].at;
