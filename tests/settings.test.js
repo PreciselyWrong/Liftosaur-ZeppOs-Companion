@@ -6,7 +6,7 @@ import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
 import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
-import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTIC_CODES, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
+import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTICS_EMPTY, WORKOUT_DIAGNOSTIC_CODES, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
 const source = fs.readFileSync(path.join(process.cwd(), 'setting', 'index.js'), 'utf8');
 const appSideSource = fs.readFileSync(path.join(process.cwd(), 'app-side', 'index.js'), 'utf8');
@@ -20,6 +20,7 @@ new Function(
   'normalizeWorkoutDisplaySettings',
   'WORKOUT_DIAGNOSTICS_KEY',
   'WORKOUT_DIAGNOSTICS_ENABLED_KEY',
+  'WORKOUT_DIAGNOSTICS_EMPTY',
   'formatWorkoutDiagnostics',
   'normalizeWorkoutDiagnosticsEnabled',
   'View',
@@ -37,6 +38,7 @@ new Function(
   normalizeWorkoutDisplaySettings,
   WORKOUT_DIAGNOSTICS_KEY,
   WORKOUT_DIAGNOSTICS_ENABLED_KEY,
+  WORKOUT_DIAGNOSTICS_EMPTY,
   formatWorkoutDiagnostics,
   normalizeWorkoutDiagnosticsEnabled,
   component('View'),
@@ -80,16 +82,33 @@ function renderSettings(initial = {}) {
   };
   const context = { state: {}, getStorage: settingsPage.getStorage };
   const tree = settingsPage.build.call(context, props);
-  const selects = [];
+  return { tree, selects: collect(tree, 'Select'), writes, values };
+}
+
+function collect(tree, type) {
+  const found = [];
   const visit = (node) => {
     if (!node) return;
     if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'Select') selects.push(node);
+    if (node.type === type) found.push(node);
     visit(node.children);
   };
   visit(tree);
-  return { tree, selects, writes, values };
+  return found;
 }
+
+const texts = (tree) => collect(tree, 'Text').flatMap(({ children }) => children.filter((value) => typeof value === 'string'));
+const toggle = (tree, label) => collect(tree, 'Toggle').find(({ props }) => props.label === label);
+const sections = (tree) => tree.children[0].map((card) => card.children[0]);
+const CONTROL_TYPES = ['Toggle', 'Select', 'TextInput', 'Button'];
+const YES_NO_SETTINGS = [
+  ['Auto prepare', 'autoPrepare', 'autoPrepare'],
+  ['Exercise images', 'exerciseImages', 'exerciseImages'],
+  ['Workout progress', 'showWorkoutProgress', 'showWorkoutProgress'],
+  ['Plate breakdown', 'showPlateBreakdown', 'showPlateBreakdown'],
+  ['Rest Info button', 'showRestInfo', 'showRestInfo'],
+  ['Record watch diagnostics', 'workoutDiagnosticsEnabled', WORKOUT_DIAGNOSTICS_ENABLED_KEY],
+];
 
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
@@ -104,22 +123,50 @@ test('exercise images are opt-in and preserve the saved preference', () => {
   assert.equal(loadSettings({ exerciseImages: 'false' }).state.exerciseImages, false);
 });
 
+test('every yes/no setting is a Toggle and only multi-value settings are dropdowns', () => {
+  const { tree, selects } = renderSettings();
+
+  assert.deepEqual(collect(tree, 'Toggle').map(({ props }) => props.label), YES_NO_SETTINGS.map(([label]) => label));
+  for (const { props } of selects) assert.ok(props.options.length > 2, props.label);
+  for (const [label, stateKey] of YES_NO_SETTINGS) {
+    assert.equal(typeof toggle(tree, label).props.value, 'boolean', label);
+    assert.equal(toggle(tree, label).props.value, loadSettings().state[stateKey], label);
+  }
+});
+
+test('every Toggle saves the same true or false string its readers already understand', () => {
+  for (const [label, stateKey, storageKey] of YES_NO_SETTINGS) {
+    for (const enabled of [true, false]) {
+      const { tree, writes } = renderSettings({ [storageKey]: String(!enabled) });
+      toggle(tree, label).props.onChange(enabled);
+      assert.deepEqual(writes, [[storageKey, String(enabled)]], label);
+      assert.equal(loadSettings({ [storageKey]: String(enabled) }).state[stateKey], enabled, label);
+    }
+  }
+});
+
+test('Exercise images keeps the value saved by the former On/Off dropdown', () => {
+  // The dropdown saved 'true' or 'false'; its first release saved the raw boolean.
+  for (const [stored, enabled] of [[undefined, false], ['false', false], ['true', true], [false, false], [true, true]]) {
+    const { tree } = renderSettings(stored === undefined ? {} : { exerciseImages: stored });
+    assert.equal(toggle(tree, 'Exercise images').props.value, enabled, String(stored));
+  }
+
+  const { tree, writes } = renderSettings({ exerciseImages: 'false' });
+  toggle(tree, 'Exercise images').props.onChange(true);
+  toggle(tree, 'Exercise images').props.onChange(false);
+  assert.deepEqual(writes, [['exerciseImages', 'true'], ['exerciseImages', 'false']]);
+  assert.deepEqual(writes.map(([, value]) => normalizeExerciseImages(value)), [true, false]);
+});
+
 test('Workout display switches preserve defaults and save each independent choice', () => {
   const initial = renderSettings();
-  const toggles = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'Toggle') toggles.push(node);
-    visit(node.children);
-  };
-  visit(initial.tree);
   for (const [label, key, initialValue, nextValue] of [
     ['Workout progress', 'showWorkoutProgress', false, true],
     ['Plate breakdown', 'showPlateBreakdown', true, false],
     ['Rest Info button', 'showRestInfo', true, false],
   ]) {
-    const control = toggles.find(({ props }) => props.label === label);
+    const control = toggle(initial.tree, label);
     assert.ok(control, label);
     assert.equal(control.props.value, initialValue);
     control.props.onChange(nextValue);
@@ -133,21 +180,10 @@ test('Auto prepare is opt-in, persists On and Off, and explains its behavior', (
   assert.equal(loadSettings({ autoPrepare: 'true' }).state.autoPrepare, true);
 
   const rendered = renderSettings();
-  const toggles = [];
-  const text = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'Toggle') toggles.push(node);
-    if (node.type === 'Text') text.push(...node.children.filter((value) => typeof value === 'string'));
-    visit(node.children);
-  };
-  visit(rendered.tree);
-
-  const autoPrepare = toggles.find(({ props }) => props.label === 'Auto prepare');
+  const autoPrepare = toggle(rendered.tree, 'Auto prepare');
   assert.ok(autoPrepare);
   assert.equal(autoPrepare.props.value, false);
-  assert.ok(text.includes('Open the next set while rest runs.'));
+  assert.ok(texts(rendered.tree).includes('Open the next set while rest runs.'));
 
   autoPrepare.props.onChange(true);
   autoPrepare.props.onChange(false);
@@ -157,39 +193,111 @@ test('Auto prepare is opt-in, persists On and Off, and explains its behavior', (
 test('every dropdown shows its current choice and persists a string value', () => {
   const { selects, writes } = renderSettings();
 
-  assert.deepEqual(selects.map(({ props }) => props.value), ['5', 'false', '120']);
-  assert.deepEqual(selects.map(({ props }) => props.options.length), [4, 2, 4]);
+  assert.deepEqual(selects.map(({ props }) => props.value), ['5', '120']);
+  assert.deepEqual(selects.map(({ props }) => props.options.length), [4, 4]);
   assert.deepEqual(selects.map(({ props }) => props.label), [
     'Ready countdown: 5 sec',
-    'Exercise images: Off',
     'Screen timeout: 120 sec',
   ]);
-  assert.deepEqual(selects.map(({ props }) => props.title), [undefined, undefined, undefined]);
+  assert.deepEqual(selects.map(({ props }) => props.title), [undefined, undefined]);
 
   selects[0].props.onChange('10');
-  selects[1].props.onChange('true');
-  selects[2].props.onChange('always');
+  selects[1].props.onChange('always');
   assert.deepEqual(writes, [
     ['getReadySeconds', '10'],
-    ['exerciseImages', 'true'],
     ['screenOnDuration', 'always'],
   ]);
 });
 
-test('the settings page is three coherent cards with centered headings and compact controls', () => {
-  const { tree } = renderSettings();
-  const cardStyle = source.slice(source.indexOf('const CARD_STYLE'), source.indexOf('function settingsHeading'));
+test('settings are grouped in topic sections, most used first', () => {
+  const layout = (tree) => sections(tree).map(([title, ...children]) => [
+    title.children[0],
+    children.filter(({ type }) => CONTROL_TYPES.includes(type)).map(({ props }) => props.label).join(', '),
+  ]);
 
-  assert.equal(tree.children[0].length, 3);
+  assert.deepEqual(layout(renderSettings().tree), [
+    ['Connection', 'Liftosaur API key, Save key'],
+    ['Sets and rest', 'Auto prepare, Ready countdown: 5 sec'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Diagnostics', 'Record watch diagnostics'],
+    ['Help', ''],
+  ]);
+  assert.deepEqual(layout(renderSettings({
+    apiKey: 'lftsk_example_key',
+    [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
+    [WORKOUT_DIAGNOSTICS_KEY]: JSON.stringify({ version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] }),
+  }).tree), [
+    ['Connection', 'Liftosaur API key, Save key, Disconnect'],
+    ['Sets and rest', 'Auto prepare, Ready countdown: 5 sec'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Diagnostics', 'Record watch diagnostics, Select and copy logs'],
+    ['Help', ''],
+  ]);
+});
+
+test('each explained control has one identically styled helper right below it', () => {
+  const { tree } = renderSettings({
+    [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
+    [WORKOUT_DIAGNOSTICS_KEY]: JSON.stringify({ version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] }),
+  });
+  const helpers = new Map([
+    ['Liftosaur API key', null],
+    ['Save key', null],
+    ['Auto prepare', 'Open the next set while rest runs.'],
+    ['Ready countdown: 5 sec', 'Counts down before a timed set starts.'],
+    ['Screen timeout: 120 sec', null],
+    ['Exercise images', 'Show pictures in the list, Info and Prepare.'],
+    ['Workout progress', 'Show completed sets at the top of the watch.'],
+    ['Plate breakdown', 'Show plates during rest and while editing a set.'],
+    ['Rest Info button', 'Keep exercise details available from the rest preview.'],
+    ['Record watch diagnostics', 'Open this Lifto app on the watch to apply the change.'],
+    ['Select and copy logs', 'Open the field, then long-press, Select all and Copy.'],
+  ]);
+  const helperStyles = [];
+  for (const children of sections(tree)) {
+    children.forEach((node, index) => {
+      if (!CONTROL_TYPES.includes(node.type)) return;
+      assert.ok(helpers.has(node.props.label), node.props.label);
+      const next = children[index + 1];
+      const helper = helpers.get(node.props.label);
+      if (!helper) {
+        assert.ok(!next || CONTROL_TYPES.includes(next.type), `${node.props.label} needs no helper`);
+        return;
+      }
+      assert.equal(next.type, 'Text', node.props.label);
+      assert.deepEqual(next.children, [helper]);
+      helperStyles.push(next.props);
+    });
+  }
+
+  assert.equal(helperStyles.length, [...helpers.values()].filter(Boolean).length);
+  for (const style of helperStyles) assert.deepEqual(style, helperStyles[0]);
+  const [apiKey, copyLogs] = collect(tree, 'TextInput');
+  assert.deepEqual(copyLogs.props.labelStyle, apiKey.props.labelStyle);
+});
+
+test('the rest timer note explains its section instead of floating between controls', () => {
+  const [, setsAndRest] = sections(renderSettings().tree);
+
+  assert.equal(setsAndRest[0].children[0], 'Sets and rest');
+  assert.deepEqual(setsAndRest[1].children, ['Rest timers follow your Liftosaur settings.']);
+  assert.equal(CONTROL_TYPES.includes(setsAndRest[2].type), true);
+});
+
+test('the settings page uses flex column cards with centered section titles', () => {
+  const cardStyle = source.slice(source.indexOf('const CARD_STYLE'), source.indexOf('};', source.indexOf('const CARD_STYLE')));
+
   assert.match(cardStyle, /display:\s*'flex'/);
   assert.match(cardStyle, /flexDirection:\s*'column'/);
-  assert.match(source, /'Lifto Companion'/);
-  assert.match(source, /'Workout settings'/);
-  assert.match(source, /'Account help'/);
-  assert.match(source, /alignItems:\s*'center'[\s\S]*?textAlign:\s*'center'/);
+  for (const [title] of sections(renderSettings().tree)) {
+    assert.equal(title.type, 'Text');
+    assert.equal(title.props.style.textAlign, 'center');
+  }
+  assert.doesNotMatch(source, /'Lifto Companion'|'Workout settings'|'Account help'/);
   assert.doesNotMatch(source, /title:\s*'Get ready countdown'/);
   assert.doesNotMatch(source, /Exercise images \(List \+ Info \+ Prepare\)/);
   assert.doesNotMatch(source, /'REST TIMERS'|'WORKOUT DISPLAY'|'API KEY'/);
+  assert.doesNotMatch(source, /pre-line|\. \\n|\\n\d/, 'separate Text elements, not newlines, lay out the page');
 });
 
 test('phone settings show watch diagnostic steps only after a sanitized report arrives', () => {
@@ -198,45 +306,28 @@ test('phone settings show watch diagnostic steps only after a sanitized report a
     events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }],
   });
   const { tree } = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true', [WORKOUT_DIAGNOSTICS_KEY]: report });
-  const text = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'Text') text.push(...node.children.filter((value) => typeof value === 'string'));
-    visit(node.children);
-  };
-  visit(tree);
-  assert.equal(tree.children[0].length, 4);
-  assert.ok(text.includes('Watch diagnostics'));
-  assert.ok(text.includes('1970-01-01T00:00:01.000Z UTC SET_TAP'));
+  const diagnostics = sections(tree).find(([title]) => title.children[0] === 'Diagnostics');
+
+  assert.equal(tree.children[0].length, 5);
+  assert.deepEqual(texts(diagnostics).slice(0, 4), [
+    'Diagnostics',
+    'Open this Lifto app on the watch to apply the change.',
+    'Recent watch steps',
+    'Sent when Lifto connects or resumes.',
+  ]);
+  assert.ok(texts(diagnostics).includes('1970-01-01T00:00:01.000Z UTC SET_TAP'));
 });
 
 test('watch diagnostics require an explicit phone toggle and clear the report when disabled', () => {
   assert.equal(loadSettings().state.workoutDiagnosticsEnabled, false);
   const initial = renderSettings();
-  const toggles = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'Toggle') toggles.push(node);
-    visit(node.children);
-  };
-  visit(initial.tree);
-  const diagnosticsToggle = toggles.find(({ props }) => props.label === 'Record watch diagnostics');
+  const diagnosticsToggle = toggle(initial.tree, 'Record watch diagnostics');
   assert.ok(diagnosticsToggle);
   assert.equal(diagnosticsToggle.props.value, false);
   diagnosticsToggle.props.onChange(true);
   assert.deepEqual(initial.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'true']]);
   const enabled = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true', [WORKOUT_DIAGNOSTICS_KEY]: 'saved' });
-  const enabledToggles = [];
-  const collect = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(collect);
-    if (node.type === 'Toggle') enabledToggles.push(node);
-    collect(node.children);
-  };
-  collect(enabled.tree);
-  const enabledDiagnostics = enabledToggles.find(({ props }) => props.label === 'Record watch diagnostics');
+  const enabledDiagnostics = toggle(enabled.tree, 'Record watch diagnostics');
   assert.equal(enabledDiagnostics.props.value, true);
   enabledDiagnostics.props.onChange(false);
   assert.deepEqual(enabled.writes, [[WORKOUT_DIAGNOSTICS_ENABLED_KEY, 'false']]);
@@ -254,18 +345,9 @@ test('diagnostics card provides multiline enabled TextInput for copying logs wit
     [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
     [WORKOUT_DIAGNOSTICS_KEY]: report,
   });
-  const inputs = [];
-  const text = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'TextInput') inputs.push(node);
-    if (node.type === 'Text') text.push(...node.children.filter((value) => typeof value === 'string'));
-    visit(node.children);
-  };
-  visit(tree);
+  const text = texts(tree);
 
-  const copyInput = inputs.find(({ props }) => props.label === 'Select and copy logs');
+  const copyInput = collect(tree, 'TextInput').find(({ props }) => props.label === 'Select and copy logs');
   assert.ok(copyInput, 'export TextInput should be rendered');
   assert.equal(copyInput.props.multiline, true);
   assert.equal(copyInput.props.rows, 12);
@@ -274,7 +356,7 @@ test('diagnostics card provides multiline enabled TextInput for copying logs wit
   assert.equal(copyInput.props.value, formatWorkoutDiagnostics(report));
   assert.doesNotMatch(copyInput.props.value, /secret_12345|private detail/);
   for (const line of copyInput.props.value.split('\n')) assert.ok(text.includes(line));
-  assert.ok(text.includes('Open the text field, then long-press, Select all and Copy.'));
+  assert.ok(text.includes('Open the field, then long-press, Select all and Copy.'));
 });
 
 test('diagnostics export TextInput onChange cannot modify storage or overwrite canonical report', () => {
@@ -286,16 +368,8 @@ test('diagnostics export TextInput onChange cannot modify storage or overwrite c
     [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true',
     [WORKOUT_DIAGNOSTICS_KEY]: report,
   });
-  const inputs = [];
-  const visit = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visit);
-    if (node.type === 'TextInput') inputs.push(node);
-    visit(node.children);
-  };
-  visit(tree);
 
-  const copyInput = inputs.find(({ props }) => props.label === 'Select and copy logs');
+  const copyInput = collect(tree, 'TextInput').find(({ props }) => props.label === 'Select and copy logs');
   assert.ok(copyInput);
   const writeCountBefore = writes.length;
   copyInput.props.onChange('malicious edit');
@@ -305,33 +379,29 @@ test('diagnostics export TextInput onChange cannot modify storage or overwrite c
 
 test('diagnostics export control is hidden when there are no valid diagnostics or when disabled', () => {
   const empty = renderSettings({ [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'true' });
-  const emptyInputs = [];
-  const emptyTexts = [];
-  const visitEmpty = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visitEmpty);
-    if (node.type === 'TextInput') emptyInputs.push(node);
-    if (node.type === 'Text') emptyTexts.push(...node.children.filter((value) => typeof value === 'string'));
-    visitEmpty(node.children);
-  };
-  visitEmpty(empty.tree);
-  assert.equal(emptyInputs.some(({ props }) => props.label === 'Select and copy logs'), false);
-  assert.ok(emptyTexts.includes('No watch diagnostics yet'));
-  assert.equal(emptyTexts.includes('Open the text field, then long-press, Select all and Copy.'), false);
+  assert.equal(collect(empty.tree, 'TextInput').some(({ props }) => props.label === 'Select and copy logs'), false);
+  assert.ok(texts(empty.tree).includes('No watch diagnostics yet'));
+  assert.equal(texts(empty.tree).includes('Open the field, then long-press, Select all and Copy.'), false);
 
   const disabled = renderSettings({
     [WORKOUT_DIAGNOSTICS_ENABLED_KEY]: 'false',
     [WORKOUT_DIAGNOSTICS_KEY]: JSON.stringify({ version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT }] }),
   });
-  const disabledInputs = [];
-  const visitDisabled = (node) => {
-    if (!node) return;
-    if (Array.isArray(node)) return node.forEach(visitDisabled);
-    if (node.type === 'TextInput') disabledInputs.push(node);
-    visitDisabled(node.children);
-  };
-  visitDisabled(disabled.tree);
-  assert.equal(disabledInputs.some(({ props }) => props.label === 'Select and copy logs'), false);
+  assert.equal(collect(disabled.tree, 'TextInput').some(({ props }) => props.label === 'Select and copy logs'), false);
+  assert.equal(texts(disabled.tree).includes('No watch diagnostics yet'), false);
+});
+
+test('Help lists the API key steps as separate lines', () => {
+  const help = sections(renderSettings().tree).at(-1);
+
+  assert.deepEqual(texts(help), [
+    'Help',
+    'Find your API key in Liftosaur.',
+    '1. Open Liftosaur.',
+    '2. Go to Settings > API Keys.',
+    '3. Copy your personal key.',
+    '4. Paste it above and tap Save key.',
+  ]);
 });
 
 test('account status uses separate centered lines instead of ignored newline characters', () => {
@@ -354,7 +424,7 @@ test('the Side Service defaults Auto prepare off and reads the phone preference'
 });
 
 test('the settings page explains that Liftosaur owns rest defaults', () => {
-  assert.match(source, /Rest timers follow your Liftosaur settings/);
+  assert.ok(texts(renderSettings().tree).includes('Rest timers follow your Liftosaur settings.'));
   assert.doesNotMatch(source, /defaultStandardRest|defaultWarmupRest|defaultSupersetRest/);
 });
 
