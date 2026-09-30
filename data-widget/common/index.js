@@ -391,6 +391,10 @@ function send(type, payload = {}, options = {}) {
 
 function updateSyncWarning() {
   if (!workoutController) return;
+  if (workoutController.isSaveFailing()) {
+    syncWarning = 'Unsaved on watch';
+    return;
+  }
   const status = workoutController.status();
   if (status.code === 'pending') {
     syncWarning = 'Sync pending';

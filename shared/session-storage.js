@@ -24,44 +24,56 @@ export function createMemoryStorageAdapter() {
   };
 }
 
+/**
+ * Watch storage with a memory copy of the snapshot it could not write.
+ * Every write tries the watch again: one transient failure, for example while
+ * memory is short, must not silently keep every later save in memory only.
+ * `write` returns false while the newest snapshot exists only in memory.
+ */
 export function createFallbackStorageAdapter(
   primary,
   fallback = createMemoryStorageAdapter(),
   onFallback = null
 ) {
-  let fallbackActive = !primary;
+  let newestInMemory = !primary;
 
-  function activateFallback(err) {
-    fallbackActive = true;
+  function report(err) {
     if (typeof onFallback === 'function') onFallback(err);
   }
 
   return {
     read() {
-      if (fallbackActive) return fallback.read();
+      if (newestInMemory) return fallback.read();
       try {
         return primary.read();
       } catch (err) {
-        activateFallback(err);
+        report(err);
         return fallback.read();
       }
     },
     write(data) {
-      if (fallbackActive) return fallback.write(data);
-      try {
-        return primary.write(data);
-      } catch (err) {
-        activateFallback(err);
-        return fallback.write(data);
+      if (primary) {
+        try {
+          primary.write(data);
+          newestInMemory = false;
+          fallback.remove();
+          return true;
+        } catch (err) {
+          report(err);
+        }
       }
+      fallback.write(data);
+      newestInMemory = true;
+      return false;
     },
     remove() {
-      if (fallbackActive) return fallback.remove();
+      fallback.remove();
+      newestInMemory = !primary;
+      if (!primary) return;
       try {
-        return primary.remove();
+        primary.remove();
       } catch (err) {
-        activateFallback(err);
-        return fallback.remove();
+        report(err);
       }
     },
   };
@@ -103,14 +115,14 @@ export function createSessionStore(adapter) {
     save({ plan, journal, startedAt = null, sync = null }) {
       if (!plan || !Array.isArray(journal)) return false;
       try {
-        adapter.write(JSON.stringify({
+        const written = adapter.write(JSON.stringify({
           version: SNAPSHOT_VERSION,
           plan,
           journal,
           startedAt,
           sync: sync || { mode: plan?.source === 'WORKOUT_API' ? 'DIRECT' : 'LEGACY' },
         }));
-        return true;
+        return written !== false;
       } catch (err) {
         console.log('[session-store] write failed:', err?.message || String(err));
         return false;
