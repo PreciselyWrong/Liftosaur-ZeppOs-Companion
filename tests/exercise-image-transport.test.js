@@ -186,7 +186,7 @@ test('non-200 image downloads report the HTTP status without leaking the URL', a
   const h = serviceHarness();
   const result = h.service.load({ imageUrl });
   h.task.onSuccess({ statusCode: 403 });
-  assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_HTTP_STATUS' });
+  assert.deepEqual(await result, { status: 'unavailable', reason: 'DOWNLOAD_HTTP_STATUS', statusCode: 403 });
   assert.deepEqual(h.failures, [{ stage: 'download', code: 'HTTP_STATUS', statusCode: 403 }]);
 });
 test('a Side Service two weeks later reuses a converted image without downloading', async () => {
