@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import {
   createWorkoutController,
+  coalesceIntervals,
   defaultDirectSync,
   normalizeDirectSync,
 } from '../shared/workout-controller.js';
@@ -2107,4 +2108,16 @@ test('deferred server snapshot during rest does not reset rest or undo selection
   assert.equal(controller.hasDeferredServerWorkout(), false);
   assert.equal(controller.view().exerciseName, 'Bench Press');
   assert.equal(controller.view().currentSet.weight, 82.5);
+});
+
+test('coalesceIntervals merges overlapping and adjacent activity spans', () => {
+  assert.deepEqual(coalesceIntervals([[0, 10], [5, 15]]), [[0, 15]]);
+  assert.deepEqual(coalesceIntervals([[0, 10], [10, 20]]), [[0, 20]]);
+  assert.deepEqual(coalesceIntervals([[20, 30], [0, 10]]), [[0, 10], [20, 30]]);
+  // Idempotent: re-coalescing an already-merged set is a no-op. This is the
+  // property that keeps preservedIntervals bounded across repeated preservation.
+  const once = coalesceIntervals([[0, 10], [5, 15], [12, 20]]);
+  assert.deepEqual(coalesceIntervals(once), once);
+  // Degenerate/invalid entries are dropped.
+  assert.deepEqual(coalesceIntervals([[5, 5], [10, 8], 'x', [1, 4]]), [[1, 4]]);
 });
