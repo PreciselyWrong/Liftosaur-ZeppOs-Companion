@@ -25,18 +25,19 @@ test('abrupt restart retains last action and runtime outside the rolling phase e
   const restart = createWorkoutDiagnostics(f.storage, f.now, () => null, { runtime: () => ({ ...runtime, firmware: '8.0' }) });
   restart.record('BOOT');
   const report = restart.read();
-  assert.equal(report.previousEvents.at(-1).code, 'CLEAR_START');
-  assert.equal(report.previousDetails.lastAction.context.action, 'START_SET');
-  assert.equal(report.previousDetails.runtime.firmware, '7.23.0.1');
+  const [crashed] = report.previousRuns;
+  assert.equal(crashed.events.at(-1).code, 'CLEAR_START');
+  assert.equal(crashed.details.lastAction.context.action, 'START_SET');
+  assert.equal(crashed.details.runtime.firmware, '7.23.0.1');
   assert.equal(report.details.runtime.firmware, '8.0');
-  assert.equal(report.previousEvents.length, 12);
+  assert.equal(crashed.events.length, 12);
   const phone = createWorkoutDiagnostics(f.storage);
   assert.equal(phone.replace(report), true);
   assert.match(formatWorkoutDiagnostics(phone.read()), /START_SET/);
   assert.match(formatWorkoutDiagnostics(phone.read()), /7\.23\.0\.1/);
 });
 
-test('startup-only reopenings preserve earlier incident evidence; subsequent user action replaces it', () => {
+test('startup-only reopenings preserve earlier incident evidence; a later user action keeps it one run back', () => {
   const f = fixture();
   const log = createWorkoutDiagnostics(f.storage, f.now);
   log.setEnabled(true);
@@ -47,10 +48,11 @@ test('startup-only reopenings preserve earlier incident evidence; subsequent use
   log.record('PAUSE');
   log.record('RESUME');
   log.record('BOOT');
-  assert.equal(log.read().previousDetails.lastAction.context.action, 'COMPLETE_SET');
+  const lastActions = () => log.read().previousRuns.map(run => run.details.lastAction.context.action);
+  assert.deepEqual(lastActions(), ['COMPLETE_SET']);
   log.record('ACTION_TAP', { action: 'OPEN_INFO' });
   log.record('BOOT');
-  assert.equal(log.read().previousDetails.lastAction.context.action, 'OPEN_INFO');
+  assert.deepEqual(lastActions(), ['OPEN_INFO', 'COMPLETE_SET']);
 });
 
 test('heartbeat and periodic memory probes remain bounded across fast UI ticks', () => {
@@ -115,8 +117,9 @@ test('first startup failure evidence survives the next boot before any user acti
   first.record('REDRAW_START');
   const restarted = createWorkoutDiagnostics(f.storage, f.now);
   restarted.record('BOOT');
-  assert.deepEqual(restarted.read().previousEvents.map(event => event.code), ['BOOT', 'BUILD', 'RENDER_START', 'REDRAW_START']);
-  assert.equal(restarted.read().previousDetails.runtime.firmware, runtime.firmware);
+  const [failedStartup] = restarted.read().previousRuns;
+  assert.deepEqual(failedStartup.events.map(event => event.code), ['BOOT', 'BUILD', 'RENDER_START', 'REDRAW_START']);
+  assert.equal(failedStartup.details.runtime.firmware, runtime.firmware);
 });
 
 test('synchronous phase errors keep their marker and rethrow the original error object', () => {
@@ -165,9 +168,11 @@ test('bounded report stays below 16 KiB after phone sanitization', () => {
   const report = {
     version: 1,
     events: Array.from({ length: 12 }, (_, at) => ({ at, code: 'RENDER_END', context, memory: { appUsed: Number.MAX_SAFE_INTEGER, appPeak: Number.MAX_SAFE_INTEGER, systemUsed: Number.MAX_SAFE_INTEGER, systemTotal: Number.MAX_SAFE_INTEGER } })),
-    previousEvents: Array.from({ length: 12 }, (_, at) => ({ at, code: 'CLEAR_START', context })),
     details: { runtime, lastAction: { at: 1000, context }, lastError: { at: 1000, context: { errorClass: 'TypeError', phase: 'SCREEN' } }, lastMemory: { at: 1000, memory: { appUsed: 1024 } } },
-    previousDetails: { runtime, lastAction: { at: 1000, context } },
+    previousRuns: [{
+      events: Array.from({ length: 12 }, (_, at) => ({ at, code: 'CLEAR_START', context })),
+      details: { runtime, lastAction: { at: 1000, context } },
+    }],
   };
   assert.equal(log.replace(report), true);
   assert.ok(JSON.stringify(log.read()).length < 16 * 1024);
@@ -212,7 +217,7 @@ for (const product of ['companion', 'workout']) {
     const env = {
       createWorkoutDiagnostics, readWorkoutRuntimeInfo: diagnostics.readWorkoutRuntimeInfo,
       readWorkoutMemory: diagnostics.readWorkoutMemory, WORKOUT_DIAGNOSTIC_CODES: diagnostics.WORKOUT_DIAGNOSTIC_CODES,
-      deviceStorage: f.storage, deviceInfo: { deviceSource: 123, width: 480, height: 480, screenShape: 1 },
+      diagnosticsStorage: f.storage, deviceInfo: { deviceSource: 123, width: 480, height: 480, screenShape: 1 },
       appApi: { getPackageInfo: () => { nativeCalls.push('package'); return { version: { name: '0.5.12', code: 48 } }; } },
       getSystemInfo: () => { nativeCalls.push('system'); return { firmwareVersion: '7.23.0.1', osVersion: '4.0', minAPI: '4.0' }; },
       screen: 'SESSION', session: { state }, workoutController: { state }, activeWidgets: Array(36).fill({}),

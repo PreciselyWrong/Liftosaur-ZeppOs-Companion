@@ -81,7 +81,8 @@ import {
   phoneConnectionMessage,
 } from '../../shared/connection-state.js';
 import { withRequestTimeout } from '../../shared/request-timeout.js';
-import { createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
+import { createFileDiagnosticsStorage, createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES, WORKOUT_DIAGNOSTICS_KEY } from '../../shared/workout-diagnostics.js';
+import * as watchFiles from '@zos/fs';
 import {
   TYPOGRAPHY,
   LIST_PAGE_SIZE,
@@ -211,15 +212,12 @@ const localStoreAdapter = createFallbackStorageAdapter(
   (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
 );
 const sessionStore = createSessionStore(localStoreAdapter);
-const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (code) => {
-  if (code !== WORKOUT_DIAGNOSTIC_CODES.BUILD &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.RESTORED &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.SET_TAP &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SAVED &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.RENDER_END) return null;
-  return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
-}, {
+const diagnosticsStorage = createFileDiagnosticsStorage(watchFiles);
+try {
+  // Reports used to share LocalStorage with the session; dropping that copy keeps each set save small.
+  if (deviceStorage && deviceStorage.getItem(WORKOUT_DIAGNOSTICS_KEY) != null) deviceStorage.removeItem(WORKOUT_DIAGNOSTICS_KEY);
+} catch {}
+const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefined, () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance), {
   flushDelayMs: 250,
   runtime: () => readWorkoutRuntimeInfo('companion', appApi.getPackageInfo, deviceInfo, getSystemInfo),
   context: () => ({
@@ -670,10 +668,12 @@ function send(type, payload = {}, options = {}) {
   const requestPayload = type === MESSAGE_TYPES.GET_SETTINGS && workoutDiagnostics.isEnabled()
     ? { ...payload, diagnostics: workoutDiagnostics.read() }
     : payload;
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REQUEST, { request: type });
   return withRequestTimeout(pageInstance.request(createMessage({ type, payload: requestPayload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
     if (isTearingDown) throw new Error('Companion page closed');
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY, { request: type });
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
@@ -687,6 +687,9 @@ function send(type, payload = {}, options = {}) {
       }
     }
     return res;
+  }).catch((err) => {
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED, { request: type, failure: phoneFailureReason(err) });
+    throw err;
   });
 }
 
@@ -702,7 +705,6 @@ function beginRequest(message) {
 
 function failRequest(err) {
   if (isTearingDown) return;
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED);
   isBusy = false;
   statusMessage = '';
   errorMessage = err?.message || 'Request failed';

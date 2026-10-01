@@ -176,7 +176,7 @@ test('keeps previous-run evidence when BOOT starts a new run', () => {
   diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
   for (let index = 0; index < 20; index++) diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
   assert.equal(diagnostics.read().events.length, 12);
-  assert.deepEqual(diagnostics.read().previousEvents.map((event) => event.code), [
+  assert.deepEqual(diagnostics.read().previousRuns[0].events.map((event) => event.code), [
     WORKOUT_DIAGNOSTIC_CODES.SET_TAP,
     WORKOUT_DIAGNOSTIC_CODES.PAUSE,
   ]);
@@ -191,8 +191,8 @@ test('retains previous evidence through boot-only restarts', () => {
   first.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
   const restarted = createWorkoutDiagnostics(storage, () => time++);
   restarted.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
-  assert.deepEqual(createWorkoutDiagnostics(storage).read().previousEvents.map((event) => event.code), [
-    WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP,
+  assert.deepEqual(createWorkoutDiagnostics(storage).read().previousRuns.map((run) => run.events.map((event) => event.code)), [
+    [WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP],
   ]);
 });
 
@@ -202,16 +202,16 @@ test('sanitizes, copies, formats, and bounds both diagnostics runs', () => {
   diagnostics.setEnabled(true);
   const events = Array.from({ length: 15 }, (_, index) => ({ at: index, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_END, secret: 'secret' }));
   const previousEvents = Array.from({ length: 15 }, (_, index) => ({ at: index + 100, code: WORKOUT_DIAGNOSTIC_CODES.RESUME, token: 'secret' }));
-  assert.equal(diagnostics.replace({ version: 1, events, previousEvents }), true);
+  assert.equal(diagnostics.replace({ version: 1, events, previousRuns: [{ events: previousEvents, secret: 'secret' }] }), true);
   const report = diagnostics.read();
   assert.equal(report.events.length, 12);
-  assert.equal(report.previousEvents.length, 12);
+  assert.equal(report.previousRuns[0].events.length, 12);
   assert.deepEqual(report.events[0], { at: 3, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_END });
-  assert.deepEqual(report.previousEvents[0], { at: 103, code: WORKOUT_DIAGNOSTIC_CODES.RESUME });
-  report.previousEvents[0].code = WORKOUT_DIAGNOSTIC_CODES.BOOT;
-  assert.equal(diagnostics.read().previousEvents[0].code, WORKOUT_DIAGNOSTIC_CODES.RESUME);
+  assert.deepEqual(report.previousRuns[0].events[0], { at: 103, code: WORKOUT_DIAGNOSTIC_CODES.RESUME });
+  report.previousRuns[0].events[0].code = WORKOUT_DIAGNOSTIC_CODES.BOOT;
+  assert.equal(diagnostics.read().previousRuns[0].events[0].code, WORKOUT_DIAGNOSTIC_CODES.RESUME);
   const formattedReport = formatWorkoutDiagnostics(diagnostics.read());
-  assert.match(formattedReport, /Previous run \(12 events, latest 12 retained\):/);
+  assert.match(formattedReport, /Previous run 1 \(12 events, latest 12 retained\):/);
   assert.match(formattedReport, /1970-01-01T00:00:00\.103Z UTC RESUME/);
   assert.doesNotMatch(formattedReport, /Previous run: 1970/);
   assert.doesNotMatch(storage.values.get(WORKOUT_DIAGNOSTICS_KEY), /secret|token/);
@@ -221,7 +221,7 @@ test('disabling diagnostics clears both runs', () => {
   const storage = memoryStorage();
   const diagnostics = createWorkoutDiagnostics(storage, () => 1_000);
   diagnostics.setEnabled(true);
-  diagnostics.replace({ version: 1, events: [{ at: 1, code: WORKOUT_DIAGNOSTIC_CODES.BOOT }], previousEvents: [{ at: 0, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] });
+  diagnostics.replace({ version: 1, events: [{ at: 1, code: WORKOUT_DIAGNOSTIC_CODES.BOOT }], previousRuns: [{ events: [{ at: 0, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] }] });
   diagnostics.setEnabled(false);
   assert.deepEqual(diagnostics.read(), { version: 1, events: [] });
   assert.equal(storage.values.has(WORKOUT_DIAGNOSTICS_KEY), false);
@@ -230,13 +230,15 @@ test('disabling diagnostics clears both runs', () => {
 test('formats Previous run and Current run into readable sections with UTC, event counts, and explicit MiB units', () => {
   const report = {
     version: 1,
-    previousEvents: [
-      {
-        at: 1_000,
-        code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP,
-        memory: { appUsed: 2 * 1024 * 1024, appPeak: 4 * 1024 * 1024, systemUsed: 48 * 1024 * 1024, systemTotal: 64 * 1024 * 1024 },
-      },
-    ],
+    previousRuns: [{
+      events: [
+        {
+          at: 1_000,
+          code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP,
+          memory: { appUsed: 2 * 1024 * 1024, appPeak: 4 * 1024 * 1024, systemUsed: 48 * 1024 * 1024, systemTotal: 64 * 1024 * 1024 },
+        },
+      ],
+    }],
     events: [
       { at: 50_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT },
       { at: 50_250, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_START },
@@ -245,7 +247,7 @@ test('formats Previous run and Current run into readable sections with UTC, even
 
   const formatted = formatWorkoutDiagnostics(report);
   assert.ok(formatted.includes('Latest snapshot received from the watch. The last event does not prove the crash cause.'));
-  assert.ok(formatted.includes('Previous run (1 event, latest 12 retained):'));
+  assert.ok(formatted.includes('Previous run 1 (1 event, latest 12 retained):'));
   assert.ok(formatted.includes('Current run (2 events, latest 12 retained):'));
   assert.ok(formatted.includes('1970-01-01T00:00:01.000Z UTC SET_TAP | app 2.0 MiB (peak 4.0 MiB) | system free 16.0/64.0 MiB'));
   assert.ok(formatted.includes('1970-01-01T00:00:50.000Z UTC BOOT'));
@@ -256,11 +258,13 @@ test('formats Previous run and Current run into readable sections with UTC, even
 test('calculates per-run elapsed milliseconds without bridging runs and handles same timestamps or clock skew', () => {
   const report = {
     version: 1,
-    previousEvents: [
-      { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP },
-      { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_SAVED },
-      { at: 9_500, code: WORKOUT_DIAGNOSTIC_CODES.PAUSE },
-    ],
+    previousRuns: [{
+      events: [
+        { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP },
+        { at: 10_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_SAVED },
+        { at: 9_500, code: WORKOUT_DIAGNOSTIC_CODES.PAUSE },
+      ],
+    }],
     events: [
       { at: 60_000, code: WORKOUT_DIAGNOSTIC_CODES.BOOT },
       { at: 61_200, code: WORKOUT_DIAGNOSTIC_CODES.RENDER_START },

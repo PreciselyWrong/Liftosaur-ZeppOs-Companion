@@ -1,5 +1,90 @@
+import { ERROR_CODES, MESSAGE_TYPES } from './protocol.js';
+
 export const WORKOUT_DIAGNOSTICS_KEY = 'liftosaur.workout.diagnostics.v1';
 export const WORKOUT_DIAGNOSTICS_ENABLED_KEY = 'liftosaur.workout.diagnostics.enabled';
+
+const DIAGNOSTICS_FILES = ['lifto-diagnostics-a.json', 'lifto-diagnostics-b.json'];
+const DIAGNOSTICS_LOG = 'lifto-diagnostics.log';
+
+function readDiagnosticsCopy(readFileSync, path) {
+  try {
+    const copy = JSON.parse(readFileSync({ path, options: { encoding: 'utf8' } }));
+    const valid = Number.isSafeInteger(copy?.sequence) && copy.values && typeof copy.values === 'object' && !Array.isArray(copy.values);
+    return valid ? copy : null;
+  } catch {
+    return null;
+  }
+}
+
+// Steps hold only allowlisted ASCII values, so each character is one byte.
+function asciiBuffer(text) {
+  const bytes = new Uint8Array(text.length);
+  for (let index = 0; index < text.length; index++) {
+    const code = text.charCodeAt(index);
+    bytes[index] = code < 0x80 ? code : 0x3f;
+  }
+  return bytes.buffer;
+}
+
+// LocalStorage rewrites every key, the session included, on each save; a report kept there
+// made every set save heavier, so the watch keeps it in its own files. A restart during a write
+// can leave that file empty, so writes alternate between two copies and the newest valid one wins.
+// Rewriting that report on every tap cost the watch over half a second, so each step is appended
+// to a log instead and folded into the report only from time to time.
+export function createFileDiagnosticsStorage(fs, paths = DIAGNOSTICS_FILES, logPath = DIAGNOSTICS_LOG) {
+  const { readFileSync, writeFileSync } = fs;
+  let values = null;
+  let sequence = 0;
+  let target = 0;
+  function load() {
+    if (values) return values;
+    const copies = paths.map((path) => readDiagnosticsCopy(readFileSync, path));
+    const newest = copies[1] && (!copies[0] || copies[1].sequence > copies[0].sequence) ? 1 : 0;
+    values = copies[newest]?.values || {};
+    sequence = copies[newest]?.sequence || 0;
+    target = 1 - newest;
+    return values;
+  }
+  function save() {
+    writeFileSync({ path: paths[target], data: JSON.stringify({ sequence: sequence + 1, values }), options: { encoding: 'utf8' } });
+    // A failed write retries the same copy, so the last complete report is never overwritten.
+    sequence += 1;
+    target = 1 - target;
+  }
+  return {
+    getItem: (key) => load()[key],
+    setItem: (key, value) => {
+      load()[key] = value;
+      save();
+    },
+    removeItem: (key) => {
+      delete load()[key];
+      // A cleared report must not linger in the older copy.
+      save();
+      save();
+    },
+    // Each batch starts a new line, so a line cut short by a restart never swallows the next one.
+    appendLines(lines) {
+      const fd = fs.openSync({ path: logPath, flag: fs.O_WRONLY | fs.O_CREAT | fs.O_APPEND });
+      try {
+        fs.writeSync({ fd, buffer: asciiBuffer(`\n${lines.join('\n')}`) });
+      } finally {
+        fs.closeSync({ fd });
+      }
+    },
+    readLines() {
+      try {
+        const text = readFileSync({ path: logPath, options: { encoding: 'utf8' } });
+        return typeof text === 'string' ? text.split('\n').filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    },
+    clearLines() {
+      writeFileSync({ path: logPath, data: '', options: { encoding: 'utf8' } });
+    },
+  };
+}
 
 export function normalizeWorkoutDiagnosticsEnabled(value) {
   if (value && typeof value === 'object') return normalizeWorkoutDiagnosticsEnabled(value.value);
@@ -37,15 +122,21 @@ export const WORKOUT_DIAGNOSTIC_CODES = Object.freeze({
   VIBRATION_END: 'VIBRATION_END',
   IMAGE_READY: 'IMAGE_READY',
   IMAGE_UNAVAILABLE: 'IMAGE_UNAVAILABLE',
+  PHONE_REQUEST: 'PHONE_REQUEST',
+  PHONE_REPLY: 'PHONE_REPLY',
 });
 
 const VERSION = 1;
 const MAX_EVENTS = 12;
+// A reopening where the user taps must not push the crashed run out of the report.
+const MAX_PREVIOUS_RUNS = 3;
+const EVENTS_PER_RUN_WHEN_FULL = 6;
 const MAX_DATE_MILLISECONDS = 8_640_000_000_000_000;
 const VALID_CODES = new Set(Object.values(WORKOUT_DIAGNOSTIC_CODES));
 const MEMORY_FIELDS = ['appUsed', 'appPeak', 'systemUsed', 'systemTotal'];
 const MAX_REPORT_BYTES = 16 * 1024;
-const MEMORY_INTERVAL_MS = 30_000;
+// Folding rewrites the whole report, so it waits for a few hundred short steps.
+const FOLD_AFTER_LINES = 400;
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const VALID_ACTIONS = new Set([
   'START_SET', 'COMPLETE_SET', 'INCREASE_WEIGHT', 'DECREASE_WEIGHT', 'INCREASE_REPS', 'DECREASE_REPS',
@@ -56,6 +147,23 @@ const VALID_ACTIONS = new Set([
 const VALID_SCREENS = new Set(['LOADING', 'CONNECTION', 'SETUP', 'EMPTY', 'HOME', 'PROGRAMS', 'WEEKS', 'DAYS', 'SESSION', 'UNKNOWN']);
 const VALID_STATES = new Set(['NO_PLAN', 'IDLE', 'READY', 'ACTIVE_SET', 'REST', 'PAUSED', 'FINISHED', 'UNKNOWN']);
 const VALID_PHASES = new Set(['CLEAR', 'SCREEN', 'REDRAW', 'ACTION', 'VIBRATION', 'IMAGE', 'UNKNOWN']);
+const VALID_REQUESTS = new Set(Object.values(MESSAGE_TYPES));
+const VALID_FAILURES = new Set(['TIMEOUT', 'UNKNOWN', ...Object.values(ERROR_CODES)]);
+
+// Minimum milliseconds between memory probes per code. Periodic probes bound their cost; taps, handler
+// ends and phone traffic show where memory goes before a restart, so each request and reply is sampled.
+const MEMORY_INTERVAL_MS_BY_CODE = new Map([
+  [WORKOUT_DIAGNOSTIC_CODES.BUILD, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.RESTORED, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.SET_TAP, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.SET_SAVED, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.RENDER_END, 30_000],
+  [WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, 250],
+  [WORKOUT_DIAGNOSTIC_CODES.ACTION_DONE, 250],
+  [WORKOUT_DIAGNOSTIC_CODES.PHONE_REQUEST, 0],
+  [WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY, 0],
+]);
 
 // Intermediate drawing markers must not rebuild the full session view.
 const CONTEXT_FREE_CODES = new Set([
@@ -69,8 +177,10 @@ const CONTEXT_FREE_CODES = new Set([
   WORKOUT_DIAGNOSTIC_CODES.JS_ERROR,
 ]);
 
+// A restart while a reply is arriving must still show which request was pending.
 const SYNCHRONOUS_WRITE_CODES = new Set([
   WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP,
+  WORKOUT_DIAGNOSTIC_CODES.PHONE_REQUEST,
   WORKOUT_DIAGNOSTIC_CODES.JS_ERROR,
   WORKOUT_DIAGNOSTIC_CODES.BOOT,
   WORKOUT_DIAGNOSTIC_CODES.PAUSE,
@@ -105,6 +215,10 @@ function sanitizeContext(raw) {
   if (screen) context.screen = screen;
   if (state) context.state = state;
   if (phase) context.phase = phase;
+  const request = safeEnum(raw.request, VALID_REQUESTS);
+  if (request) context.request = request;
+  const failure = safeEnum(raw.failure, VALID_FAILURES);
+  if (failure) context.failure = failure;
   if (Number.isSafeInteger(raw.widgets) && raw.widgets >= 0 && raw.widgets <= 500) context.widgets = raw.widgets;
   for (const field of ['modal', 'overview', 'preparation', 'imagesEnabled']) {
     if (typeof raw[field] === 'boolean') context[field] = raw[field];
@@ -176,14 +290,33 @@ function sanitizeEvents(raw) {
   return events;
 }
 
-function reportWithPrevious(events, previousEvents, details, previousDetails) {
+function buildReport(events, details, previousRuns = []) {
   return {
     version: VERSION,
     events,
-    ...(previousEvents.length > 0 ? { previousEvents } : {}),
     ...(details ? { details } : {}),
-    ...(previousDetails ? { previousDetails } : {}),
+    ...(previousRuns.length > 0 ? { previousRuns } : {}),
   };
+}
+
+function sanitizeRun(raw) {
+  const events = sanitizeEvents(raw?.events);
+  const details = sanitizeDetail(raw?.details);
+  return events.length > 0 || details ? { events, ...(details ? { details } : {}) } : null;
+}
+
+// Trims events before whole runs so every retained run keeps its last action and runtime.
+function fitReport(report) {
+  const fits = (candidate) => JSON.stringify(candidate).length <= MAX_REPORT_BYTES;
+  if (fits(report)) return report;
+  let runs = (report.previousRuns || []).map((run) => ({ ...run, events: run.events.slice(-EVENTS_PER_RUN_WHEN_FULL) }));
+  const events = report.events.slice(-EVENTS_PER_RUN_WHEN_FULL);
+  let trimmed = buildReport(events, report.details, runs);
+  while (!fits(trimmed) && runs.length > 0) {
+    runs = runs.slice(0, -1);
+    trimmed = buildReport(events, report.details, runs);
+  }
+  return fits(trimmed) ? trimmed : buildReport(events.slice(-4));
 }
 
 function sanitizeReport(raw) {
@@ -196,13 +329,63 @@ function sanitizeReport(raw) {
     }
   }
   if (!report || report.version !== VERSION || !Array.isArray(report.events)) return null;
-  const clean = reportWithPrevious(
-    sanitizeEvents(report.events),
-    sanitizeEvents(report.previousEvents),
-    sanitizeDetail(report.details),
-    sanitizeDetail(report.previousDetails),
-  );
-  return JSON.stringify(clean).length <= MAX_REPORT_BYTES ? clean : reportWithPrevious(clean.events.slice(-4), clean.previousEvents.slice(-4));
+  const previousRuns = (Array.isArray(report.previousRuns) ? report.previousRuns : [])
+    .slice(0, MAX_PREVIOUS_RUNS)
+    .map(sanitizeRun)
+    .filter(Boolean);
+  return fitReport(buildReport(sanitizeEvents(report.events), sanitizeDetail(report.details), previousRuns));
+}
+
+// One recorded step: an event, or the memory sampled right after the previous event.
+function applyStep(report, step) {
+  if (!step.code) {
+    const events = report.events.map((event, index) => (index === report.events.length - 1 ? { ...event, memory: step.memory } : event));
+    return buildReport(events, { ...(report.details || {}), lastMemory: { at: step.at, memory: step.memory } }, report.previousRuns || []);
+  }
+  const { at, code, context } = step;
+  const event = { at, code, ...(context ? { context } : {}) };
+  const isBoot = code === WORKOUT_DIAGNOSTIC_CODES.BOOT;
+  const previousHasAction = Boolean(report.details?.lastAction || report.details?.lastError);
+  const hasUserEvidence = report.events.some((entry) => [WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, WORKOUT_DIAGNOSTIC_CODES.SET_TAP, WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP].includes(entry.code));
+  const hasStartupFailureEvidence = !report.previousRuns?.length && report.events.length > 1;
+  const hasMeaningfulEvidence = previousHasAction || hasUserEvidence || hasStartupFailureEvidence;
+  const finishedRun = { events: report.events.slice(-MAX_EVENTS), ...(report.details ? { details: report.details } : {}) };
+  const previousRuns = isBoot && hasMeaningfulEvidence
+    ? [finishedRun, ...(report.previousRuns || [])].slice(0, MAX_PREVIOUS_RUNS)
+    : (report.previousRuns || []);
+  let details = isBoot ? {} : (report.details || {});
+  if (step.runtime) details = { ...details, runtime: step.runtime };
+  if (code === WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP && context?.action) details = { ...details, lastAction: { at, context } };
+  if (code === WORKOUT_DIAGNOSTIC_CODES.JS_ERROR && context?.errorClass && context?.phase) details = { ...details, lastError: { at, context } };
+  const events = isBoot ? [event] : [...report.events, event].slice(-MAX_EVENTS);
+  return buildReport(events, details, previousRuns);
+}
+
+function sanitizeStep(raw) {
+  if (!raw || !Number.isSafeInteger(raw.seq) || !Number.isSafeInteger(raw.at) || raw.at < 0 || raw.at > MAX_DATE_MILLISECONDS) return null;
+  if (raw.code === undefined) {
+    const memory = sanitizeMemory(raw.memory);
+    return memory ? { seq: raw.seq, at: raw.at, memory } : null;
+  }
+  if (!VALID_CODES.has(raw.code)) return null;
+  const context = sanitizeContext(raw.context);
+  const runtime = sanitizeRuntime(raw.runtime);
+  return { seq: raw.seq, at: raw.at, code: raw.code, ...(context ? { context } : {}), ...(runtime ? { runtime } : {}) };
+}
+
+function snapshotSequence(raw) {
+  try {
+    const parsed = typeof raw === 'string' ? JSON.parse(raw) : raw;
+    return Number.isSafeInteger(parsed?.seq) ? parsed.seq : 0;
+  } catch {
+    return 0;
+  }
+}
+
+// Only the transport outcome and the phone's protocol code are kept; messages may carry workout details.
+export function phoneFailureReason(error) {
+  if (error?.code === 'NETWORK') return 'TIMEOUT';
+  return VALID_FAILURES.has(error?.code) ? error.code : 'UNKNOWN';
 }
 
 export function readWorkoutRuntimeInfo(product, getPackageInfo, deviceInfo, getSystemInfo) {
@@ -237,13 +420,34 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
   const flushDelayMs = Number.isSafeInteger(providers?.flushDelayMs) && providers.flushDelayMs >= 0 ? providers.flushDelayMs : 0;
   const setTimer = typeof providers?.setTimeout === 'function' ? providers.setTimeout : setTimeout;
   const clearTimer = typeof providers?.clearTimeout === 'function' ? providers.clearTimeout : clearTimeout;
+  // Watch files append steps; key-value storage, such as the phone's, rewrites the whole report.
+  const journal = typeof storage?.appendLines === 'function' ? storage : null;
+  let sequence = 0;
+  let pendingLines = [];
+  let loggedLines = 0;
   let flushTimer = null;
   let flushGeneration = 0;
   let isDirty = false;
 
   try {
     enabled = normalizeWorkoutDiagnosticsEnabled(storage?.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY));
-    if (enabled) memory = sanitizeReport(storage.getItem(WORKOUT_DIAGNOSTICS_KEY)) || memory;
+    if (enabled) {
+      const stored = storage.getItem(WORKOUT_DIAGNOSTICS_KEY);
+      memory = sanitizeReport(stored) || memory;
+      if (journal) {
+        const folded = snapshotSequence(stored);
+        sequence = folded;
+        for (const line of journal.readLines()) {
+          let step = null;
+          try { step = sanitizeStep(JSON.parse(line)); } catch {}
+          // Steps already folded into the report, or cut short by a restart, are skipped.
+          if (!step || step.seq <= folded) continue;
+          memory = applyStep(memory, step);
+          sequence = Math.max(sequence, step.seq);
+          loggedLines += 1;
+        }
+      }
+    }
   } catch {
     // Diagnostics must never interfere with the durable workout journal.
   }
@@ -253,11 +457,30 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     memory = sanitizeReport(report) || { version: VERSION, events: [] };
     try {
       if (!storage || typeof storage.setItem !== 'function') return false;
-      storage.setItem(WORKOUT_DIAGNOSTICS_KEY, JSON.stringify(memory));
-      return true;
+      storage.setItem(WORKOUT_DIAGNOSTICS_KEY, JSON.stringify(journal ? { ...memory, seq: sequence } : memory));
     } catch {
       return false;
     }
+    if (journal) {
+      pendingLines = [];
+      loggedLines = 0;
+      try { journal.clearLines(); } catch {}
+    }
+    return true;
+  }
+
+  function flushLines() {
+    if (pendingLines.length === 0) return true;
+    const lines = pendingLines;
+    pendingLines = [];
+    try {
+      journal.appendLines(lines);
+    } catch {
+      return false;
+    }
+    loggedLines += lines.length;
+    if (loggedLines >= FOLD_AFTER_LINES) writeStorage(memory);
+    return true;
   }
 
   function scheduleFlush() {
@@ -266,19 +489,20 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     flushTimer = setTimer(() => {
       if (generation !== flushGeneration || !enabled) return;
       flushTimer = null;
-      if (isDirty) {
-        writeStorage(memory);
-      }
+      if (journal) flushLines();
+      else if (isDirty) writeStorage(memory);
     }, flushDelayMs);
   }
 
-  function write(report, synchronous = false) {
-    // Each new event and detail is sanitized before entering this bounded buffer.
-    memory = report;
-    isDirty = true;
-    if (synchronous || flushDelayMs === 0) {
-      return writeStorage(memory);
+  function save(step, synchronous) {
+    if (!journal) {
+      isDirty = true;
+      if (synchronous) return writeStorage(memory);
+      scheduleFlush();
+      return true;
     }
+    pendingLines.push(JSON.stringify(step));
+    if (synchronous) return flushLines();
     scheduleFlush();
     return true;
   }
@@ -308,6 +532,8 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
       if (!next) {
         cancelFlush();
         memory = { version: VERSION, events: [] };
+        pendingLines = [];
+        loggedLines = 0;
       }
       if (next !== wasEnabled) {
         runtimeReadAttempted = false;
@@ -326,6 +552,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
         } catch {
           try { storage.setItem(WORKOUT_DIAGNOSTICS_KEY, JSON.stringify(memory)); } catch {}
         }
+        try { journal?.clearLines(); } catch {}
       }
       return enabled;
     },
@@ -340,39 +567,28 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
           try { baseContext = typeof providers.context === 'function' ? providers.context() : null; } catch {}
         }
         const context = sanitizeContext({ ...(baseContext || {}), ...(rawContext || {}) });
-        const event = { at, code, ...(context ? { context } : {}) };
-        const previousHasAction = Boolean(memory.details?.lastAction || memory.details?.lastError);
-        const isBoot = code === WORKOUT_DIAGNOSTIC_CODES.BOOT;
-        const hasUserEvidence = memory.events.some((entry) => [WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, WORKOUT_DIAGNOSTIC_CODES.SET_TAP, WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP].includes(entry.code));
-        const hasStartupFailureEvidence = !memory.previousEvents?.length && memory.events.length > 1;
-        const hasMeaningfulEvidence = previousHasAction || hasUserEvidence || hasStartupFailureEvidence;
-        const previousEvents = isBoot && hasMeaningfulEvidence ? memory.events.slice(-MAX_EVENTS) : (memory.previousEvents || []);
-        const previousDetails = isBoot && hasMeaningfulEvidence ? memory.details : memory.previousDetails;
-        let details = isBoot ? {} : (memory.details || {});
-        let runtime = details.runtime;
-        if (isBoot) runtimeReadAttempted = false;
+        const step = { seq: ++sequence, at, code, ...(context ? { context } : {}) };
+        if (code === WORKOUT_DIAGNOSTIC_CODES.BOOT) runtimeReadAttempted = false;
         if (!runtimeReadAttempted && typeof providers.runtime === 'function') {
           runtimeReadAttempted = true;
-          try { runtime = sanitizeRuntime(providers.runtime()) || runtime; } catch {}
+          try {
+            const runtime = sanitizeRuntime(providers.runtime());
+            if (runtime) step.runtime = runtime;
+          } catch {}
         }
-        if (runtime) details = { ...details, runtime };
-        if (code === WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP && context?.action) details = { ...details, lastAction: { at, context } };
-        if (code === WORKOUT_DIAGNOSTIC_CODES.JS_ERROR && context?.errorClass && context?.phase) details = { ...details, lastError: { at, context } };
-        const events = code === WORKOUT_DIAGNOSTIC_CODES.BOOT
-          ? [event]
-          : [...memory.events, event].slice(-MAX_EVENTS);
-        const shouldWriteSync = SYNCHRONOUS_WRITE_CODES.has(code) || flushDelayMs === 0;
-        let report = reportWithPrevious(events, previousEvents, details, previousDetails);
-        write(report, shouldWriteSync);
-        if ((code === WORKOUT_DIAGNOSTIC_CODES.BUILD || code === WORKOUT_DIAGNOSTIC_CODES.RESTORED || code === WORKOUT_DIAGNOSTIC_CODES.SET_TAP || code === WORKOUT_DIAGNOSTIC_CODES.SET_SAVED || code === WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT || code === WORKOUT_DIAGNOSTIC_CODES.RENDER_END) && at - lastMemoryAttemptAt >= MEMORY_INTERVAL_MS) {
+        memory = applyStep(memory, step);
+        const synchronous = SYNCHRONOUS_WRITE_CODES.has(code) || flushDelayMs === 0;
+        save(step, synchronous);
+        // The step is saved before the probe, so a probe that never returns still leaves it behind.
+        const memoryInterval = MEMORY_INTERVAL_MS_BY_CODE.get(code);
+        if (memoryInterval !== undefined && at - lastMemoryAttemptAt >= memoryInterval) {
           lastMemoryAttemptAt = at;
           let sampled = null;
           try { sampled = sanitizeMemory(sampleMemory(code)); } catch {}
           if (sampled) {
-            details = { ...details, lastMemory: { at, memory: sampled } };
-            event.memory = sampled;
-            report = reportWithPrevious(events, previousEvents, details, previousDetails);
-            write(report, shouldWriteSync);
+            const sample = { seq: ++sequence, at, memory: sampled };
+            memory = applyStep(memory, sample);
+            save(sample, synchronous);
           }
         }
         return true;
@@ -420,7 +636,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
 
 export function formatWorkoutDiagnostics(raw) {
   const report = sanitizeReport(raw);
-  if (!report || (report.events.length === 0 && !report.previousEvents?.length)) return 'No watch diagnostics yet';
+  if (!report || (report.events.length === 0 && !report.previousRuns?.length)) return 'No watch diagnostics yet';
   const mib = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
   const formatEvent = (event, index, runEvents) => {
     const elapsedMs = index === 0 ? null : event.at - runEvents[index - 1].at;
@@ -434,6 +650,8 @@ export function formatWorkoutDiagnostics(raw) {
         context.screen && `screen ${context.screen}`,
         context.state && `state ${context.state}`,
         context.phase && `phase ${context.phase}`,
+        context.request && `request ${context.request}`,
+        context.failure && `failure ${context.failure}`,
         Number.isSafeInteger(context.widgets) && `widgets ${context.widgets}`,
         context.errorClass && `error ${context.errorClass}`,
         typeof context.modal === 'boolean' && `modal ${context.modal ? 'open' : 'closed'}`,
@@ -466,24 +684,20 @@ export function formatWorkoutDiagnostics(raw) {
     if (details.lastError) lines.push(`Last JavaScript error at ${new Date(details.lastError.at).toISOString()} UTC: ${details.lastError.context.errorClass || 'unknown'} during ${details.lastError.context.phase || 'unknown'}`);
     if (details.lastMemory) lines.push(`Memory sample at ${new Date(details.lastMemory.at).toISOString()} UTC: ${JSON.stringify(details.lastMemory.memory)}`);
   };
-  formatDetails('Previous run', report.previousDetails);
-  formatDetails('Current run', report.details);
-
-  if (report.previousEvents?.length) {
-    const count = report.previousEvents.length;
-    lines.push(`Previous run (${count} ${count === 1 ? 'event' : 'events'}, latest ${MAX_EVENTS} retained):`);
+  const formatRun = (label, run) => {
+    formatDetails(label, run.details);
+    const count = run.events.length;
+    if (count === 0) return;
+    lines.push(`${label} (${count} ${count === 1 ? 'event' : 'events'}, latest ${MAX_EVENTS} retained):`);
     for (let index = 0; index < count; index++) {
-      lines.push(formatEvent(report.previousEvents[index], index, report.previousEvents));
+      lines.push(formatEvent(run.events[index], index, run.events));
     }
+  };
+  const previousRuns = report.previousRuns || [];
+  for (let index = previousRuns.length - 1; index >= 0; index--) {
+    formatRun(`Previous run ${index + 1}`, previousRuns[index]);
   }
-
-  if (report.events?.length) {
-    const count = report.events.length;
-    lines.push(`Current run (${count} ${count === 1 ? 'event' : 'events'}, latest ${MAX_EVENTS} retained):`);
-    for (let index = 0; index < count; index++) {
-      lines.push(formatEvent(report.events[index], index, report.events));
-    }
-  }
+  formatRun('Current run', report);
 
   return lines.join('\n');
 }
