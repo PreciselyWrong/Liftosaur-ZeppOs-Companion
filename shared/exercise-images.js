@@ -1,5 +1,18 @@
 export const MAX_EXERCISE_IMAGE_BYTES = 512 * 1024;
 
+// Every step at which an exercise image can stop: the phone service reports the first group as
+// `${STAGE}_${ERROR}` or a fixed code, the watch client adds the rest.
+export const EXERCISE_IMAGE_FAILURES = new Set([
+  'INVALID_URL', 'SERVICE_UNAVAILABLE', 'STORAGE_INVALID', 'STORAGE_FULL', 'CONVERSION_IN_PROGRESS',
+  'DOWNLOAD_PATH_INVALID', 'CONVERSION_OUTPUT_INVALID',
+  'PHONE_DISABLED', 'REQUEST_FAILED', 'TIMEOUT', 'TRANSFER_ERROR', 'TRANSFER_CANCELED', 'FILE_INVALID', 'FILE_TOO_LARGE', 'UNKNOWN',
+]);
+for (const stage of ['DOWNLOAD', 'CONVERSION', 'TRANSFER']) {
+  for (const error of ['SIMULATOR_UNSUPPORTED', 'HTTP_STATUS', 'NATIVE_FAILURE', 'TIMEOUT', 'CANCELED', 'UNEXPECTED']) {
+    EXERCISE_IMAGE_FAILURES.add(`${stage}_${error}`);
+  }
+}
+
 export function normalizeExerciseImages(value, fallback = false) {
   if (value === undefined || value === null) return fallback;
   if (typeof value === 'string') {

@@ -169,6 +169,7 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           : error?.code === 'HTTP_STATUS' || error?.code === 'NATIVE_FAILURE' || error?.code === 'TIMEOUT'
           ? error.code : active.canceled ? 'CANCELED' : 'UNEXPECTED';
         const result = unavailable(`${stage.toUpperCase()}_${code}`);
+        if (code === 'HTTP_STATUS' && Number.isInteger(error.statusCode)) result.statusCode = error.statusCode;
         if (code === 'NATIVE_FAILURE') {
           if (Number.isInteger(error.nativeCode)) result.nativeCode = error.nativeCode;
           result.detail = safeDetail(error.nativeMessage) || (error.eventPresent ? 'NO_MESSAGE' : 'NO_EVENT');

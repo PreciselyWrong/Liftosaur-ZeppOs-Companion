@@ -3363,10 +3363,11 @@ function renderConflictScreen() {
   });
 }
 
-function handleExerciseImageChange(_imageUrl, status) {
+function handleExerciseImageChange(_imageUrl, status, failure) {
   if (isTearingDown) return;
   if (status === 'ready' || status === 'unavailable') {
-    workoutDiagnostics.record(status === 'ready' ? WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY : WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE);
+    if (status === 'ready') workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY);
+    else workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE, { image: failure?.reason, httpStatus: failure?.httpStatus });
   }
   if (isPaused || !hasBuilt) {
     controllerUiDirty = true;
