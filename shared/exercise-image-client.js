@@ -1,10 +1,12 @@
 import { MESSAGE_TYPES } from './protocol.js';
-import { MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from './exercise-images.js';
+import { EXERCISE_IMAGE_FAILURES, MAX_EXERCISE_IMAGE_BYTES, normalizeExerciseImageUrl } from './exercise-images.js';
 
 const MAX_CACHED_IMAGES = 4;
 const MAX_QUEUE_SIZE = 16;
 export const EXERCISE_IMAGE_WATCH_STORAGE_KEY = 'watchExerciseImagesV7';
 let requestSequence = 0;
+
+const MAX_REFUSED_URLS = 32;
 
 export function createExerciseImageClient({
   inbox,
@@ -23,6 +25,7 @@ export function createExerciseImageClient({
   let scheduled = false;
   const entries = new Map();
   const queue = [];
+  const refusedUrls = new Set();
 
   if (storage && typeof storage.getItem === 'function') {
     try {
@@ -143,7 +146,8 @@ export function createExerciseImageClient({
     });
   }
 
-  function finish(entry, status, src = null) {
+  // The failure names the step that stopped, so a report can tell download, transfer and file problems apart.
+  function finish(entry, status, src = null, failure = null) {
     if (active !== entry) return;
     clearTransfer();
     entry.status = status;
@@ -152,18 +156,19 @@ export function createExerciseImageClient({
       touch(entry);
       evictOldImages();
     }
-    onChange(entry.url, status);
+    onChange(entry.url, status, failure);
     scheduleNext();
   }
 
   function requestActive(entry, forceRefresh = false) {
     entry.requestId = `${Date.now()}-${++requestSequence}`;
     const requestId = entry.requestId;
-    const fail = () => {
-      if (active === entry && entry.requestId === requestId && entry.status === 'loading') finish(entry, 'unavailable');
+    const fail = (reason, httpStatus) => {
+      if (active !== entry || entry.requestId !== requestId || entry.status !== 'loading') return;
+      finish(entry, 'unavailable', null, Number.isInteger(httpStatus) ? { reason, httpStatus } : { reason });
     };
     if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(fail, 45000);
+    timer = setTimeout(() => fail('TIMEOUT'), 45000);
     if (timer && typeof timer.unref === 'function') timer.unref();
     let response;
     try {
@@ -173,14 +178,17 @@ export function createExerciseImageClient({
         forceRefresh,
       });
     } catch {
-      fail();
+      fail('REQUEST_FAILED');
       return;
     }
     Promise.resolve(response)
       .then((response) => {
-        if (response?.payload?.status !== 'queued') fail();
+        const payload = response ? response.payload : null;
+        if (payload?.status === 'queued') return;
+        if (payload?.status === 'disabled') fail('PHONE_DISABLED');
+        else fail(EXERCISE_IMAGE_FAILURES.has(payload?.reason) ? payload.reason : 'UNKNOWN', payload?.statusCode);
       })
-      .catch(fail);
+      .catch(() => fail('REQUEST_FAILED'));
   }
 
   function processNext() {
@@ -225,7 +233,8 @@ export function createExerciseImageClient({
         && typeof file.filePath === 'string'
         && file.filePath.startsWith('data://');
       if (!valid && state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
-      finish(expected, valid ? 'ready' : 'unavailable', valid ? file.filePath : null);
+      if (valid) finish(expected, 'ready', file.filePath);
+      else finish(expected, 'unavailable', null, { reason: state === 'transferred' ? 'FILE_INVALID' : `TRANSFER_${state.toUpperCase()}` });
     }
 
     file.on('change', accept);
@@ -233,7 +242,7 @@ export function createExerciseImageClient({
       && file.params.requestId === expected.requestId;
     if (!matches || file.fileSize > MAX_EXERCISE_IMAGE_BYTES) {
       try { file.cancel(); } catch {}
-      if (matches) finish(expected, 'unavailable');
+      if (matches) finish(expected, 'unavailable', null, { reason: 'FILE_TOO_LARGE' });
       return;
     }
     transfer = file;
@@ -246,7 +255,15 @@ export function createExerciseImageClient({
 
   function load(imageUrl, { retry = false, priority = false } = {}) {
     const url = normalizeExerciseImageUrl(imageUrl);
-    if (!enabled || disposed || !url) return;
+    if (!enabled || disposed) return;
+    if (!url) {
+      // A link the watch refuses would otherwise never show up anywhere; each one is reported once.
+      if (typeof imageUrl === 'string' && imageUrl && !refusedUrls.has(imageUrl) && refusedUrls.size < MAX_REFUSED_URLS) {
+        refusedUrls.add(imageUrl);
+        onChange(imageUrl, 'unavailable', { reason: 'INVALID_URL' });
+      }
+      return;
+    }
     const existing = entries.get(url);
     if (existing && (existing.status !== 'unavailable' || !retry)) {
       if (priority && existing.status === 'loading') {

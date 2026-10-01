@@ -1,4 +1,5 @@
 import { ERROR_CODES, MESSAGE_TYPES } from './protocol.js';
+import { EXERCISE_IMAGE_FAILURES } from './exercise-images.js';
 
 export const WORKOUT_DIAGNOSTICS_KEY = 'liftosaur.workout.diagnostics.v1';
 export const WORKOUT_DIAGNOSTICS_ENABLED_KEY = 'liftosaur.workout.diagnostics.enabled';
@@ -133,6 +134,7 @@ const MAX_PREVIOUS_RUNS = 3;
 const EVENTS_PER_RUN_WHEN_FULL = 6;
 const MAX_DATE_MILLISECONDS = 8_640_000_000_000_000;
 const VALID_CODES = new Set(Object.values(WORKOUT_DIAGNOSTIC_CODES));
+const IMAGE_OUTCOMES = new Set([WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY, WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE]);
 const MEMORY_FIELDS = ['appUsed', 'appPeak', 'systemUsed', 'systemTotal'];
 const MAX_REPORT_BYTES = 16 * 1024;
 // Folding rewrites the whole report, so it waits for a few hundred short steps.
@@ -219,6 +221,9 @@ function sanitizeContext(raw) {
   if (request) context.request = request;
   const failure = safeEnum(raw.failure, VALID_FAILURES);
   if (failure) context.failure = failure;
+  const image = safeEnum(raw.image, EXERCISE_IMAGE_FAILURES);
+  if (image) context.image = image;
+  if (Number.isSafeInteger(raw.httpStatus) && raw.httpStatus >= 100 && raw.httpStatus <= 599) context.httpStatus = raw.httpStatus;
   if (Number.isSafeInteger(raw.widgets) && raw.widgets >= 0 && raw.widgets <= 500) context.widgets = raw.widgets;
   for (const field of ['modal', 'overview', 'preparation', 'imagesEnabled']) {
     if (typeof raw[field] === 'boolean') context[field] = raw[field];
@@ -243,6 +248,16 @@ function sanitizeDetail(raw) {
       const context = sanitizeContext(value.context);
       if (context) result[field] = { at: value.at, context };
     }
+  }
+  const lastImage = raw.lastImage;
+  if (lastImage && Number.isSafeInteger(lastImage.at) && lastImage.at >= 0 && lastImage.at <= MAX_DATE_MILLISECONDS
+    && IMAGE_OUTCOMES.has(lastImage.code)) {
+    const context = sanitizeContext(lastImage.context);
+    result.lastImage = { at: lastImage.at, code: lastImage.code, ...(context ? { context } : {}) };
+  }
+  const images = raw.images;
+  if (images && ['ready', 'unavailable'].every((field) => Number.isSafeInteger(images[field]) && images[field] >= 0)) {
+    result.images = { ready: images.ready, unavailable: images.unavailable };
   }
   return Object.keys(result).length ? result : undefined;
 }
@@ -357,6 +372,12 @@ function applyStep(report, step) {
   if (step.runtime) details = { ...details, runtime: step.runtime };
   if (code === WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP && context?.action) details = { ...details, lastAction: { at, context } };
   if (code === WORKOUT_DIAGNOSTIC_CODES.JS_ERROR && context?.errorClass && context?.phase) details = { ...details, lastError: { at, context } };
+  // Image outcomes are rare among drawing steps, so the run keeps its last one and a count.
+  if (IMAGE_OUTCOMES.has(code)) {
+    const counts = details.images || { ready: 0, unavailable: 0 };
+    const field = code === WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY ? 'ready' : 'unavailable';
+    details = { ...details, lastImage: event, images: { ...counts, [field]: counts[field] + 1 } };
+  }
   const events = isBoot ? [event] : [...report.events, event].slice(-MAX_EVENTS);
   return buildReport(events, details, previousRuns);
 }
@@ -652,6 +673,8 @@ export function formatWorkoutDiagnostics(raw) {
         context.phase && `phase ${context.phase}`,
         context.request && `request ${context.request}`,
         context.failure && `failure ${context.failure}`,
+        context.image && `image ${context.image}`,
+        context.httpStatus && `http ${context.httpStatus}`,
         Number.isSafeInteger(context.widgets) && `widgets ${context.widgets}`,
         context.errorClass && `error ${context.errorClass}`,
         typeof context.modal === 'boolean' && `modal ${context.modal ? 'open' : 'closed'}`,
@@ -682,6 +705,12 @@ export function formatWorkoutDiagnostics(raw) {
     if (runtime) lines.push(`Runtime: ${runtime.product || 'unknown'} revision ${runtime.revision || 'unknown'} app ${runtime.appVersion || 'unknown'} (${runtime.appCode ?? 'unknown'}), firmware ${runtime.firmware || 'unknown'}, OS ${runtime.os || 'unknown'}, API ${runtime.api || 'unknown'}, device source ${runtime.deviceSource ?? 'unknown'}, screen ${runtime.width ?? 'unknown'}x${runtime.height ?? 'unknown'} shape ${runtime.screenShape ?? 'unknown'}`);
     if (details.lastAction) lines.push(`Last action at ${new Date(details.lastAction.at).toISOString()} UTC: ${details.lastAction.context.action || 'unknown'}${details.lastAction.context.screen ? ` on ${details.lastAction.context.screen}` : ''}${details.lastAction.context.state ? ` in ${details.lastAction.context.state}` : ''}`);
     if (details.lastError) lines.push(`Last JavaScript error at ${new Date(details.lastError.at).toISOString()} UTC: ${details.lastError.context.errorClass || 'unknown'} during ${details.lastError.context.phase || 'unknown'}`);
+    const images = details.images;
+    lines.push(images ? `Images: ${images.ready} shown, ${images.unavailable} unavailable` : 'Images: none requested');
+    if (details.lastImage) {
+      const context = details.lastImage.context || {};
+      lines.push(`Last image at ${new Date(details.lastImage.at).toISOString()} UTC: ${details.lastImage.code}${context.image ? ` image ${context.image}` : ''}${context.httpStatus ? ` http ${context.httpStatus}` : ''}`);
+    }
     if (details.lastMemory) lines.push(`Memory sample at ${new Date(details.lastMemory.at).toISOString()} UTC: ${JSON.stringify(details.lastMemory.memory)}`);
   };
   const formatRun = (label, run) => {
