@@ -31,9 +31,9 @@ export function createWatchExerciseImages({ request, onChange, storage = null, m
     request,
     storage,
     maxCachedImages,
-    onChange: (url, status) => {
+    onChange: (url, status, failure) => {
       console.log('[lifto] exercise image state ' + status);
-      onChange(url, status);
+      onChange(url, status, failure);
     },
     fileSize: (path) => {
       const resolved = dataPath(path);
