@@ -61,7 +61,7 @@ function fixture() {
     normalizeGetReadySeconds: value => value,
     send: async () => ({ payload: { workoutDiagnosticsEnabled: true } }),
     consumeControllerUiChange: () => { env.controllerUiDirty = false; },
-    updateSyncWarning() {}, renderClock() {}, renderScreen() {},
+    updateSyncWarning() {}, renderClockTarget() {}, renderClock() {}, renderScreen() {},
     deleteWidget: () => calls.push('deleteWidget'),
     createWidget: () => { calls.push('createWidget'); return {}; },
     redraw: () => calls.push('redraw'),
