@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import test from 'node:test';
+import test, { mock } from 'node:test';
 import vm from 'node:vm';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
 import { MAX_EXERCISE_IMAGE_BYTES } from '../shared/exercise-images.js';
@@ -142,4 +142,86 @@ this.create = createWatchExerciseImages;`, context);
   context.create({ request() {}, onChange: (...args) => changes.push(args) });
   clientOptions.onChange(url, 'unavailable', { reason: 'TRANSFER_ERROR' });
   assert.deepEqual(changes, [[url, 'unavailable', { reason: 'TRANSFER_ERROR' }]]);
+});
+
+function slowPhone() {
+  let receive;
+  let incoming = null;
+  const requests = [];
+  const changes = [];
+  const imageClient = createExerciseImageClient({
+    inbox: { on(_, handler) { receive = handler; }, getNextFile: () => incoming },
+    request: (_, payload) => new Promise((resolve) => requests.push({ payload, resolve })),
+    removeFile() {},
+    fileSize: () => 100,
+    onChange: (imageUrl, status, failure) => changes.push({ status, failure }),
+  });
+  imageClient.setEnabled(true);
+  return {
+    imageClient,
+    requests,
+    changes,
+    queue: (index) => requests[index].resolve({ payload: { status: 'queued' } }),
+    deliver: (index) => {
+      incoming = { params: { type: 'exercise-image', ...requests[index].payload }, fileSize: 100,
+        filePath: 'data://download/squat.png', readyState: 'transferred', on() {}, cancel() {} };
+      receive();
+    },
+  };
+}
+
+test('an image that outlasts the first wait is requested once more and shown', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = slowPhone();
+  h.imageClient.load(url);
+  await flush();
+  t.mock.timers.tick(45_000);
+  await flush();
+  assert.equal(h.requests.length, 2);
+  assert.deepEqual(h.changes, []);
+  h.queue(1);
+  await flush();
+  h.deliver(1);
+  assert.equal(h.imageClient.get(url).status, 'ready');
+  h.imageClient.dispose();
+});
+
+test('a second timeout says whether the phone or the transfer kept the watch waiting', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  for (const [answer, reason] of [[false, 'PHONE_NO_REPLY'], [true, 'FILE_NOT_RECEIVED']]) {
+    const h = slowPhone();
+    h.imageClient.load(url);
+    for (const attempt of [0, 1]) {
+      await flush();
+      if (answer) h.queue(attempt);
+      await flush();
+      t.mock.timers.tick(45_000);
+    }
+    await flush();
+    assert.equal(h.requests.length, 2, reason);
+    assert.equal(h.requests[1].payload.forceRefresh, answer, reason);
+    assert.deepEqual(h.changes, [{ status: 'unavailable', failure: { reason } }], reason);
+    h.imageClient.dispose();
+  }
+});
+
+test('a promised image that never arrives is fetched fresh after 20 seconds', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout'] });
+  const h = slowPhone();
+  h.imageClient.load(url);
+  await flush();
+  h.queue(0);
+  await flush();
+  t.mock.timers.tick(19_999);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  t.mock.timers.tick(1);
+  await flush();
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].payload.forceRefresh, true);
+  h.queue(1);
+  await flush();
+  h.deliver(1);
+  assert.equal(h.imageClient.get(url).status, 'ready');
+  h.imageClient.dispose();
 });
