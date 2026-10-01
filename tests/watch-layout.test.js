@@ -161,6 +161,8 @@ test('ready-screen actions render above the demo badge and below the disabled fo
   );
   const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
   assert.ok(renderUi.indexOf('renderClock()') > renderUi.indexOf("trace('SCREEN', renderScreen)"));
+  const target = renderUi.indexOf('renderClockTarget()');
+  assert.ok(target >= 0 && target < renderUi.indexOf("trace('SCREEN', renderScreen)"));
   assert.match(source, /function renderReadyScreen[\s\S]*?text_size:\s*font\('body'\)/);
 });
 
