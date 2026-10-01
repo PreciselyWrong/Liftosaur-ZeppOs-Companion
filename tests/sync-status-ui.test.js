@@ -27,17 +27,19 @@ for (const product of ['page', 'data-widget']) {
       addWidget: (type, props) => widgets.push({ type, ...props }),
       addLiveButton: (key, props) => widgets.push({ key, ...props }),
       addLiveLabel: (key, props) => widgets.push({ key, ...props }),
+      addTransparentLabel: (key, props) => widgets.push({ key, ...props }),
     };
     vm.createContext(env);
-    for (const name of ['renderClock', 'canOpenSyncDetails', 'openSyncDetailsModal', 'closeSyncDetailsModal', 'renderSyncDetailsModal']) {
+    for (const name of ['renderClockTarget', 'renderClock', 'canOpenSyncDetails', 'openSyncDetailsModal', 'closeSyncDetailsModal', 'renderSyncDetailsModal']) {
       const start = source.indexOf('function ' + name + '(');
       const end = source.indexOf('\nfunction ', start + 1);
       vm.runInContext(source.slice(start, end), env);
     }
+    env.renderClockTarget();
     env.renderClock();
     const clock = widgets.find(item => item.key === 'clock');
     assert.equal(clock.text, '12:34 | 1 pending');
-    clock.click_func();
+    widgets.find(item => item.key === 'clockTarget').click_func();
     assert.equal(env.isSyncDetailsOpen, true);
     env.renderSyncDetailsModal();
     assert.ok(widgets.some(item => String(item.text).includes('Saved on watch')));

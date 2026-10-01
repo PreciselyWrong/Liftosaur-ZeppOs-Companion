@@ -1751,6 +1751,22 @@ function currentClockLabel() {
   }
 }
 
+// The sync-details target sits under the rest ring and the transparent label: a footer button drew
+// a black box whose lower corners hid the ring where the round screen curves into the bottom row.
+function renderClockTarget() {
+  if (!canOpenSyncDetails()) return;
+  addLiveButton('clockTarget', {
+    x: px(EXTENSION_CLOCK_LAYOUT.x),
+    y: px(EXTENSION_CLOCK_LAYOUT.y),
+    w: px(EXTENSION_CLOCK_LAYOUT.width),
+    h: px(EXTENSION_CLOCK_LAYOUT.height),
+    radius: px(4),
+    normal_color: THEME.bg,
+    press_color: THEME.card,
+    click_func: openSyncDetailsModal,
+  });
+}
+
 /**
  * The time of day, under the bottom button of every screen.
  *
@@ -1781,18 +1797,7 @@ function renderClock() {
     text_style: text_style.NONE,
     text: label,
   };
-  if (canOpenSyncDetails()) {
-    addLiveButton('clock', {
-      ...props,
-      radius: px(4),
-      normal_color: THEME.bg,
-      press_color: THEME.card,
-      click_func: openSyncDetailsModal,
-    });
-    if (typeof liveWidgets !== 'undefined' && liveWidgets.clock) liveWidgets.clock.syncButton = true;
-  } else {
-    addTransparentLabel('clock', props);
-  }
+  addTransparentLabel('clock', props);
 }
 
 function formatHeartRate(hrVal) {
@@ -4043,6 +4048,7 @@ function renderUI() {
   // The backdrop is the one widget already in screen pixels: it must cover the
   // whole panel, fitted content included.
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
+  renderClockTarget();
 
   renderDemoBadge();
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
@@ -4128,16 +4134,11 @@ function updateClock() {
   ].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
-  const hasSyncButton = liveWidgets.clock?.syncButton === true;
-  const shouldHaveSyncButton = canOpenSyncDetails();
-  if (hasSyncButton !== shouldHaveSyncButton) {
+  if (Boolean(liveWidgets.clockTarget) !== canOpenSyncDetails()) {
     renderUI();
     return;
   }
-  const updated = hasSyncButton
-    ? updateLiveWidget('clock', { text: label })
-    : updateTransparentLabel('clock', { text: label });
-  if (!updated) renderUI();
+  if (!updateTransparentLabel('clock', { text: label })) renderUI();
 }
 
 /**

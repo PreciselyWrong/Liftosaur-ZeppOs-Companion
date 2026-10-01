@@ -70,7 +70,7 @@ function renderer(product, setsCount = 2) {
     widget: { BUTTON: 1, FILL_RECT: 2 }, W: 466, H: 466, THEME: {},
     px: n => n, font: () => 20, controls: {}, ACTIVE_SET_ACTION_LAYOUT: {},
     actionText: 'Done', restStatusColor: () => 0, darkenColor: () => 0,
-    updateSyncWarning() {}, updateControllerStatus() {}, renderClock() {}, startClock() {},
+    updateSyncWarning() {}, updateControllerStatus() {}, renderClockTarget() {}, renderClock() {}, startClock() {},
     clearFlash() {}, stopRestBezelAnimation() {}, renderDemoBadge() {}, hideModalControls() {}, destroyModalControls() {},
     consumeControllerUiChange() { env.controllerUiDirty = false; },
     renderScreen() { calls.push(`screen:${controller.view().state}`); },
