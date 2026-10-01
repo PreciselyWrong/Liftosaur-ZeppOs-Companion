@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
+import { createWorkoutDiagnostics, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 
 const source = readFileSync(new URL('../page/common/index.js', import.meta.url), 'utf8');
@@ -28,7 +28,7 @@ function fixture(enabled, reply = Promise.resolve({ payload: { workoutDiagnostic
       request = message;
       return reply;
     } },
-    MESSAGE_TYPES, workoutDiagnostics: diagnostics, WORKOUT_DIAGNOSTIC_CODES,
+    MESSAGE_TYPES, workoutDiagnostics: diagnostics, WORKOUT_DIAGNOSTIC_CODES, phoneFailureReason,
     normalizeWorkoutDiagnosticsEnabled: value => value === true,
     createMessage: value => value,
     withRequestTimeout: value => value,
@@ -42,9 +42,11 @@ function fixture(enabled, reply = Promise.resolve({ payload: { workoutDiagnostic
 
 test('Companion forwards opt-in watch steps during settings refresh', async () => {
   const state = fixture(true);
+  const sent = state.diagnostics.read();
   await state.env.send(MESSAGE_TYPES.GET_SETTINGS);
-  assert.deepEqual(state.request.payload.diagnostics, state.diagnostics.read());
+  assert.deepEqual(state.request.payload.diagnostics, sent);
   assert.deepEqual(state.request.payload.diagnostics.events.map(event => event.code), ['BOOT', 'ACTION_TAP']);
+  assert.equal(state.diagnostics.read().events.at(-1).code, 'PHONE_REPLY');
 });
 
 test('Companion learns the phone opt-in before recording and forwarding steps', async () => {
@@ -53,8 +55,9 @@ test('Companion learns the phone opt-in before recording and forwarding steps', 
   assert.equal(state.request.payload.diagnostics, undefined);
   assert.equal(state.diagnostics.isEnabled(), true);
   assert.equal(state.diagnostics.read().events[0].code, 'DIAGNOSTICS_ON');
+  const sent = state.diagnostics.read();
   await state.env.send(MESSAGE_TYPES.GET_SETTINGS);
-  assert.deepEqual(state.request.payload.diagnostics, state.diagnostics.read());
+  assert.deepEqual(state.request.payload.diagnostics, sent);
 });
 
 test('a late phone reply cannot enable diagnostics after the Companion page closes', async () => {
@@ -91,8 +94,8 @@ test('Companion records set boundaries around the durable local action', () => {
   assert.deepEqual(events, ['SET_TAP', 'persisted', 'SET_SAVED']);
 });
 
-test('Companion samples only whitelisted diagnostic codes and rotates on restart', () => {
-  assert.match(source, /createWorkoutDiagnostics\(deviceStorage/);
+test('Companion samples memory through the shared diagnostics policy and rotates on restart', () => {
+  assert.match(source, /createWorkoutDiagnostics\(diagnosticsStorage/);
   assert.match(source, /readWorkoutMemory\(appApi\.getPackageInfo, appApi\.getPerformance\)/);
   assert.match(source, /workoutDiagnostics\.record\(WORKOUT_DIAGNOSTIC_CODES\.BOOT\)/);
   assert.match(source, /workoutDiagnostics\.record\(WORKOUT_DIAGNOSTIC_CODES\.BUILD\)/);

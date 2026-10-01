@@ -47,7 +47,8 @@ import { createMessage, MESSAGE_TYPES } from '../../shared/protocol.js';
 import { SESSION_STATES } from '../../shared/workout-session.js';
 import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
 import { createFallbackStorageAdapter, createSessionStore } from '../../shared/session-storage.js';
-import { createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTIC_CODES } from '../../shared/workout-diagnostics.js';
+import { createFileDiagnosticsStorage, createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES, WORKOUT_DIAGNOSTICS_KEY } from '../../shared/workout-diagnostics.js';
+import * as watchFiles from '@zos/fs';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import {
@@ -163,16 +164,12 @@ const localStoreAdapter = createFallbackStorageAdapter(
   () => console.log('[lifto-ext] storage fallback to memory')
 );
 const sessionStore = createSessionStore(localStoreAdapter);
-const workoutDiagnostics = createWorkoutDiagnostics(deviceStorage, undefined, (code) => {
-  if (code !== WORKOUT_DIAGNOSTIC_CODES.BUILD &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.SET_TAP &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SAVED &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.SET_SYNCED &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT &&
-      code !== WORKOUT_DIAGNOSTIC_CODES.RENDER_END) return null;
-  return readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance);
-}, {
+const diagnosticsStorage = createFileDiagnosticsStorage(watchFiles);
+try {
+  // Reports used to share LocalStorage with the session; dropping that copy keeps each set save small.
+  if (deviceStorage && deviceStorage.getItem(WORKOUT_DIAGNOSTICS_KEY) != null) deviceStorage.removeItem(WORKOUT_DIAGNOSTICS_KEY);
+} catch {}
+const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefined, () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance), {
   flushDelayMs: 250,
   runtime: () => readWorkoutRuntimeInfo('workout', appApi.getPackageInfo, deviceInfo, getSystemInfo),
   context: () => {
@@ -375,16 +372,21 @@ function send(type, payload = {}, options = {}) {
     return Promise.reject(new Error('Phone not reachable'));
   }
   const timeoutMs = options.timeoutMs;
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REQUEST, { request: type });
   return withRequestTimeout(widgetInstance.request(createMessage({ type, payload })), timeoutMs ? { timeoutMs } : {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
     if (isTearingDown) throw new Error('Workout page closed');
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY, { request: type });
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
       throw err;
     }
     return res;
+  }).catch((err) => {
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED, { request: type, failure: phoneFailureReason(err) });
+    throw err;
   });
 }
 
@@ -451,7 +453,6 @@ function beginRequest(message) {
 
 function failRequest(err) {
   if (isTearingDown) return;
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED);
   isBusy = false;
   statusMessage = '';
   errorMessage = err?.message || 'Request failed';
