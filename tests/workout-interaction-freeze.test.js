@@ -78,7 +78,7 @@ function renderer(product, setsCount = 2) {
     createWidget(_type, props) { const handle = { props }; if (props.click_func) nativeButtons.push(handle); return handle; },
     deleteWidget() { calls.push(inClick ? 'delete-in-click' : 'delete'); },
     ...timers,
-    deviceStorage: {
+    diagnosticsStorage: {
       getItem: key => values.get(key),
       setItem(key, value) { calls.push('diagnostic-write'); values.set(key, value); },
       removeItem: key => values.delete(key),
@@ -234,7 +234,7 @@ test('one deferred write retains all drawing steps, action, errors, and previous
   assert.throws(() => f.diagnostics.trace('ACTION', () => { throw new TypeError('private text'); }), TypeError);
   const restarted = createWorkoutDiagnostics(f.storage, () => 2000);
   restarted.record(C.BOOT);
-  const previous = restarted.read().previousDetails;
+  const previous = restarted.read().previousRuns[0].details;
   assert.equal(previous.lastAction.context.action, 'COMPLETE_SET');
   assert.equal(previous.lastError.context.errorClass, 'TypeError');
   assert.doesNotMatch(f.values.get(WORKOUT_DIAGNOSTICS_KEY), /private text/);
