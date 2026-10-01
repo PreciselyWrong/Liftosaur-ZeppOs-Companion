@@ -42,7 +42,7 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
     clearInterval(id) { timers.delete(id); }, clearTimeout() {},
     updateClock() {}, refreshSportMetrics() {}, retryPendingWrites() {}, updateTimedSetScreen() {},
     updateSyncWarning() {}, updatePreparedRestVisuals() {}, handlePollFailure() {},
-    clearWidgets() {}, addRawWidget() {}, renderClock() {}, redraw() {}, syncRestPresentation() {},
+    clearWidgets() {}, addRawWidget() {}, renderClockTarget() {}, renderClock() {}, redraw() {}, syncRestPresentation() {},
     renderRestScreen() {}, renderActiveSetScreen() {}, renderHomeScreen() {}, applyDisplayHold() {},
     stopRestBezelAnimation() {}, resetConnectionRetry() {}, resetDisplayHold() {}, stopVibration() {},
     loadDisplaySettings: () => Promise.resolve(),

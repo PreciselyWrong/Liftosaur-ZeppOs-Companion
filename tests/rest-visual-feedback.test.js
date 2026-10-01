@@ -438,7 +438,7 @@ for (const [name, source, isCompanion] of [
   });
 }
 
-test('Companion sync-details clock remains clickable while its label updates', () => {
+test('Companion sync-details footer stays tappable while its label updates', () => {
   const { env, liveWidgets } = createMockEnv({ source: companionSource });
   const click = () => {};
   Object.assign(env, {
@@ -461,27 +461,29 @@ test('Companion sync-details clock remains clickable while its label updates', (
     canOpenSyncDetails: () => true,
     openSyncDetailsModal: click,
     addLiveButton: (key, props) => env.addLiveLabel(key, props),
-    updateLiveWidget: (key, changes) => {
+    addTransparentLabel: (key, props) => env.addLiveLabel(key, props),
+    updateTransparentLabel: (key, changes) => {
       Object.assign(liveWidgets[key].props, changes);
-      liveWidgets[key].widget.setProperty(env.prop.MORE, changes);
       return true;
     },
   });
   const api = new Function('env', `with (env) {
+    ${extractFunction(companionSource, 'renderClockTarget')}
     ${extractFunction(companionSource, 'renderClock')}
     ${extractFunction(companionSource, 'updateClock')}
-    return { render: renderClock, update: updateClock };
+    return { target: renderClockTarget, render: renderClock, update: updateClock };
   }`)(env);
+  api.target();
   api.render();
-  assert.equal(liveWidgets.clock.widget.click_func, click);
+  assert.equal(liveWidgets.clockTarget.widget.click_func, click);
   env.currentClockLabel = () => '13:00 PM';
   api.update();
-  assert.equal(liveWidgets.clock.widget.click_func, click, 'Clock refresh keeps the sync-details action');
+  assert.equal(liveWidgets.clockTarget.widget.click_func, click, 'Clock refresh keeps the sync-details action');
   assert.equal(liveWidgets.clock.props.text, '13:00 PM | Pending sync');
   env.canOpenSyncDetails = () => false;
   env.currentClockLabel = () => '13:01 PM';
   api.update();
-  assert.equal(env.renderCount, 1, 'Sync-state changes rebuild the clock in its new interaction mode');
+  assert.equal(env.renderCount, 1, 'Sync-state changes rebuild the footer in its new interaction mode');
 });
 for (const [name, source, isCompanion] of [
   ['Companion', companionSource, true],
@@ -627,7 +629,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       };
       env.addLiveLabel = addFooter;
       env.addTransparentLabel = addFooter;
-      const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClock', 'renderUI'];
+      const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'renderUI'];
       const render = new Function('env', `with (env) {
         ${names.map(name => extractFunction(source, name)).join('\n')}
         const renderScreen = () => renderRestBezel(view.rest);
@@ -664,6 +666,55 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
 }
 
 for (const [name, source] of [['Companion', companionSource], ['Workout', extensionSource]]) {
+  test(`${name}: a tappable footer keeps the rest ring visible above its target`, () => {
+    const device = { width: 466, height: 466, isRound: true };
+    const { env, view, widgets } = createMockEnv({ source });
+    const scale = device.width / 480;
+    const openDetails = () => {};
+    Object.assign(env, {
+      W: device.width, H: device.height, LAYOUT: createScreenLayout(device),
+      px: value => value * scale, font: () => 20 * scale,
+      clockTimer: null, lastRenderedClock: '', currentClockLabel: () => '11:26',
+      recordingLabel: () => 'On watch', isTearingDown: false, hasBuilt: true,
+      isPaused: false, isDispatchingClick: false, isNotesModalOpen: false,
+      preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
+      workoutDiagnostics: createWorkoutDiagnostics(), cancelScheduledRender() {},
+      updateSyncWarning() {}, clearWidgets() {}, hideModalControls() {},
+      renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => true,
+      openSyncDetailsModal: openDetails,
+    });
+    env.workoutController.sync = () => ({});
+    env.workoutController.getWorkoutSetWrites = () => [1];
+    const add = (type) => (key, props) => {
+      const entry = { type, key, enabled: type !== 'text', ...env.LAYOUT.fit(props), setEnable: enabled => { entry.enabled = enabled; } };
+      widgets.push(entry);
+      return entry;
+    };
+    env.addLiveLabel = add('text');
+    env.addTransparentLabel = add('text');
+    env.addLiveButton = add('button');
+    const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'renderUI'];
+    const render = new Function('env', `with (env) {
+      ${names.map(functionName => extractFunction(source, functionName)).join('\n')}
+      const renderScreen = () => renderRestBezel(view.rest);
+      return renderUI;
+    }`)(env);
+    render();
+    const firstHalo = widgets.findIndex(w => w.type === 'arc');
+    const lastHalo = widgets.findLastIndex(w => w.type === 'arc');
+    const footer = widgets.find(w => w.key === 'clock');
+    const target = widgets.find(w => w.key === 'clockTarget');
+    assert.equal(footer.type, 'text', 'The visible footer has no background to hide the ring');
+    assert.equal(footer.enabled, false);
+    assert.equal(footer.text, '11:26 | On watch');
+    assert.ok(widgets.indexOf(footer) > lastHalo, 'Footer text stays above the ring');
+    assert.equal(target.type, 'button');
+    assert.equal(target.click_func, openDetails);
+    assert.ok(!target.text, 'The target draws no second label');
+    assert.ok(widgets.indexOf(target) < firstHalo, 'The target sits under the ring so the ring covers its corners');
+    assert.deepEqual([target.x, target.y, target.w, target.h], [footer.x, footer.y, footer.w, footer.h]);
+  });
+
   test(`${name}: heart label has no button background in both session top bars`, () => {
     for (const functionName of ['renderTopBar', 'renderPreparedTopBar']) {
       const { env, view, widgets, liveWidgets } = createMockEnv({ source });

@@ -95,6 +95,11 @@ for (const product of ['page', 'data-widget']) {
         createdWidgets.push(item);
         return item;
       },
+      addTransparentLabel: (key, props) => {
+        const item = { key, props };
+        createdWidgets.push(item);
+        return item;
+      },
       addLiveLabel: (key, props) => {
         const item = { key, props };
         createdWidgets.push(item);
@@ -110,6 +115,7 @@ for (const product of ['page', 'data-widget']) {
     vm.createContext(env);
 
     const fnNames = [
+      'renderClockTarget',
       'renderClock',
       'canOpenSyncDetails',
       'openSyncDetailsModal',
@@ -130,8 +136,9 @@ for (const product of ['page', 'data-widget']) {
     }
 
     // 1. Open sync details modal
+    env.renderClockTarget();
     env.renderClock();
-    const clock = createdWidgets.find(w => w.key === 'clock');
+    const clock = createdWidgets.find(w => w.key === 'clockTarget');
     assert.equal(typeof clock.props.click_func, 'function');
     clock.props.click_func();
     assert.equal(env.isSyncDetailsOpen, true);

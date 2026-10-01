@@ -32,7 +32,7 @@ function fixture() {
     deleteWidget: () => { if (inClick) throw new Error('deleted the clicked button'); calls.push('delete'); },
     clearWidgets() { env.activeWidgets.forEach(env.deleteWidget); env.activeWidgets = []; },
     consumeControllerUiChange() {}, destroyModalControls() {}, hideModalControls() {},
-    renderDemoBadge() {}, renderScreen() {}, renderClock() {},
+    renderDemoBadge() {}, renderScreen() {}, renderClockTarget() {}, renderClock() {},
     redraw: () => calls.push('redraw'),
     setTimeout(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
     clearTimeout(id) { timers.delete(id); },
