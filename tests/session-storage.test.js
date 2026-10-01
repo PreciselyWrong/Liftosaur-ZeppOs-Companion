@@ -119,11 +119,11 @@ test('keeps the current session in memory when device storage fails mid-workout'
   };
   const store = createSessionStore(createFallbackStorageAdapter(primary));
 
-  assert.equal(store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000 }), true);
+  assert.equal(store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000 }), false, 'a memory-only save is reported');
   assert.equal(store.load().startedAt, 1000);
-  assert.equal(writes, 1, 'the broken primary is disabled after its first failure');
-
-  store.save({ plan: PLAN, journal: [...JOURNAL, { type: 'COMPLETE_SET', timestamp: 2000 }] });
   assert.equal(writes, 1);
+
+  assert.equal(store.save({ plan: PLAN, journal: [...JOURNAL, { type: 'COMPLETE_SET', timestamp: 2000 }] }), false);
+  assert.equal(writes, 2, 'every save tries the watch storage again');
   assert.equal(store.load().journal.length, 2);
 });

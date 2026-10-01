@@ -127,6 +127,7 @@ export function createWorkoutController({
   let lastServerWorkoutSignature = null;
   let sessionGeneration = 0;
   let disposed = false;
+  let saveFailing = false;
   let getReadySeconds = 5;
 
   function hasActiveTimer() {
@@ -178,12 +179,14 @@ export function createWorkoutController({
 
   function persist() {
     if (disposed || !dayPlan || !store) return false;
-    return store.save({
+    const saved = store.save({
       plan: dayPlan,
       journal: session.getJournal(),
       startedAt: session.view(now()).startedAt,
       sync: directSync,
     });
+    saveFailing = saved !== true;
+    return saved;
   }
 
   function mutateSession(action) {
@@ -584,6 +587,7 @@ export function createWorkoutController({
     if (store) {
       store.clear();
     }
+    saveFailing = false;
     session.cancelWorkout({ timestamp: now() });
     session = createWorkoutSession({ plan: null });
     sessionGeneration += 1;
@@ -1123,6 +1127,7 @@ export function createWorkoutController({
       preservedIntervals: directSync.preservedIntervals.map((interval) => [...interval]),
     }),
     status: () => ({ ...currentStatus }),
+    isSaveFailing: () => saveFailing,
     getStatus: () => ({ ...currentStatus }),
 
     startWorkout: (options = {}) => {
