@@ -7,6 +7,8 @@ export const EXERCISE_IMAGE_WATCH_STORAGE_KEY = 'watchExerciseImagesV7';
 let requestSequence = 0;
 
 const MAX_REFUSED_URLS = 32;
+const PHONE_REPLY_WAIT_MS = 45000;
+const FILE_WAIT_MS = 20000;
 
 export function createExerciseImageClient({
   inbox,
@@ -163,13 +165,29 @@ export function createExerciseImageClient({
   function requestActive(entry, forceRefresh = false) {
     entry.requestId = `${Date.now()}-${++requestSequence}`;
     const requestId = entry.requestId;
+    const isCurrent = () => active === entry && entry.requestId === requestId && entry.status === 'loading';
     const fail = (reason, httpStatus) => {
-      if (active !== entry || entry.requestId !== requestId || entry.status !== 'loading') return;
+      if (!isCurrent()) return;
       finish(entry, 'unavailable', null, Number.isInteger(httpStatus) ? { reason, httpStatus } : { reason });
     };
-    if (timer !== null) clearTimeout(timer);
-    timer = setTimeout(() => fail('TIMEOUT'), 45000);
-    if (timer && typeof timer.unref === 'function') timer.unref();
+    let queued = false;
+    const waitFor = (ms) => {
+      if (timer !== null) clearTimeout(timer);
+      timer = setTimeout(() => {
+        if (!isCurrent()) return;
+        if (!entry.timeoutRetried) {
+          entry.timeoutRetried = true;
+          transfer = null;
+          // A slow first download often finishes on the phone meanwhile. A promised file that never
+          // came usually means the phone's saved copy is gone, so that retry asks for a fresh one.
+          requestActive(entry, forceRefresh || queued);
+          return;
+        }
+        fail(queued ? 'FILE_NOT_RECEIVED' : 'PHONE_NO_REPLY');
+      }, ms);
+      if (timer && typeof timer.unref === 'function') timer.unref();
+    };
+    waitFor(PHONE_REPLY_WAIT_MS);
     let response;
     try {
       response = request(MESSAGE_TYPES.GET_EXERCISE_IMAGE, {
@@ -184,7 +202,13 @@ export function createExerciseImageClient({
     Promise.resolve(response)
       .then((response) => {
         const payload = response ? response.payload : null;
-        if (payload?.status === 'queued') return;
+        if (payload?.status === 'queued') {
+          // On an Active 2 a sent image arrived 0.6 s after this reply, so the file gets a shorter wait.
+          if (!isCurrent()) return;
+          queued = true;
+          waitFor(FILE_WAIT_MS);
+          return;
+        }
         if (payload?.status === 'disabled') fail('PHONE_DISABLED');
         else fail(EXERCISE_IMAGE_FAILURES.has(payload?.reason) ? payload.reason : 'UNKNOWN', payload?.statusCode);
       })
