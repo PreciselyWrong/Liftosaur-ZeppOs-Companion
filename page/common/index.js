@@ -945,6 +945,10 @@ function loadDayPlan(week, day) {
 
 function updateControllerStatus() {
   directSync = workoutController.sync();
+  if (workoutController.isSaveFailing()) {
+    syncWarning = 'Unsaved on watch';
+    return;
+  }
   const status = workoutController.status();
   if (status.code === 'pending') {
     syncWarning = 'Sync pending - will retry';
