@@ -40,16 +40,19 @@ export function createNativePauseReconciler({ stallThresholdMs = 2500 } = {}) {
   let focusLostDurationSeconds = null;
   let paused = false;
 
-  function sample({ durationSeconds, timestamp }) {
+  function sample({ durationSeconds, timestamp, isNativePaused = false }) {
     if (!Number.isFinite(durationSeconds) || !Number.isFinite(timestamp)) return [];
     const actions = [];
+    // The session is the durable record of a native pause. After a rebuild or a duration
+    // restart this reconciler never saw the pause begin, so it must still emit the resume.
+    if (isNativePaused) paused = true;
 
     if (lastDurationSeconds === null || durationSeconds < lastDurationSeconds) {
       lastDurationSeconds = durationSeconds;
       lastProgressAt = timestamp;
       focusLostAt = null;
       focusLostDurationSeconds = null;
-      paused = false;
+      paused = Boolean(isNativePaused);
       return actions;
     }
 

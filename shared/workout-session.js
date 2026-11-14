@@ -1419,6 +1419,15 @@ export function createWorkoutSession({
       applyEvent({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source }, timestamp });
     },
 
+    // The lifter overrides an inferred native pause that Zepp data never shows ending (#106).
+    forceResumeWorkout({ timestamp = Date.now() } = {}) {
+      for (const source of ['native', 'manual']) {
+        if (activePauseReasons.has(source === 'native' ? 'native-workout' : 'manual-workout')) {
+          applyEvent({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source }, timestamp });
+        }
+      }
+    },
+
     toggleRestPause({ timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.REST || !restInfo) return;
       if (restInfo.isPaused) {

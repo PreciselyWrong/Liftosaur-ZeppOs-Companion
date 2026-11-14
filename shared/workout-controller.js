@@ -1181,6 +1181,8 @@ export function createWorkoutController({
         timestamp: options.timestamp ?? now(),
         source: options.source,
       })),
+    forceResumeWorkout: (options = {}) =>
+      mutateSession(() => session.forceResumeWorkout({ timestamp: options.timestamp ?? now() })),
     toggleRestPause: (options = {}) =>
       mutateSession(() =>
         session.toggleRestPause({ timestamp: options.timestamp ?? now() })
