@@ -1,8 +1,9 @@
 import { rmSync, statSync } from '@zos/fs';
 import TransferFile from '@zos/ble/TransferFile';
 import { createExerciseImageClient } from './exercise-image-client.js';
+import { hasImageMemoryHeadroom } from './exercise-images.js';
 
-export function createWatchExerciseImages({ request, onChange, storage = null, maxCachedImages = 4 }) {
+export function createWatchExerciseImages({ request, onChange, storage = null, maxCachedImages = 4, readMemory = () => null }) {
   let nativeInbox = null;
   try {
     const TransferClass = typeof TransferFile === 'function'
@@ -31,6 +32,7 @@ export function createWatchExerciseImages({ request, onChange, storage = null, m
     request,
     storage,
     maxCachedImages,
+    hasMemoryHeadroom: () => hasImageMemoryHeadroom(readMemory()),
     onChange: (url, status, failure) => {
       console.log('[lifto] exercise image state ' + status);
       onChange(url, status, failure);

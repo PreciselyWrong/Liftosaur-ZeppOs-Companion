@@ -4281,6 +4281,7 @@ Page(
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
+        readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
         maxCachedImages: 4,
       });
       pageInstance = this;
