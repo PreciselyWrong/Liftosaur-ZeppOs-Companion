@@ -38,12 +38,19 @@ for (const product of ['page', 'data-widget']) {
 
     assert.match(modal, /addLiveLabel\('workoutTimerModalValue'/);
     assert.match(modal, /addLiveButton\('workoutTimerModalPause'/);
-    assert.match(modal, /isManualWorkoutPaused \? 'Resume' : 'Pause'/);
+    assert.match(modal, /isWorkoutPaused \? 'Resume' : 'Pause'/);
     assert.match(modal, /workoutController\.pauseWorkout\(\)/);
-    assert.match(modal, /workoutController\.resumeWorkout\(\)/);
+    // A native pause must stay force-resumable when Zepp data never shows the resume.
+    assert.match(modal, /workoutController\.forceResumeWorkout\(\)/);
+    assert.doesNotMatch(modal, /isNativeWorkoutPaused && !current\.isManualWorkoutPaused\) return/);
     assert.match(modal, /click_func: closeWorkoutTimerControls/);
     assert.match(close, /isWorkoutTimerControlsOpen = false/);
     assert.match(close, /controllerUiDirty = true/);
     assert.doesNotMatch(close, /renderUI\(\)/);
   });
 }
+
+test('data-widget tells the native pause reconciler about a restored native pause', () => {
+  const refresh = extractFunction(readProductSource('data-widget'), 'refreshSportMetrics');
+  assert.match(refresh, /isNativePaused: Boolean\(view\?\.isNativeWorkoutPaused\)/);
+});

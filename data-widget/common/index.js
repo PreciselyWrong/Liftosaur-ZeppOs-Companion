@@ -505,7 +505,11 @@ function refreshSportMetrics() {
         (view?.state === SESSION_STATES.ACTIVE_SET || view?.state === SESSION_STATES.REST)
       ) {
         applyNativePauseActions(
-          nativePauseReconciler.sample({ durationSeconds, timestamp: requestedAt })
+          nativePauseReconciler.sample({
+            durationSeconds,
+            timestamp: requestedAt,
+            isNativePaused: Boolean(view?.isNativeWorkoutPaused),
+          })
         );
       } else if (view?.state !== SESSION_STATES.ACTIVE_SET && view?.state !== SESSION_STATES.REST) {
         nativePauseReconciler.reset();
@@ -2448,18 +2452,15 @@ function renderWorkoutTimerControlsModal(view) {
     w: px(layout.pauseWidth),
     h: px(layout.pauseHeight),
     radius: px(layout.pauseHeight / 2),
-    normal_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primary,
-    press_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primaryDark,
-    color: view.isManualWorkoutPaused ? 0x000000 : THEME.textPrimary,
-    text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
-      ? 'Zepp paused'
-      : (view.isManualWorkoutPaused ? 'Resume' : 'Pause'),
+    normal_color: view.isWorkoutPaused ? THEME.yellow : THEME.primary,
+    press_color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryDark,
+    color: view.isWorkoutPaused ? 0x000000 : THEME.textPrimary,
+    text: view.isWorkoutPaused ? 'Resume' : 'Pause',
     text_size: font('button'),
-    diagnosticAction: view.isManualWorkoutPaused ? 'RESUME' : 'PAUSE',
+    diagnosticAction: view.isWorkoutPaused ? 'RESUME' : 'PAUSE',
     click_func: () => {
-      const current = workoutController.view();
-      if (current.isNativeWorkoutPaused && !current.isManualWorkoutPaused) return;
-      if (current.isManualWorkoutPaused) workoutController.resumeWorkout();
+      // Resume also clears an inferred Zepp pause so a missed native resume never traps the lifter.
+      if (workoutController.view().isWorkoutPaused) workoutController.forceResumeWorkout();
       else workoutController.pauseWorkout();
     },
   });

@@ -215,6 +215,29 @@ test('guarantees critical local mutations persist to store before calling onChan
   ]);
 });
 
+test('forced workout resume clears a native pause and persists before onChange', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let clock = 1000;
+  const saved = [];
+  const originalSave = store.save.bind(store);
+  store.save = (snapshot) => {
+    saved.push(snapshot.journal.length);
+    return originalSave(snapshot);
+  };
+  const controller = createWorkoutController({ store, now: () => clock });
+  controller.loadPlan(SAMPLE_PLAN);
+  controller.startWorkout();
+  clock = 5000;
+  controller.pauseWorkout({ source: 'native' });
+  assert.equal(controller.view().isNativeWorkoutPaused, true);
+  saved.length = 0;
+
+  clock = 9000;
+  controller.forceResumeWorkout();
+  assert.equal(controller.view().isWorkoutPaused, false);
+  assert.deepEqual(saved, [3]);
+});
+
 test('local action methods modify session state, update journal, and expose helper getters', () => {
   let currentTime = 1000;
   const controller = createWorkoutController({

@@ -29,6 +29,33 @@ test('manual workout pause survives native pause reconciliation', () => {
   assert.equal(session.view(25_000).elapsedSeconds, 10);
 });
 
+test('forced workout resume clears a native pause and survives replay', () => {
+  const plan = {
+    programId: 'force-resume',
+    unit: 'kg',
+    exercises: [{
+      index: 1,
+      name: 'Squat',
+      sets: [{ index: 1, targetReps: 5, targetWeight: 100, restSeconds: 60 }],
+    }],
+  };
+  const session = createWorkoutSession({ plan });
+  session.startWorkout({ timestamp: 0 });
+  session.pauseWorkout({ timestamp: 5_000, source: 'native' });
+  session.pauseWorkout({ timestamp: 6_000 });
+
+  session.forceResumeWorkout({ timestamp: 15_000 });
+  const view = session.view(20_000);
+  assert.equal(view.isWorkoutPaused, false);
+  assert.equal(view.isNativeWorkoutPaused, false);
+  assert.equal(view.isManualWorkoutPaused, false);
+  assert.equal(view.elapsedSeconds, 10);
+
+  const restored = createWorkoutSession({ plan, initialJournal: session.getJournal() });
+  assert.equal(restored.view(20_000).isWorkoutPaused, false);
+  assert.equal(restored.view(20_000).elapsedSeconds, 10);
+});
+
 test('superset context follows actual pending progression without changing the journal', () => {
   for (const counts of [[2, 2], [2, 2, 2], [1, 3, 2]]) {
     const session = createWorkoutSession({ plan: makePlan({ exercises: counts.map((count, i) => ({
