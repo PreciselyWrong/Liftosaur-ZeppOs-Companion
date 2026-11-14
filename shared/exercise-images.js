@@ -6,8 +6,19 @@ export const EXERCISE_IMAGE_FAILURES = new Set([
   'INVALID_URL', 'SERVICE_UNAVAILABLE', 'STORAGE_INVALID', 'STORAGE_FULL', 'CONVERSION_IN_PROGRESS',
   'DOWNLOAD_PATH_INVALID', 'CONVERSION_OUTPUT_INVALID',
   'PHONE_DISABLED', 'REQUEST_FAILED', 'PHONE_NO_REPLY', 'FILE_NOT_RECEIVED', 'TRANSFER_ERROR', 'TRANSFER_CANCELED',
-  'FILE_INVALID', 'FILE_TOO_LARGE', 'UNKNOWN',
+  'FILE_INVALID', 'FILE_TOO_LARGE', 'LOW_MEMORY', 'UNKNOWN',
 ]);
+
+// The Active 2 closed the app without a message right after an image request made at 0.0 of 3.0 MiB
+// system free, while earlier requests at 0.3 MiB worked. Below this the watch skips the request.
+const MIN_IMAGE_FREE_MEMORY_BYTES = 256 * 1024;
+
+export function hasImageMemoryHeadroom(memory) {
+  const total = memory?.systemTotal;
+  const used = memory?.systemUsed;
+  if (!Number.isFinite(total) || !Number.isFinite(used) || total <= 0) return true;
+  return total - used >= MIN_IMAGE_FREE_MEMORY_BYTES;
+}
 for (const stage of ['DOWNLOAD', 'CONVERSION', 'TRANSFER']) {
   for (const error of ['SIMULATOR_UNSUPPORTED', 'HTTP_STATUS', 'NATIVE_FAILURE', 'TIMEOUT', 'CANCELED', 'UNEXPECTED']) {
     EXERCISE_IMAGE_FAILURES.add(`${stage}_${error}`);

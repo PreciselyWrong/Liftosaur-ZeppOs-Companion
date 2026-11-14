@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import { createExerciseImageClient } from '../shared/exercise-image-client.js';
+import { hasImageMemoryHeadroom } from '../shared/exercise-images.js';
 import { OVERVIEW_PAGE_SIZE } from '../shared/watch-layout.js';
 
 const url = '/externalimages/exercises/single/small/squat.png';
@@ -349,3 +350,28 @@ test('a missing watch image file is requested again after restart', async () => 
   client.dispose();
 });
 
+test('Image requests are refused while system memory is exhausted', async () => {
+  const requests = [];
+  const changes = [];
+  const client = createExerciseImageClient({
+    inbox: { on() {}, getNextFile() { return null; } },
+    request: async (_, payload) => { requests.push(payload); return { payload: { status: 'queued' } }; },
+    removeFile() {},
+    hasMemoryHeadroom: () => false,
+    onChange: (changedUrl, status, failure) => changes.push({ changedUrl, status, failure }),
+  });
+  client.setEnabled(true);
+  client.load(url);
+  await flush();
+  client.dispose();
+  assert.deepEqual(requests, []);
+  assert.deepEqual(changes.map(({ status, failure }) => ({ status, failure })),
+    [{ status: 'unavailable', failure: { reason: 'LOW_MEMORY' } }]);
+});
+
+test('Memory headroom check only fails on a known near-zero reading', () => {
+  const MIB = 1024 * 1024;
+  assert.equal(hasImageMemoryHeadroom(null), true);
+  assert.equal(hasImageMemoryHeadroom({ systemUsed: 3 * MIB - 0.3 * MIB, systemTotal: 3 * MIB }), true);
+  assert.equal(hasImageMemoryHeadroom({ systemUsed: 3128592, systemTotal: 3145728 }), false);
+});
