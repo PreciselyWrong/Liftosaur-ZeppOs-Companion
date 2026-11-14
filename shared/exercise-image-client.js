@@ -18,6 +18,7 @@ export function createExerciseImageClient({
   onChange = () => {},
   storage = null,
   maxCachedImages = storage ? 32 : 4,
+  hasMemoryHeadroom = () => true,
 }) {
   let enabled = false;
   let disposed = false;
@@ -224,6 +225,11 @@ export function createExerciseImageClient({
       return;
     }
     active = entry;
+    // A refused request is not retried by timers; the next visible load asks again.
+    if (!hasMemoryHeadroom()) {
+      finish(entry, 'unavailable', null, { reason: 'LOW_MEMORY' });
+      return;
+    }
     requestActive(entry);
   }
 
