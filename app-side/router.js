@@ -163,7 +163,9 @@ export function createSideRouter({ programService = null, workoutService = null,
               return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, 'sets must be a non-empty array');
             }
             const result = await workoutService.syncWorkoutSets(sets);
-            return createReply(rawMessage, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT, result);
+            // The watch only compares startTime, and a full workout per set fills its memory pool.
+            const startTime = result?.workout?.startTime;
+            return createReply(rawMessage, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT, startTime ? { workout: { startTime } } : {});
           } catch (err) {
             return apiFailure(rawMessage, err);
           }
