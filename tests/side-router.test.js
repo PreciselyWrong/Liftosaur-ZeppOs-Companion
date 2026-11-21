@@ -217,7 +217,7 @@ function fakeWorkoutService(overrides = {}) {
     getNextWorkout: async (selection) => ({ workout: { id: 'next', selection } }),
     getCurrentWorkout: async () => ({ workout: { id: 'current' } }),
     startWorkout: async (payload) => ({ workout: { id: 'started', payload } }),
-    syncWorkoutSets: async (sets) => ({ workout: { syncedCount: sets.length } }),
+    syncWorkoutSets: async () => ({ workout: { startTime: 1700000000000, exercises: [] } }),
     finishWorkout: async (payload) => ({ workout: { id: payload.startTime, finished: true } }),
     discardWorkout: async (startTime) => ({ deleted: true, startTime }),
     getSettings: async () => ({ units: 'kg', timers: {} }),
@@ -348,7 +348,18 @@ describe('Workout Service Routing', () => {
       })
     );
     assert.equal(valid.type, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT);
-    assert.equal(valid.payload.workout.syncedCount, 1);
+    assert.deepEqual(valid.payload, { workout: { startTime: 1700000000000 } });
+  });
+
+  test('replies to a set sync with only the workout start time the watch compares', async () => {
+    const exercises = Array.from({ length: 8 }, (_, index) => ({ id: `e${index}`, sets: Array.from({ length: 5 }, () => ({ reps: 5, weight: 100 })) }));
+    const router = createSideRouter({ workoutService: fakeWorkoutService({
+      syncWorkoutSets: async () => ({ workout: { startTime: 1700000000000, exercises, notes: 'x'.repeat(2000) } }),
+    }) });
+    const res = await router.handle(createMessage({ type: MESSAGE_TYPES.SYNC_WORKOUT_SETS, payload: { sets: [{ entryId: 'e1', setId: 's1' }] } }));
+    assert.equal(res.type, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT);
+    // Each reply costs the watch about ten times its size, and only startTime is read.
+    assert.deepEqual(res.payload, { workout: { startTime: 1700000000000 } });
   });
 
   test('routes GET_SETTINGS needing no payload', async () => {
