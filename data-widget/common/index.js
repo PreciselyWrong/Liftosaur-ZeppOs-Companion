@@ -4029,6 +4029,7 @@ DataWidget(
       hasBuilt = false;
       lifecycleGeneration += 1;
       cancelScheduledRender();
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.EXIT);
       workoutDiagnostics.cancel();
       resetConnectionRetry();
       workoutController?.dispose();

@@ -154,10 +154,12 @@ test('Workout action metadata is semantic, persisted, and removed before native 
 });
 
 test('destroy abandons controller work without saving or clearing the local journal', () => {
-  const { env, calls } = fixture();
+  const { env, calls, diagnostics } = fixture();
   env.scheduleRenderUI();
   env.lifecycle.onDestroy();
-  assert.deepEqual(calls, ['dispose']);
+  // The only write is the diagnostics EXIT marker, which tells a normal close from a kill.
+  assert.deepEqual(calls, ['storage', 'dispose']);
+  assert.equal(diagnostics.read().events.at(-1).code, 'EXIT');
 });
 
 test('late set sync success and failure cannot write diagnostics after destruction', async () => {
