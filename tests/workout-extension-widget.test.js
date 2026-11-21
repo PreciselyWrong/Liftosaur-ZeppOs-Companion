@@ -761,3 +761,30 @@ test('tick updates prepared Start set action in place across zero, overtime, and
   assert.equal(uiRedrawn, false);
   assert.equal(nextSetCalled, false);
 });
+
+test('a failed program request shows the phone connection screen, not an empty account', async () => {
+  const source = readWidgetSource();
+  const state = {
+    screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: true, statusMessage: '', errorMessage: '',
+    EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME' },
+    MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS' },
+    PHONE_CONNECTING_MESSAGE: '', retries: 0,
+    beginRequest() {}, renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {}, failRequest() {},
+    loadDisplaySettings: () => Promise.resolve(),
+    workoutController: { markAuthoritativeResponse() {} },
+    workoutToDayPlan: () => null,
+    isTemporaryPhoneError: (err) => err.code === 'TIMEOUT',
+    scheduleConnectionRetry() { state.retries += 1; },
+    send: (type) => {
+      if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+      if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: null } });
+      return Promise.reject(Object.assign(new Error('timeout'), { code: 'TIMEOUT' }));
+    },
+  };
+  const scope = new Proxy(state, { has: (target, key) => key in target });
+  const load = new Function('scope', `with (scope) { return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  load();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(state.screen, 'CONNECTION');
+  assert.equal(state.retries, 1);
+});
