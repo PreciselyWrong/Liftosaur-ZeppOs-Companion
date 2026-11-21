@@ -3534,10 +3534,8 @@ function startInitialNetworkLoad() {
           logRecoverableError('[lifto-ext] next workout unavailable', err);
           return null;
         }),
-        send(MESSAGE_TYPES.LIST_PROGRAMS).catch((err) => {
-          logRecoverableError('[lifto-ext] program list unavailable', err);
-          return null;
-        }),
+        // A failed list is a phone problem, not an empty account, so it reaches the retry path below.
+        send(MESSAGE_TYPES.LIST_PROGRAMS),
       ]).then(([nextRes, listRes]) => {
         const nextWorkout = nextRes?.payload?.workout || null;
         if (nextWorkout) {
