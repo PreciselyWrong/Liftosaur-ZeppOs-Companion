@@ -30,7 +30,7 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
     screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION', HOME: 'HOME' },
     SESSION_STATES: { ACTIVE_SET: 'ACTIVE_SET', REST: 'REST', READY: 'READY', NO_PLAN: 'NO_PLAN', FINISHED: 'FINISHED' },
     controllerUiDirty: false, lastRenderedState: null, lastRenderedSecond: null,
-    syncWarning: null, dayPlan: null, preparationImageUrl: null, isBusy: false,
+    syncWarning: null, dayPlan: null, defaultWorkoutPlan: null, preparationImageUrl: null, isBusy: false,
     restoredDisplaySettingsPending: false, terminalActionPending: null, initialLoadPending: false,
     lifecycleGeneration: 0, lastPendingSyncRetryAt: 0,
     W: 480, H: 480, THEME: { bg: 0 }, widget: { FILL_RECT: 1 },

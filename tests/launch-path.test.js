@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
-import { programForSavedPlan, suggestedProgramIndex } from '../shared/selection.js';
+import { launchPlanFor, programForSavedPlan, suggestedProgramIndex } from '../shared/selection.js';
 
 const widgetSource = readFileSync(new URL('../data-widget/common/index.js', import.meta.url), 'utf8');
 
@@ -128,4 +128,70 @@ test('the launch and the onResume that follows it share one settings request', a
   state.lifecycleGeneration += 1;
   loadDisplaySettings();
   assert.equal(sent.length, 3);
+});
+
+test('Workout Home preloads the images of the next workout it offers', () => {
+  const preloads = [];
+  const state = {
+    isEditLastSetOpen: false, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false,
+    discardConfirmationRequested: false, phoneRequiredReason: null, isNotesModalOpen: false,
+    screen: 'HOME', isBusy: false, EXTENSION_SCREENS,
+    defaultWorkoutPlan: { exercises: [{ imageUrl: 'https://example.com/a.png' }, { imageUrl: null }, { imageUrl: 'https://example.com/b.jpeg' }] },
+    exerciseImages: { preload: (urls) => preloads.push(urls) },
+    renderHomeScreen: () => 'home', renderLoadingScreen: () => 'loading',
+  };
+  const renderScreen = compile(widgetSource, ['renderScreen'], state, 'renderScreen');
+  assert.equal(renderScreen(), 'home');
+  // The first image used to wait 2 to 3 s for the phone download after the day was opened.
+  assert.deepEqual(preloads, [['https://example.com/a.png', null, 'https://example.com/b.jpeg']]);
+  state.isBusy = true;
+  assert.equal(renderScreen(), 'loading');
+  assert.equal(preloads.length, 1);
+});
+
+function widgetDayPick({ fetchedAt }) {
+  const sent = [];
+  const loaded = [];
+  const plan = { programId: 'p1', week: 6, dayInWeek: 5, unit: 'kg', exercises: [{ name: 'Pull Up' }] };
+  const state = {
+    selectedWeek: null, selectedProgram: { id: 'p1' }, outline: { programId: 'p1' }, dayPlan: null,
+    defaultWorkoutPlan: plan, defaultWorkoutFetchedAt: fetchedAt, accountSettings: { units: 'kg' },
+    isBusy: false, statusMessage: '', errorMessage: '', finishState: null, isOverviewOpen: false,
+    overviewPage: 0, readyPage: 0, screen: 'DAYS', isTearingDown: false, console: { log() {} }, Date,
+    EXTENSION_SCREENS, MESSAGE_TYPES, launchPlanFor, renderUI() {},
+    defaultDirectSync: (mode) => ({ mode }),
+    workoutToDayPlan: (workout) => ({ ...workout, unit: 'kg' }),
+    workoutController: { loadPlan: (value) => loaded.push(value) },
+    send(type, payload) {
+      sent.push({ type, payload });
+      return Promise.resolve({ payload: { workout: { ...plan, dayInWeek: payload.dayInWeek } } });
+    },
+  };
+  const names = ['loadDayPlan', 'beginRequest', 'failRequest'];
+  if (widgetSource.includes('function openDayPlan(')) names.push('openDayPlan');
+  const loadDayPlan = compile(widgetSource, names, state, 'loadDayPlan');
+  return { state, sent, loaded, plan, loadDayPlan };
+}
+
+test('picking the day the launch already fetched opens it without asking the phone again', async () => {
+  const { state, sent, loaded, plan, loadDayPlan } = widgetDayPick({ fetchedAt: Date.now() });
+  loadDayPlan({ number: 6 }, { number: 5 });
+  assert.deepEqual(sent, []);
+  assert.equal(state.screen, 'SESSION');
+  assert.equal(loaded[0], plan);
+  // The launch answer serves one workout; picking the day again later asks the phone.
+  loadDayPlan({ number: 6 }, { number: 5 });
+  await settle();
+  assert.equal(sent.length, 1);
+});
+
+test('another day, or a launch answer past its freshness, is asked from the phone', async () => {
+  for (const [fetchedAt, day] of [[Date.now(), 4], [Date.now() - 10 * 60000, 5]]) {
+    const { state, sent, loadDayPlan } = widgetDayPick({ fetchedAt });
+    loadDayPlan({ number: 6 }, { number: day });
+    await settle();
+    assert.equal(sent.length, 1);
+    assert.deepEqual(sent[0].payload, { programId: 'p1', week: 6, dayInWeek: day });
+    assert.equal(state.screen, 'SESSION');
+  }
 });

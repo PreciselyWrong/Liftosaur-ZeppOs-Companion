@@ -100,6 +100,7 @@ import {
   suggestedStart,
   withoutIndex,
   programForSavedPlan,
+  launchPlanFor,
 } from '../../shared/selection.js';
 
 const THEME = {
@@ -3478,6 +3479,9 @@ function renderScreen() {
   if (screen === EXTENSION_SCREENS.LOADING) return renderLoadingScreen();
   if (screen === EXTENSION_SCREENS.HOME) {
     if (isBusy) return renderLoadingScreen();
+    // The day Home offers is the likeliest pick: its images reach the flash cache while the lifter
+    // decides, instead of 2 to 3 s after the day opens. The image client keeps one transfer at a time.
+    if (defaultWorkoutPlan?.exercises) exerciseImages?.preload(defaultWorkoutPlan.exercises.map((exercise) => exercise?.imageUrl));
     return renderHomeScreen();
   }
   if (screen === EXTENSION_SCREENS.PROGRAMS) return renderProgramsScreen();
@@ -3732,13 +3736,17 @@ function loadOutline(program, { nextScreen = EXTENSION_SCREENS.WEEKS, reply = nu
 
 function loadDayPlan(week, day) {
   selectedWeek = week;
+  const pick = { programId: selectedProgram?.id || outline?.programId, week: week.number, dayInWeek: day.number };
+  const launchPlan = launchPlanFor(defaultWorkoutPlan, defaultWorkoutFetchedAt, pick);
+  if (launchPlan) {
+    // One workout per launch answer: a later pick of this day asks the phone again.
+    defaultWorkoutFetchedAt = null;
+    openDayPlan(launchPlan);
+    return;
+  }
   beginRequest('Loading workout...');
 
-  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, {
-    programId: selectedProgram?.id || outline?.programId,
-    week: week.number,
-    dayInWeek: day.number,
-  })
+  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, pick)
     .then((res) => {
       const rawWorkout = res.payload?.workout || null;
       if (!rawWorkout) {
@@ -3754,21 +3762,25 @@ function loadDayPlan(week, day) {
       if (!plan.exercises || plan.exercises.length === 0) {
         throw new Error('This workout has no exercises');
       }
-      isBusy = false;
-      statusMessage = '';
-      dayPlan = plan;
-      workoutController.loadPlan(dayPlan, {
-        sync: defaultDirectSync('DIRECT'),
-        clearStore: true,
-      });
-      finishState = null;
-      isOverviewOpen = false;
-      overviewPage = 0;
-      readyPage = 0;
-      screen = EXTENSION_SCREENS.SESSION;
-      renderUI();
+      openDayPlan(plan);
     })
     .catch(failRequest);
+}
+
+function openDayPlan(plan) {
+  isBusy = false;
+  statusMessage = '';
+  dayPlan = plan;
+  workoutController.loadPlan(dayPlan, {
+    sync: defaultDirectSync('DIRECT'),
+    clearStore: true,
+  });
+  finishState = null;
+  isOverviewOpen = false;
+  overviewPage = 0;
+  readyPage = 0;
+  screen = EXTENSION_SCREENS.SESSION;
+  renderUI();
 }
 
 function submitWorkout() {
