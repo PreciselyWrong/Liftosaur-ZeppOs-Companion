@@ -189,6 +189,8 @@ export function createWorkoutSession({
   let selectedPendingExerciseIndex = null;
   let activeTimer = null;
   let journal = [];
+  // Changes whenever the journal does, so a caller can tell an unchanged journal without reading it.
+  let journalRevision = 0;
   // The newest journal event while it is a live adjustment the next tap may fold into.
   let openAdjustment = null;
   const intervals = [];
@@ -451,6 +453,7 @@ export function createWorkoutSession({
 
   function applyEvent(event) {
     openAdjustment = null;
+    journalRevision += 1;
     journal.push(event);
 
     switch (event.type) {
@@ -1089,6 +1092,7 @@ export function createWorkoutSession({
     const lastEvent = journal[journal.length - 1];
     if (!lastEvent || lastEvent.type !== EVENT_TYPES.CORRECT_SET) return false;
     openAdjustment = null;
+    journalRevision += 1;
     journal.pop();
     setWrites.pop();
     const { setId, prevWeight, prevReps } = lastEvent.payload || {};
@@ -1572,6 +1576,7 @@ export function createWorkoutSession({
 
     isAllCompleted: allSetsDone,
     getJournal: () => [...journal],
+    getJournalRevision: () => journalRevision,
   };
 }
 
