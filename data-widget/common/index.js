@@ -156,7 +156,12 @@ try {
 const deviceStorageAdapter = deviceStorage
   ? {
       read: () => deviceStorage.getItem(STORAGE_KEY, null),
-      write: (data) => deviceStorage.setItem(STORAGE_KEY, data),
+      write: (data) => {
+        // Saves cost the watch about 0.4 s each, so the always-on health summary keeps their duration.
+        const startedAt = Date.now();
+        deviceStorage.setItem(STORAGE_KEY, data);
+        workoutDiagnostics.notePersist(Date.now() - startedAt, data.length);
+      },
       remove: () => deviceStorage.removeItem(STORAGE_KEY),
     }
   : null;
@@ -174,6 +179,9 @@ try {
 } catch {}
 const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefined, () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance), {
   flushDelayMs: 250,
+  // onPause marks a clean exit, so the next launch can tell a silent kill from a normal close.
+  persistHealth: true,
+  journalLength: () => workoutController?.getJournal().length,
   runtime: () => readWorkoutRuntimeInfo('workout', appApi.getPackageInfo, deviceInfo, getSystemInfo),
   context: () => {
     let state;
@@ -382,7 +390,7 @@ function send(type, payload = {}, options = {}) {
     timeoutMs: PHONE_REQUEST_TIMEOUT_MS,
   }).then((res) => {
     if (isTearingDown) throw new Error('Workout page closed');
-    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY, { request: type });
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY, { request: type }, res);
     if (res && res.type === MESSAGE_TYPES.ERROR) {
       const err = new Error(res.payload?.message || 'Liftosaur API error');
       err.code = res.payload?.code;
@@ -3673,11 +3681,13 @@ function loadDisplaySettings() {
   const generation = lifecycleGeneration;
   // build() starts the launch load and the onResume right after it asks again: one reply serves both.
   if (displaySettingsLoad && displaySettingsLoad.generation === generation) return displaySettingsLoad.promise;
-  const diagnosticsPayload = workoutDiagnostics.isEnabled() ? { diagnostics: workoutDiagnostics.read() } : {};
-  const promise = send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsPayload).then((settingsRes) => {
+  // Every resume asks for settings: the report goes once per new run, then only a small health patch.
+  const diagnosticsUpload = workoutDiagnostics.prepareUpload();
+  const promise = send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsUpload.payload).then((settingsRes) => {
     if (isTearingDown || generation !== lifecycleGeneration) return accountSettings;
     const diagnosticsWereEnabled = workoutDiagnostics.isEnabled();
     workoutDiagnostics.setEnabled(normalizeWorkoutDiagnosticsEnabled(settingsRes.payload?.workoutDiagnosticsEnabled));
+    if (workoutDiagnostics.isEnabled()) diagnosticsUpload.commit();
     if (!diagnosticsWereEnabled && workoutDiagnostics.isEnabled()) {
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.DIAGNOSTICS_ON);
     }
@@ -3978,7 +3988,7 @@ DataWidget(
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
-        readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
+        readMemory: () => workoutDiagnostics.noteMemory(readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance)),
         // Cached images are files in watch flash and only drawn ones are decoded, so a whole day fits
         // without more RAM; each eviction cost a 40 KB BLE transfer again, the riskiest image step.
         // 12 converted 140 px images is about 480 KB of flash, enough for a long day's preload.

@@ -298,3 +298,22 @@ test('pause stops native rest breathing before deletion; destroy does not call w
   assert.ok(!calls.includes('unexpected-native'));
   assert.equal(env.restPulseAnimHandles.length, 0);
 });
+
+test('a resumed page does not upload the same diagnostics report again', async () => {
+  const { env, diagnostics } = fixture();
+  diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
+  diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: 'COMPLETE_SET' });
+  env.normalizeWorkoutDisplaySettings = () => ({});
+  env.saveAutoPreparePreference = () => {};
+  env.deviceStorage = null;
+  const payloads = [];
+  env.send = async (type, payload) => {
+    payloads.push(payload);
+    return { payload: { workoutDiagnosticsEnabled: true } };
+  };
+  await env.loadDisplaySettings();
+  env.lifecycleGeneration += 1;
+  await env.loadDisplaySettings();
+  assert.ok(Array.isArray(payloads[0].diagnostics.events), 'the first settings request carries the report');
+  assert.equal(payloads[1].diagnostics?.events, undefined, 'the resume request does not resend it');
+});
