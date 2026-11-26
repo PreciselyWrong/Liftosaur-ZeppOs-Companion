@@ -800,7 +800,8 @@ export function createWorkoutController({
 
           const remainingPendingCount =
             session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-          if (returnedWorkout && remainingPendingCount === 0) {
+          // The phone replies with only startTime; a reply without entries is not a snapshot to adopt.
+          if (returnedWorkout && Array.isArray(returnedWorkout.entries) && remainingPendingCount === 0) {
             const currentState = session.view(now()).state;
             if (currentState === SESSION_STATES.REST) {
               deferredServerWorkout = returnedWorkout;
