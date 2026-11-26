@@ -20,9 +20,11 @@ export const REPLY_KINDS = {
   // Full snapshot of the running workout: entries plus the start time naming it, or none.
   snapshot: (payload) => payload.workout == null
     || (hasEntries(payload.workout) && Number.isFinite(payload.workout.startTime)),
-  // Acknowledgement only: at most the running workout's start time, never entries to adopt.
+  // Acknowledgement: the running workout's start time. A phone older than the watch during an
+  // update may still add the entries; they are never adopted, and this phone never sends them.
   ack: (payload) => payload.workout === undefined
-    || (isObject(payload.workout) && Number.isFinite(payload.workout.startTime) && payload.workout.entries === undefined),
+    || (isObject(payload.workout) && Number.isFinite(payload.workout.startTime)
+      && (payload.workout.entries === undefined || Array.isArray(payload.workout.entries))),
   programs: (payload) => Array.isArray(payload.programs),
   outline: (payload) => Array.isArray(payload.weeks),
   plan: (payload) => Array.isArray(payload.exercises),
@@ -58,5 +60,6 @@ export function isExpectedReply(requestType, payload) {
 /** Whether `reply` is a message the phone may send in answer to a `requestType` request. */
 export function isValidReply(requestType, reply) {
   if (reply?.type === T.ERROR) return isObject(reply.payload) && REPLY_KINDS.error(reply.payload);
-  return reply?.type === PROTOCOL_SCHEMA[requestType]?.[0] && isExpectedReply(requestType, reply.payload);
+  return reply?.type === PROTOCOL_SCHEMA[requestType]?.[0] && isExpectedReply(requestType, reply.payload)
+    && !(PROTOCOL_SCHEMA[requestType][1] === 'ack' && reply.payload.workout && reply.payload.workout.entries);
 }

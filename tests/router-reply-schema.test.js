@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 
 import { createSideRouter } from '../app-side/router.js';
 import { MESSAGE_TYPES, ERROR_CODES, createMessage } from '../shared/protocol.js';
+import { isExpectedReply, isValidReply } from '../shared/protocol-schema.js';
 
 const T = MESSAGE_TYPES;
 const entries = [{ entryId: 'e1', sets: [] }];
@@ -30,6 +31,13 @@ for (const [type, payload, service] of wrongShapes) {
     assert.equal(logs.length, 1);
   });
 }
+
+test('the phone may send only the reduced set sync reply, while the watch still reads a full one', () => {
+  const full = { type: T.SYNC_WORKOUT_SETS_RESULT, payload: { workout: { startTime: 5, entries } } };
+  assert.equal(isValidReply(T.SYNC_WORKOUT_SETS, full), false);
+  assert.equal(isExpectedReply(T.SYNC_WORKOUT_SETS, full.payload), true);
+  assert.equal(isValidReply(T.SYNC_WORKOUT_SETS, { ...full, payload: { workout: { startTime: 5 } } }), true);
+});
 
 test('valid replies leave the router unchanged', async () => {
   const router = createSideRouter({
