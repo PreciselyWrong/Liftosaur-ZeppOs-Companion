@@ -10,6 +10,7 @@
 
 import { EVENT_TYPES, SESSION_STATES, createWorkoutSession, weightStepFor } from './workout-session.js';
 import { MESSAGE_TYPES } from './protocol.js';
+import { isExpectedReply } from './protocol-schema.js';
 import { workoutToDayPlan } from './workout-api-plan.js';
 import { createWorkoutRefreshPolicy } from './workout-refresh-policy.js';
 import { normalizeGetReadySeconds } from './timed-settings.js';
@@ -332,6 +333,15 @@ export function createWorkoutController({
     return completions.length ? [{
       type: EVENT_TYPES.LOCAL_COMPLETIONS, payload: { completions }, timestamp: now(),
     }] : [];
+  }
+
+  // The only way to a reply payload: a reply of another kind is a retryable error, never data.
+  function expectReply(type, res) {
+    const payload = res ? res.payload : null;
+    if (isExpectedReply(type, payload)) return payload;
+    const error = new Error(`Unexpected ${type} reply`);
+    error.code = 'API_FAILED';
+    throw error;
   }
 
   // A workout without entries cannot be run: adopting it would end the workout on NO_PLAN.
@@ -726,7 +736,8 @@ export function createWorkoutController({
       return 'UNREACHABLE';
     }
     if (disposed || session !== startingSession) return 'OTHER';
-    const workout = res?.payload?.workout;
+    if (!isExpectedReply(MESSAGE_TYPES.GET_WORKOUT_CURRENT, res ? res.payload : null)) return 'UNREACHABLE';
+    const workout = res.payload.workout;
     if (!workout || workout.startTime !== startedAt || workout.programId !== dayPlan?.programId) return 'OTHER';
     try {
       bindStartedWorkout(workout);
@@ -775,6 +786,7 @@ export function createWorkoutController({
           throw err;
         });
         if (disposed || session !== startingSession) return false;
+        expectReply(MESSAGE_TYPES.START_WORKOUT, res);
         policy.markAuthoritativeResponse();
         const payloadObj = res ? res.payload : null;
         const returnedWorkout = payloadObj ? payloadObj.workout : null;
@@ -869,11 +881,11 @@ export function createWorkoutController({
             (write, index) => JSON.stringify(currentWrites[batchStart + index]) === JSON.stringify(write)
           );
           if (!prefixMatches) return false;
+          // An acknowledgement carries at most the start time: nothing in it can be adopted.
+          const acknowledged = expectReply(MESSAGE_TYPES.SYNC_WORKOUT_SETS, res).workout;
           policy.markAuthoritativeResponse();
-          const payloadObj = res ? res.payload : null;
-          const returnedWorkout = payloadObj ? payloadObj.workout : null;
-          if (returnedWorkout) {
-            if (returnedWorkout.startTime && returnedWorkout.startTime !== session.view(now()).startedAt) {
+          if (acknowledged) {
+            if (acknowledged.startTime !== session.view(now()).startedAt) {
               directSync.conflict = true;
               persist();
               setStatus({ code: SYNC_STATUS_CODES.CONFLICT, detail: 'START_TIME_MISMATCH' });
@@ -886,20 +898,6 @@ export function createWorkoutController({
           // so only the save is needed, not a full redraw.
           directSync.acknowledgedSetCount += batchLength;
           persist();
-
-          const remainingPendingCount =
-            session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-          // The phone replies with only startTime; a reply without entries is not a snapshot to adopt.
-          if (returnedWorkout && Array.isArray(returnedWorkout.entries) && remainingPendingCount === 0) {
-            const currentState = session.view(now()).state;
-            if (currentState === SESSION_STATES.REST) {
-              deferredServerWorkout = returnedWorkout;
-              lastServerWorkoutSignature = workoutSignature(returnedWorkout);
-            } else if (currentState === SESSION_STATES.ACTIVE_SET) {
-              applyAdoptedSnapshot(returnedWorkout);
-              break;
-            }
-          }
         }
         return true;
       } catch (err) {
@@ -944,9 +942,8 @@ export function createWorkoutController({
     try {
       const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
       if (disposed) return false;
+      const serverWorkout = expectReply(MESSAGE_TYPES.GET_WORKOUT_CURRENT, res).workout;
       policy.markSuccess();
-      const payloadObj = res ? res.payload : null;
-      const serverWorkout = payloadObj ? payloadObj.workout : null;
       const stateNow = session.view(now()).state;
       if (
         session !== sessionAtPollStart ||
@@ -1028,9 +1025,8 @@ export function createWorkoutController({
     try {
       const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
       if (disposed) return { success: false, reason: 'DISPOSED' };
+      const workout = expectReply(MESSAGE_TYPES.GET_WORKOUT_CURRENT, res).workout;
       policy.markAuthoritativeResponse();
-      const payloadObj = res ? res.payload : null;
-      const workout = payloadObj ? payloadObj.workout : null;
       if (!workout) {
         directSync.conflict = true;
         directSync.remoteMissing = true;

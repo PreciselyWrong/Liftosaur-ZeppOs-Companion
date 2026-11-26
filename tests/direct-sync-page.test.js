@@ -172,12 +172,12 @@ test('a stale poll cannot overwrite a newer local set', () => {
   assert.match(poll, /currentWriteCount\s*!==\s*writeCountAtPollStart/);
 });
 
-test('a successful set batch adopts the whole server workout', () => {
+test('a set batch acknowledgement is checked as one and never adopted as a workout', () => {
   const source = readWorkoutController();
   const sync = source.slice(source.indexOf('function synchronizeDirectSets()'), source.indexOf('async function pollCurrentWorkout()'));
-  assert.match(sync, /returnedWorkout/);
-  assert.match(sync, /deferredServerWorkout\s*=\s*returnedWorkout/);
-  assert.match(sync, /applyAdoptedSnapshot\(returnedWorkout\)/);
+  assert.match(sync, /expectReply\(MESSAGE_TYPES\.SYNC_WORKOUT_SETS, res\)/);
+  assert.doesNotMatch(sync, /deferredServerWorkout\s*=/);
+  assert.doesNotMatch(sync, /applyAdoptedSnapshot\(/);
 });
 
 test('start response avoids the QuickJS optional-chain stack bug', () => {
@@ -202,10 +202,10 @@ test('Companion uses the shared set input guard and workout navigation labels', 
   assert.match(source, /repsLeft: set\?\.isUnilateral \? set\.reps : null/);
 });
 
-test('a batch is adopted only after every newer local set is acknowledged', () => {
+test('a snapshot is adopted only after every newer local set is acknowledged', () => {
   const source = readWorkoutController();
-  const sync = source.slice(source.indexOf('function synchronizeDirectSets()'), source.indexOf('async function pollCurrentWorkout()'));
-  assert.match(sync, /remainingPendingCount\s*===\s*0[\s\S]*?applyAdoptedSnapshot/);
+  const poll = source.slice(source.indexOf('async function pollCurrentWorkout()'), source.indexOf('function requestWorkoutRefresh()'));
+  assert.match(poll, /currentPending\s*===\s*0[\s\S]*?applyAdoptedSnapshot/);
 });
 
 test('finish refuses to clear a workout while set writes remain pending', () => {

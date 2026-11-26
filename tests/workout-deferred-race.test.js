@@ -5,6 +5,8 @@ import { createMemoryStorageAdapter, createSessionStore } from '../shared/sessio
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 
+const openPolicy = { beginPoll: () => true, markSuccess() {}, markFailure() {}, markAuthoritativeResponse() {}, request() {} };
+
 function workout() {
   return {
     programId: 'program', dayName: 'Day', dayData: { week: 1, dayInWeek: 1 }, startTime: 1000,
@@ -25,15 +27,18 @@ test('deferred snapshots preserve newer writes, navigation and recovery across s
       oldSnapshot.entries[0].sets[0].completed = { reps: 5, weight: '20kg' };
       let release;
       let batches = 0;
+      let current = oldSnapshot;
       const store = createSessionStore(createMemoryStorageAdapter());
       const controller = createWorkoutController({
-        now: () => 1000, store,
+        now: () => 1000, store, refreshPolicy: openPolicy,
+        // Set batches are acknowledged with the start time only; snapshots come from the running workout read.
         request: async type => {
           if (type === MESSAGE_TYPES.START_WORKOUT) return { payload: { workout: initial } };
           if (type === MESSAGE_TYPES.SYNC_WORKOUT_SETS) {
-            if (++batches === 1) return { payload: { workout: oldSnapshot } };
+            if (++batches === 1) return { payload: { workout: { startTime: 1000 } } };
             return new Promise(resolve => { release = resolve; });
           }
+          if (type === MESSAGE_TYPES.GET_WORKOUT_CURRENT) return { payload: { workout: current } };
           return { payload: {} };
         },
       });
@@ -42,6 +47,7 @@ test('deferred snapshots preserve newer writes, navigation and recovery across s
       await controller.ensureStarted();
       controller.completeSet();
       await controller.syncSets();
+      await controller.pollCurrent();
       assert.equal(controller.hasDeferredServerWorkout(), true);
       if (timing === 'replacement') {
         controller.replaceFromServer(workoutToDayPlan(oldSnapshot, { isCurrent: true }));
@@ -54,11 +60,14 @@ test('deferred snapshots preserve newer writes, navigation and recovery across s
       const sync = controller.syncSets();
       await Promise.resolve();
       if (timing !== 'pending') {
-        const latest = structuredClone(oldSnapshot);
-        latest.entries[1].sets[0].completed = { reps: 5, weight: '20kg' };
-        latest.entries[1].sets[1].reps = 8;
-        release({ payload: timing === 'latest snapshot' ? { workout: latest } : {} });
+        release({ payload: {} });
         await sync;
+        if (timing === 'latest snapshot') {
+          current = structuredClone(oldSnapshot);
+          current.entries[1].sets[0].completed = { reps: 5, weight: '20kg' };
+          current.entries[1].sets[1].reps = 8;
+          await controller.pollCurrent();
+        }
       }
       const writes = controller.getWorkoutSetWrites();
       controller[action]();
