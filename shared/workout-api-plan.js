@@ -120,7 +120,8 @@ function mapWorkoutSet(set, setIndex, isWarmupDefault, planUnit) {
  * real payloads; any other side count needs two different loadings agreeing
  * before the formula is trusted.
  *
- * @returns {object|null} equipment in the `GET /gyms/:id/equipment` shape
+ * @returns {object|null} equipment in the `GET /gyms/:id/equipment` shape,
+ *          marked `inferred` because it is only the part of the gym seen
  */
 function inferLoadingEquipment(rawSets) {
   let unit = null;
@@ -159,6 +160,7 @@ function inferLoadingEquipment(rawSets) {
 
   if (unit === null || (sides !== 1 && sums.size < 2)) return null;
   return {
+    inferred: true,
     bar: { [unit]: `${bar}${unit}` },
     multiplier: sides,
     isFixed: false,

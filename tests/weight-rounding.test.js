@@ -130,9 +130,28 @@ test('formats a one-sided plate stack as one load', () => {
   assert.equal(formatLoadoutLabel(22.5, ONE_SIDED_STACK, 'kg'), '1×20 + 1×2.5 KG');
 });
 
-test('does not suggest plates for an inexact or unresolved weight', () => {
-  assert.equal(formatLoadoutLabel(61, BARBELL, 'kg'), null);
+test('offers the nearest loadable weights for an inexact weight, and nothing when unresolved', () => {
+  assert.equal(formatLoadoutLabel(61, BARBELL, 'kg'), 'NEAR 60/62.5 KG');
   assert.equal(formatLoadoutLabel(60, null, 'kg'), null);
+});
+
+test('offers only the side that exists past the ends of the equipment', () => {
+  assert.equal(formatLoadoutLabel(15, BARBELL, 'kg'), 'NEAR 20 KG', 'lighter than the empty bar');
+  // The bar and one of each pair per side, 20 + 2 x 63.75, is the most on hand.
+  assert.equal(formatLoadoutLabel(300, BARBELL, 'kg'), 'NEAR 147.5 KG', 'heavier than every plate on hand');
+  assert.equal(formatLoadoutLabel(30, DUMBBELL, 'kg'), 'NEAR 25 KG');
+  assert.equal(formatLoadoutLabel(2, DUMBBELL, 'kg'), 'NEAR 5 KG');
+});
+
+test('finds the nearest heavier load a plain greedy fill would miss', () => {
+  // 21 cannot be loaded; 22.5 needs the 2.5, 25 would be the first greedy pick.
+  assert.equal(formatLoadoutLabel(21, ONE_SIDED_STACK, 'kg'), 'NEAR 20/22.5 KG');
+});
+
+test('equipment inferred from the workout never offers nearest weights', () => {
+  const inferred = { ...BARBELL, inferred: true };
+  assert.equal(formatLoadoutLabel(60, inferred, 'kg'), '1×20 KG');
+  assert.equal(formatLoadoutLabel(61, inferred, 'kg'), null);
 });
 
 test('formats the official Liftosaur per-side plates array', () => {
@@ -162,7 +181,7 @@ test('manual weight changes recalculate plates from equipment instead of retaini
 
 test('identifies an exact fixed weight without inventing plates', () => {
   assert.equal(formatLoadoutLabel(17.5, DUMBBELL, 'kg'), 'USE 17.5 KG');
-  assert.equal(formatLoadoutLabel(16, DUMBBELL, 'kg'), null);
+  assert.equal(formatLoadoutLabel(16, DUMBBELL, 'kg'), 'NEAR 15/17.5 KG');
 });
 
 test('picks from the list for fixed equipment', () => {
