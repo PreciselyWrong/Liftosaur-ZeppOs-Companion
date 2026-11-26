@@ -13,6 +13,8 @@ import {
 
 const rootDir = process.cwd();
 const defaultTargetDir = path.join(rootDir, 'build', 'workout-extension');
+const releaseDir = (product) => path.join(rootDir, 'build', 'release', product);
+const noPrepare = () => {};
 
 test('validates supported products', () => {
   assert.deepEqual(SUPPORTED_PRODUCTS, ['companion', 'workout', 'all']);
@@ -29,7 +31,7 @@ test('validates supported products', () => {
   assert.throws(() => normalizeProduct('watch'), /Invalid product/);
 });
 
-test('planBuild for companion requires no App ID and targets root directory', () => {
+test('planBuild for companion requires no App ID and builds a prepared copy of the root', () => {
   const plan = planBuild('companion', { env: {} });
   assert.equal(plan.product, 'companion');
   assert.equal(plan.steps.length, 1);
@@ -38,11 +40,12 @@ test('planBuild for companion requires no App ID and targets root directory', ()
   assert.equal(step.product, 'companion');
   assert.equal(step.command, 'zeus');
   assert.deepEqual(step.args, ['build']);
-  assert.equal(step.cwd, rootDir);
+  assert.equal(step.prepareFrom, rootDir);
+  assert.equal(step.cwd, releaseDir('companion'));
   assert.equal(step.generate, false);
 });
 
-test('planBuild for workout validates App ID and targets generated build directory', () => {
+test('planBuild for workout validates App ID and builds a prepared copy of the generated project', () => {
   assert.throws(() => planBuild('workout', { env: {} }), /Missing or invalid Workout Extension App ID/);
   assert.throws(() => planBuild('workout', { appId: 'not-a-number' }), /Missing or invalid Workout Extension App ID/);
   assert.throws(() => planBuild('workout', { appId: 0 }), /Missing or invalid Workout Extension App ID/);
@@ -56,7 +59,8 @@ test('planBuild for workout validates App ID and targets generated build directo
   assert.equal(step.product, 'workout');
   assert.equal(step.command, 'zeus');
   assert.deepEqual(step.args, ['build']);
-  assert.equal(step.cwd, defaultTargetDir);
+  assert.equal(step.prepareFrom, defaultTargetDir);
+  assert.equal(step.cwd, releaseDir('workout'));
   assert.equal(step.generate, true);
   assert.equal(step.appId, 998877);
 
@@ -76,16 +80,17 @@ test('planBuild for all validates App ID upfront and orders companion before wor
   assert.equal(plan.steps.length, 2);
 
   assert.equal(plan.steps[0].product, 'companion');
-  assert.equal(plan.steps[0].cwd, rootDir);
+  assert.equal(plan.steps[0].cwd, releaseDir('companion'));
   assert.equal(plan.steps[0].generate, false);
 
   assert.equal(plan.steps[1].product, 'workout');
-  assert.equal(plan.steps[1].cwd, defaultTargetDir);
+  assert.equal(plan.steps[1].prepareFrom, defaultTargetDir);
+  assert.equal(plan.steps[1].cwd, releaseDir('workout'));
   assert.equal(plan.steps[1].generate, true);
   assert.equal(plan.steps[1].appId, 123456);
 });
 
-test('executeBuild executes companion with zeus build in repository root', () => {
+test('executeBuild executes companion with zeus build in its prepared release copy', () => {
   const calls = [];
   const fakeSpawn = (command, args, options) => {
     calls.push({ command, args, options });
@@ -96,7 +101,7 @@ test('executeBuild executes companion with zeus build in repository root', () =>
     generatorCalled = true;
   };
 
-  const result = executeBuild('companion', {
+  const result = executeBuild('companion', { prepare: noPrepare,
     spawn: fakeSpawn,
     generator: fakeGenerator,
     env: {},
@@ -107,7 +112,7 @@ test('executeBuild executes companion with zeus build in repository root', () =>
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.platform === 'win32' ? 'zeus build' : 'zeus');
   assert.deepEqual(calls[0].args, process.platform === 'win32' ? [] : ['build']);
-  assert.equal(calls[0].options.cwd, rootDir);
+  assert.equal(calls[0].options.cwd, releaseDir('companion'));
   assert.equal(calls[0].options.stdio, 'inherit');
 });
 
@@ -120,7 +125,7 @@ test('executeBuild restores agent pointers removed by Zeus', () => {
     fs.writeFileSync(agentsPath, 'project instructions\n');
     fs.writeFileSync(claudePath, '@AGENTS.md\n');
 
-    executeBuild('companion', {
+    executeBuild('companion', { prepare: noPrepare,
       rootDir: temporaryRoot,
       env: {},
       spawn: () => {
@@ -148,7 +153,7 @@ test('executeBuild generates project before running zeus build for workout', () 
     generatorCalls.push(opts);
   };
 
-  const result = executeBuild('workout', {
+  const result = executeBuild('workout', { prepare: noPrepare,
     appId: 789012,
     spawn: fakeSpawn,
     generator: fakeGenerator,
@@ -163,7 +168,7 @@ test('executeBuild generates project before running zeus build for workout', () 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.platform === 'win32' ? 'zeus build' : 'zeus');
   assert.deepEqual(calls[0].args, process.platform === 'win32' ? [] : ['build']);
-  assert.equal(calls[0].options.cwd, defaultTargetDir);
+  assert.equal(calls[0].options.cwd, releaseDir('workout'));
   assert.equal(calls[0].options.stdio, 'inherit');
 });
 
@@ -175,7 +180,7 @@ test('executeBuild for all fails before starting companion process if App ID is 
   };
 
   assert.throws(
-    () => executeBuild('all', { env: {}, spawn: fakeSpawn }),
+    () => executeBuild('all', { prepare: noPrepare, env: {}, spawn: fakeSpawn }),
     /Missing or invalid Workout Extension App ID/,
   );
   assert.equal(spawnCalled, false, 'spawn should not be called if validation fails');
@@ -192,30 +197,33 @@ test('executeBuild for all runs companion then workout in sequence', () => {
   };
 
   const result = executeBuild('all', {
+    prepare: (from, to) => order.push({ type: 'prepare', from, to }),
     appId: 345678,
     spawn: fakeSpawn,
     generator: fakeGenerator,
   });
 
   assert.equal(result.product, 'all');
-  assert.equal(order.length, 3);
-  assert.deepEqual(order[0], {
+  assert.equal(order.length, 5);
+  assert.deepEqual(order[0], { type: 'prepare', from: rootDir, to: releaseDir('companion') });
+  assert.deepEqual(order[1], {
     type: 'spawn',
     command: process.platform === 'win32' ? 'zeus build' : 'zeus',
     args: process.platform === 'win32' ? [] : ['build'],
-    cwd: rootDir,
+    cwd: releaseDir('companion'),
   });
-  assert.deepEqual(order[1], {
+  assert.deepEqual(order[2], {
     type: 'generator',
     appId: 345678,
     targetDir: defaultTargetDir,
     rootDir,
   });
-  assert.deepEqual(order[2], {
+  assert.deepEqual(order[3], { type: 'prepare', from: defaultTargetDir, to: releaseDir('workout') });
+  assert.deepEqual(order[4], {
     type: 'spawn',
     command: process.platform === 'win32' ? 'zeus build' : 'zeus',
     args: process.platform === 'win32' ? [] : ['build'],
-    cwd: defaultTargetDir,
+    cwd: releaseDir('workout'),
   });
 });
 
@@ -232,7 +240,7 @@ test('executeBuild propagates non-zero exit and aborts immediately on first fail
 
   assert.throws(
     () =>
-      executeBuild('all', {
+      executeBuild('all', { prepare: noPrepare,
         appId: 555666,
         spawn: fakeSpawn,
         generator: fakeGenerator,
@@ -244,7 +252,7 @@ test('executeBuild propagates non-zero exit and aborts immediately on first fail
   assert.equal(generatorCalled, false, 'generator must not run after companion build failure');
 
   assert.throws(
-    () => executeBuild('companion', { spawn: () => ({ status: null, signal: 'SIGTERM' }) }),
+    () => executeBuild('companion', { prepare: noPrepare, spawn: () => ({ status: null, signal: 'SIGTERM' }) }),
     (err) => err.status === 1 && err.product === 'companion',
   );
 });
@@ -254,7 +262,7 @@ test('executeBuild propagates spawn error exceptions', () => {
   const fakeSpawn = () => ({ error: spawnError });
 
   assert.throws(
-    () => executeBuild('companion', { spawn: fakeSpawn }),
+    () => executeBuild('companion', { prepare: noPrepare, spawn: fakeSpawn }),
     /spawn ENOENT/,
   );
 });
@@ -268,7 +276,7 @@ test('main handles CLI args and exit status', () => {
   const fakeSpawn = () => ({ status: 0 });
   const fakeGen = () => {};
 
-  main(['companion'], { spawn: fakeSpawn, generator: fakeGen, exit: mockExit });
+  main(['companion'], { prepare: noPrepare, spawn: fakeSpawn, generator: fakeGen, exit: mockExit });
   assert.equal(exitCode, null);
 
   main(['unknown-target'], { exit: mockExit });

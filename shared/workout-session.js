@@ -49,6 +49,34 @@ function initialWeightFor(set) {
   return set?.targetWeight ?? (set?.askWeight ? 0 : null);
 }
 
+const SET_ADJUSTMENTS = {
+  [EVENT_TYPES.ADJUST_WEIGHT]: 'currentWeight',
+  [EVENT_TYPES.ADJUST_REPS]: 'currentReps',
+  [EVENT_TYPES.ADJUST_RPE]: 'currentRpe',
+};
+
+function adjustSetValue(type, value, delta) {
+  if (type === EVENT_TYPES.ADJUST_WEIGHT) {
+    return Math.max(0, Math.round(((value ?? 0) + delta) * 100) / 100);
+  }
+  if (type === EVENT_TYPES.ADJUST_REPS) return Math.max(0, (value ?? 0) + delta);
+  return Math.min(10, Math.max(1, Math.round(((value ?? 8) + delta) * 2) / 2));
+}
+
+function adjustRest(rest, delta, isWorkoutPaused) {
+  if (rest.isPaused) {
+    rest.pausedRemaining = Math.max(0, (rest.pausedRemaining ?? 0) + delta);
+  } else if (isWorkoutPaused) {
+    rest.nativePausedRemainingMs = Math.max(0, (rest.nativePausedRemainingMs ?? 0) + delta * 1000);
+    rest.duration = Math.max(0, rest.duration + delta);
+  } else {
+    rest.endsAt = rest.endsAt + delta * 1000;
+    rest.duration = Math.max(0, rest.duration + delta);
+  }
+}
+
+const REST_ADJUSTED_FIELDS = ['isPaused', 'pausedRemaining', 'nativePausedRemainingMs', 'duration', 'endsAt'];
+
 function combineExerciseDetails(exercise) {
   return formatExerciseDetails(exercise);
 }
@@ -161,6 +189,10 @@ export function createWorkoutSession({
   let selectedPendingExerciseIndex = null;
   let activeTimer = null;
   let journal = [];
+  // Changes whenever the journal does, so a caller can tell an unchanged journal without reading it.
+  let journalRevision = 0;
+  // The newest journal event while it is a live adjustment the next tap may fold into.
+  let openAdjustment = null;
   const intervals = [];
   const setWrites = [];
   let intervalStart = null;
@@ -420,6 +452,8 @@ export function createWorkoutSession({
   }
 
   function applyEvent(event) {
+    openAdjustment = null;
+    journalRevision += 1;
     journal.push(event);
 
     switch (event.type) {
@@ -461,26 +495,13 @@ export function createWorkoutSession({
         break;
       }
 
-      case EVENT_TYPES.ADJUST_WEIGHT: {
-        const prog = pendingProgress();
-        if (!prog) break;
-        const base = prog.currentWeight ?? 0;
-        prog.currentWeight = Math.max(0, Math.round((base + event.payload.delta) * 100) / 100);
-        break;
-      }
-
-      case EVENT_TYPES.ADJUST_REPS: {
-        const prog = pendingProgress();
-        if (!prog) break;
-        prog.currentReps = Math.max(0, (prog.currentReps ?? 0) + event.payload.delta);
-        break;
-      }
-
+      case EVENT_TYPES.ADJUST_WEIGHT:
+      case EVENT_TYPES.ADJUST_REPS:
       case EVENT_TYPES.ADJUST_RPE: {
         const prog = pendingProgress();
         if (!prog) break;
-        const base = prog.currentRpe ?? 8;
-        prog.currentRpe = Math.min(10, Math.max(1, Math.round((base + event.payload.delta) * 2) / 2));
+        const field = SET_ADJUSTMENTS[event.type];
+        prog[field] = adjustSetValue(event.type, prog[field], event.payload.delta);
         break;
       }
 
@@ -691,19 +712,7 @@ export function createWorkoutSession({
 
       case EVENT_TYPES.ADJUST_REST: {
         if (state === SESSION_STATES.REST && restInfo) {
-          const delta = event.payload?.delta || 0;
-          if (restInfo.isPaused) {
-            restInfo.pausedRemaining = Math.max(0, (restInfo.pausedRemaining ?? 0) + delta);
-          } else if (hasWorkoutPause()) {
-            restInfo.nativePausedRemainingMs = Math.max(
-              0,
-              (restInfo.nativePausedRemainingMs ?? 0) + delta * 1000
-            );
-            restInfo.duration = Math.max(0, restInfo.duration + delta);
-          } else {
-            restInfo.endsAt = restInfo.endsAt + delta * 1000;
-            restInfo.duration = Math.max(0, restInfo.duration + delta);
-          }
+          adjustRest(restInfo, event.payload?.delta || 0, hasWorkoutPause());
         }
         break;
       }
@@ -790,6 +799,58 @@ export function createWorkoutSession({
         break;
       }
     }
+  }
+
+  /** What an adjustment of `type` changes right now, or null when it would change nothing. */
+  function adjustmentState(type) {
+    if (type === EVENT_TYPES.ADJUST_REST) {
+      if (state !== SESSION_STATES.REST || !restInfo) return null;
+      const workoutPaused = hasWorkoutPause();
+      return {
+        target: [restInfo, workoutPaused],
+        workoutPaused,
+        value: REST_ADJUSTED_FIELDS.map((field) => restInfo[field]),
+      };
+    }
+    const prog = pendingProgress();
+    if (!prog) return null;
+    return { target: [state, prog, prog.currentSetIndex], value: [prog[SET_ADJUSTMENTS[type]]] };
+  }
+
+  function projectAdjustment(type, start, delta) {
+    if (type !== EVENT_TYPES.ADJUST_REST) return [adjustSetValue(type, start.value[0], delta)];
+    const rest = {};
+    REST_ADJUSTED_FIELDS.forEach((field, index) => { rest[field] = start.value[index]; });
+    adjustRest(rest, delta, start.workoutPaused);
+    return REST_ADJUSTED_FIELDS.map((field) => rest[field]);
+  }
+
+  const sameItems = (a, b) => a.length === b.length && a.every((item, index) => item === b[index]);
+
+  /**
+   * Applies a live adjustment, folding it into the previous journal event when that event
+   * adjusted the same value of the same set and one event with the summed delta, replayed
+   * from the state before the first tap, lands exactly where the taps did. Clamping can
+   * break that (a weight held at zero), and then the tap keeps its own event.
+   */
+  function applyAdjustment(event) {
+    const run = openAdjustment;
+    const start = adjustmentState(event.type);
+    const mergeable = Boolean(run && start && run.event.type === event.type
+      && journal[journal.length - 1] === run.event && sameItems(run.start.target, start.target));
+    applyEvent(event);
+    if (!start) return;
+    if (mergeable) {
+      const delta = run.event.payload.delta + event.payload.delta;
+      if (sameItems(projectAdjustment(event.type, run.start, delta), adjustmentState(event.type).value)) {
+        const merged = { ...event, payload: { ...event.payload, delta } };
+        journal[journal.length - 2] = merged;
+        journal.pop();
+        openAdjustment = { start: run.start, event: merged };
+        return;
+      }
+    }
+    openAdjustment = { start, event };
   }
 
   function beginPause(reason, timestamp) {
@@ -1030,6 +1091,8 @@ export function createWorkoutSession({
   function rollbackLastCorrection() {
     const lastEvent = journal[journal.length - 1];
     if (!lastEvent || lastEvent.type !== EVENT_TYPES.CORRECT_SET) return false;
+    openAdjustment = null;
+    journalRevision += 1;
     journal.pop();
     setWrites.pop();
     const { setId, prevWeight, prevReps } = lastEvent.payload || {};
@@ -1344,17 +1407,17 @@ export function createWorkoutSession({
     // for, and the change lands on the set about to be performed.
     adjustWeight(steps = 1, { timestamp = Date.now() } = {}) {
       if (!isAdjustable()) return;
-      applyEvent({ type: EVENT_TYPES.ADJUST_WEIGHT, payload: { delta: steps * step }, timestamp });
+      applyAdjustment({ type: EVENT_TYPES.ADJUST_WEIGHT, payload: { delta: steps * step }, timestamp });
     },
 
     adjustReps(delta, { timestamp = Date.now() } = {}) {
       if (!isAdjustable()) return;
-      applyEvent({ type: EVENT_TYPES.ADJUST_REPS, payload: { delta }, timestamp });
+      applyAdjustment({ type: EVENT_TYPES.ADJUST_REPS, payload: { delta }, timestamp });
     },
 
     adjustRpe(delta, { timestamp = Date.now() } = {}) {
       if (!isAdjustable()) return;
-      applyEvent({ type: EVENT_TYPES.ADJUST_RPE, payload: { delta }, timestamp });
+      applyAdjustment({ type: EVENT_TYPES.ADJUST_RPE, payload: { delta }, timestamp });
     },
 
     completeSet({
@@ -1452,7 +1515,7 @@ export function createWorkoutSession({
 
     adjustRest(deltaSeconds, { timestamp = Date.now() } = {}) {
       if (state !== SESSION_STATES.REST) return;
-      applyEvent({ type: EVENT_TYPES.ADJUST_REST, payload: { delta: deltaSeconds }, timestamp });
+      applyAdjustment({ type: EVENT_TYPES.ADJUST_REST, payload: { delta: deltaSeconds }, timestamp });
     },
 
     nextSet({ timestamp = Date.now() } = {}) {
@@ -1513,6 +1576,7 @@ export function createWorkoutSession({
 
     isAllCompleted: allSetsDone,
     getJournal: () => [...journal],
+    getJournalRevision: () => journalRevision,
   };
 }
 

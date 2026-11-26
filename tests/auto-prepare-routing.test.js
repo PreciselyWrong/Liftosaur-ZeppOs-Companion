@@ -104,7 +104,7 @@ for (const product of ['page', 'data-widget']) {
       isNotesModalOpen: false, isTearingDown: false, lifecycleGeneration: 1, displaySettingsLoad: null,
       controllerUiDirty: false, screen: 'SESSION', SCREEN: { SESSION: 'SESSION' },
       EXTENSION_SCREENS: { SESSION: 'SESSION' }, MESSAGE_TYPES: { GET_SETTINGS: 'GET_SETTINGS' },
-      workoutDiagnostics: { isEnabled: () => false, setEnabled() {} },
+      workoutDiagnostics: { isEnabled: () => false, setEnabled() {}, prepareUpload: () => ({ payload: {}, commit() {} }) },
       workoutController: { configureTimedSets() {} }, applyDisplayHold() {}, renderUI() {},
     };
     vm.createContext(env);

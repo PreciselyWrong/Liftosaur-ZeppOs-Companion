@@ -106,7 +106,7 @@ test('the launch and the onResume that follows it share one settings request', a
   const state = {
     lifecycleGeneration: 3, displaySettingsLoad: null, isTearingDown: false, accountSettings: null,
     isNotesModalOpen: false, screen: 'LOADING', EXTENSION_SCREENS, MESSAGE_TYPES,
-    workoutDiagnostics: { isEnabled: () => false, setEnabled() {}, record() {} },
+    workoutDiagnostics: { isEnabled: () => false, setEnabled() {}, record() {}, prepareUpload: () => ({ payload: {}, commit() {} }) },
     WORKOUT_DIAGNOSTIC_CODES: {}, deviceStorage: null, restPresentation: null,
     exerciseImages: null, workoutController: { configureTimedSets() {} },
     normalizeWorkoutDiagnosticsEnabled: Boolean, normalizeExerciseImages: Boolean, normalizeGetReadySeconds: Number,

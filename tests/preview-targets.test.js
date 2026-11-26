@@ -14,6 +14,8 @@ import {
 
 const rootDir = process.cwd();
 const defaultWorkoutDir = path.join(rootDir, 'build', 'workout-extension');
+const releaseDir = (product) => path.join(rootDir, 'build', 'release', product);
+const noPrepare = () => {};
 const defaultBuilderScript = path.join(rootDir, 'tools', 'build-preview.mjs');
 const defaultCompanionQr = path.join(rootDir, 'build', 'lifto-companion-qr.png');
 const defaultWorkoutQr = path.join(rootDir, 'build', 'lifto-workout-qr.png');
@@ -38,7 +40,7 @@ test('exposes default preview outputs and scale', () => {
   assert.equal(DEFAULT_PREVIEW_SCALE, 10);
 });
 
-test('planPreview for companion requires no App ID and targets root directory', () => {
+test('planPreview for companion requires no App ID and previews a prepared copy of the root', () => {
   const plan = planPreview('companion', { env: {} });
   assert.equal(plan.product, 'companion');
   assert.equal(plan.steps.length, 1);
@@ -47,7 +49,8 @@ test('planPreview for companion requires no App ID and targets root directory', 
   assert.equal(step.product, 'companion');
   assert.equal(step.command, process.execPath);
   assert.deepEqual(step.args, [defaultBuilderScript, defaultCompanionQr, '10']);
-  assert.equal(step.cwd, rootDir);
+  assert.equal(step.prepareFrom, rootDir);
+  assert.equal(step.cwd, releaseDir('companion'));
   assert.equal(step.generate, false);
   assert.equal(step.outPath, defaultCompanionQr);
   assert.equal(step.scale, 10);
@@ -74,7 +77,7 @@ test('planPreview rejects an invalid scale before starting a preview', () => {
   assert.throws(() => planPreview('companion', { scale: Number.NaN }), /positive number/);
 });
 
-test('planPreview for workout validates App ID and targets generated build directory', () => {
+test('planPreview for workout validates App ID and previews a prepared copy of the generated project', () => {
   assert.throws(() => planPreview('workout', { env: {} }), /Missing or invalid Workout Extension App ID/);
   assert.throws(() => planPreview('workout', { appId: 'invalid' }), /Missing or invalid Workout Extension App ID/);
   assert.throws(() => planPreview('workout', { appId: 0 }), /Missing or invalid Workout Extension App ID/);
@@ -88,7 +91,8 @@ test('planPreview for workout validates App ID and targets generated build direc
   assert.equal(step.product, 'workout');
   assert.equal(step.command, process.execPath);
   assert.deepEqual(step.args, [defaultBuilderScript, defaultWorkoutQr, '10']);
-  assert.equal(step.cwd, defaultWorkoutDir);
+  assert.equal(step.prepareFrom, defaultWorkoutDir);
+  assert.equal(step.cwd, releaseDir('workout'));
   assert.equal(step.generate, true);
   assert.equal(step.appId, 887766);
   assert.equal(step.outPath, defaultWorkoutQr);
@@ -115,7 +119,7 @@ test('planPreview for workout accepts custom outPath and scale', () => {
   assert.equal(step.scale, 8);
 });
 
-test('executePreview executes companion preview in repository root without generator', () => {
+test('executePreview builds the companion QR from its prepared release copy without generator', () => {
   const calls = [];
   const fakeSpawn = (command, args, options) => {
     calls.push({ command, args, options });
@@ -126,18 +130,21 @@ test('executePreview executes companion preview in repository root without gener
     generatorCalled = true;
   };
 
+  const prepared = [];
   const result = executePreview('companion', {
+    prepare: (from, to) => prepared.push([from, to, calls.length]),
     spawn: fakeSpawn,
     generator: fakeGenerator,
     env: {},
   });
+  assert.deepEqual(prepared, [[rootDir, releaseDir('companion'), 0]], 'the copy is prepared before the QR builder runs');
 
   assert.equal(result.product, 'companion');
   assert.equal(generatorCalled, false, 'generator should not be called for companion preview');
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.execPath);
   assert.deepEqual(calls[0].args, [defaultBuilderScript, defaultCompanionQr, '10']);
-  assert.equal(calls[0].options.cwd, rootDir);
+  assert.equal(calls[0].options.cwd, releaseDir('companion'));
   assert.equal(calls[0].options.shell, false);
   assert.equal(calls[0].options.stdio, 'inherit');
 });
@@ -153,7 +160,7 @@ test('executePreview generates project before running QR builder for workout', (
     generatorCalls.push(opts);
   };
 
-  const result = executePreview('workout', {
+  const result = executePreview('workout', { prepare: noPrepare,
     appId: 654321,
     spawn: fakeSpawn,
     generator: fakeGenerator,
@@ -168,7 +175,7 @@ test('executePreview generates project before running QR builder for workout', (
   assert.equal(calls.length, 1);
   assert.equal(calls[0].command, process.execPath);
   assert.deepEqual(calls[0].args, [defaultBuilderScript, defaultWorkoutQr, '10']);
-  assert.equal(calls[0].options.cwd, defaultWorkoutDir);
+  assert.equal(calls[0].options.cwd, releaseDir('workout'));
   assert.equal(calls[0].options.shell, false);
   assert.equal(calls[0].options.stdio, 'inherit');
 });
@@ -185,7 +192,7 @@ test('executePreview for workout fails before generation or spawn if App ID is m
   };
 
   assert.throws(
-    () => executePreview('workout', { env: {}, spawn: fakeSpawn, generator: fakeGenerator }),
+    () => executePreview('workout', { prepare: noPrepare, env: {}, spawn: fakeSpawn, generator: fakeGenerator }),
     /Missing or invalid Workout Extension App ID/,
   );
   assert.equal(spawnCalled, false, 'spawn should not be called when App ID is missing');
@@ -196,14 +203,14 @@ test('executePreview propagates non-zero exit and signal failures', () => {
   const fakeSpawnNonZero = () => ({ status: 42 });
 
   assert.throws(
-    () => executePreview('companion', { spawn: fakeSpawnNonZero }),
+    () => executePreview('companion', { prepare: noPrepare, spawn: fakeSpawnNonZero }),
     (err) => err.status === 42 && err.product === 'companion' && err.message.includes('exit code 42'),
   );
 
   const fakeSpawnSignal = () => ({ status: null, signal: 'SIGTERM' });
 
   assert.throws(
-    () => executePreview('companion', { spawn: fakeSpawnSignal }),
+    () => executePreview('companion', { prepare: noPrepare, spawn: fakeSpawnSignal }),
     (err) => err.status === 1 && err.signal === 'SIGTERM' && err.product === 'companion' && err.message.includes('signal SIGTERM'),
   );
 });
@@ -213,7 +220,7 @@ test('executePreview propagates spawn error exceptions', () => {
   const fakeSpawn = () => ({ error: spawnError });
 
   assert.throws(
-    () => executePreview('companion', { spawn: fakeSpawn }),
+    () => executePreview('companion', { prepare: noPrepare, spawn: fakeSpawn }),
     /spawn ENOENT/,
   );
 });
@@ -227,7 +234,7 @@ test('main handles CLI args and exit status', () => {
   const fakeSpawn = () => ({ status: 0 });
   const fakeGen = () => {};
 
-  main(['companion'], { spawn: fakeSpawn, generator: fakeGen, exit: mockExit });
+  main(['companion'], { prepare: noPrepare, spawn: fakeSpawn, generator: fakeGen, exit: mockExit });
   assert.equal(exitCode, null);
 
   main(['unknown-target'], { exit: mockExit });

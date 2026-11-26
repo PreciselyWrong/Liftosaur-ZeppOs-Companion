@@ -23,8 +23,11 @@ function session({ sets = 30 } = {}) {
       finished.push(payload);
       return { payload: { status: 'SAVED' } };
     }
-    for (const write of payload?.sets || []) {
-      server.entries[0].sets.find((set) => set.setId === write.setId).completed = write.completed;
+    if (type === MESSAGE_TYPES.SYNC_WORKOUT_SETS) {
+      for (const write of payload.sets) {
+        server.entries[0].sets.find((set) => set.setId === write.setId).completed = write.completed;
+      }
+      return { payload: { workout: { startTime: server.startTime } } };
     }
     return { payload: { workout: structuredClone(server) } };
   };

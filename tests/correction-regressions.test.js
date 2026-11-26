@@ -21,6 +21,7 @@ function fixture({ store = createSessionStore(createMemoryStorageAdapter()) } = 
         for (const write of payload.sets) {
           remote.entries[0].sets.find(set => set.setId === write.setId).completed = structuredClone(write.completed);
         }
+        return { payload: { workout: { startTime: remote.startTime } } };
       }
       return { payload: { workout: structuredClone(remote) } };
     },
