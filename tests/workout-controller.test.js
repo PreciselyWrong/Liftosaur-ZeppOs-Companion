@@ -691,6 +691,40 @@ test('local set persists before the first transport call', async () => {
   assert.equal(completedSetCountInStoreAtTransportCall, 1);
 });
 
+test('a start-time-only set sync reply keeps the plan through rest and the next set', async () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
+    })
+  );
+
+  const controller = createWorkoutController({ store, request: transport.request, now: () => 1000 });
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  await controller.ensureStarted();
+  const exerciseCount = controller.plan().exercises.length;
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+
+  controller.nextSet();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+  assert.equal(controller.plan().exercises.length, exerciseCount);
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 2);
+  assert.equal(controller.plan().exercises.length, exerciseCount);
+});
+
 test('concurrent drains share one promise and acknowledge only confirmed batch length', async () => {
   const adapter = createMemoryStorageAdapter();
   const store = createSessionStore(adapter);
