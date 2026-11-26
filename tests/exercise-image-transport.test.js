@@ -32,6 +32,22 @@ test('exercise download url proxies PNG images to white background and passes GI
   assert.equal(exerciseDownloadUrl(null), null);
 });
 
+// On an Active 2 a 166 KB user-upload JPEG converted to 1,094,464 bytes, over the 512 KiB the
+// watch accepts, so that exercise never showed its image. A 140 px proxied PNG converts to ~40 KB.
+test('exercise download url resizes user-upload JPEG and WebP images like PNGs', () => {
+  for (const url of [
+    'https://www.liftosaur.com/userimages/user-uploads/abc/exercise.jpeg',
+    'https://www.liftosaur.com/userimages/user-uploads/abc/exercise.JPG',
+    'https://images.example.com/exercise.webp',
+  ]) {
+    assert.equal(
+      exerciseDownloadUrl(url),
+      `https://wsrv.nl/exercise.png?url=${encodeURIComponent(url)}&w=140&h=140&fit=contain&cbg=white&bg=white&output=png`,
+      url,
+    );
+  }
+});
+
 test('image policy accepts public HTTPS image files and explicit opt-in', () => {
   assert.equal(normalizeExerciseImageUrl(imageUrl), `https://www.liftosaur.com${imageUrl}`);
   const gif = 'https://www.docteur-fitness.com/wp-content/uploads/2021/12/oiseau-assis-sur-banc.gif';
