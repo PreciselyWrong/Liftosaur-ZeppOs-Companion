@@ -21,6 +21,19 @@ const MAX_AUTO_RETRIES = 2;
 // The quiet moment a tap buys before the day preload asks for its next image.
 export const PRELOAD_TAP_QUIET_MS = 5000;
 
+// What a workout screen does to the day preload: a set under way stops it; the ready, rest and Prepare
+// screens feed it the day's images, the upcoming exercise first, then the rest in workout order.
+export function exerciseImagePreloadFor(view) {
+  if (!view) return null;
+  const timedSetRunning = view.timedSet && view.timedSet.phase !== 'READY' && view.timedSet.phase !== 'REST';
+  if (view.state === 'ACTIVE_SET' || timedSetRunning) return { pause: true };
+  if (view.state !== 'READY' && view.state !== 'REST') return null;
+  const exercises = Array.isArray(view.overviewExercises) ? view.overviewExercises : [];
+  const current = view.state === 'REST' ? (view.pending?.exerciseIndex ?? view.currentExerciseIndex) : view.currentExerciseIndex;
+  const start = Number.isInteger(current) && current >= 0 && current < exercises.length ? current : 0;
+  return { urls: [...exercises.slice(start), ...exercises.slice(0, start)].map((exercise) => exercise?.imageUrl) };
+}
+
 // A critical workout request never waits on an image: the image work waits on it instead.
 export function holdExerciseImagesDuring(images, type, start) {
   if (type !== MESSAGE_TYPES.SYNC_WORKOUT_SETS || !images || typeof images.hold !== 'function') return start();

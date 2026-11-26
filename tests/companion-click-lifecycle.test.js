@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
 
 const source = readFileSync(new URL('../page/common/index.js', import.meta.url), 'utf8');
 
@@ -20,6 +21,7 @@ function fixture() {
   const events = [];
   const env = {
     isTearingDown: false, isDispatchingClick: false, renderTimer: null,
+    exerciseImages: null, exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS,
     controllerUiDirty: false, activeWidgets: [], liveWidgets: {},
     preparationImageUrl: null, isNotesModalOpen: false,
     workoutDiagnostics: { record(code, context) { events.push({ code, context }); }, trace(_phase, operation) { return operation(); } }, WORKOUT_DIAGNOSTIC_CODES: {
