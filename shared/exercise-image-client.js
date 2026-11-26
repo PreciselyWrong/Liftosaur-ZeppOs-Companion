@@ -9,6 +9,44 @@ let requestSequence = 0;
 const MAX_REFUSED_URLS = 32;
 const PHONE_REPLY_WAIT_MS = 45000;
 const FILE_WAIT_MS = 20000;
+// The Active 2 closed the app silently while an image transfer, a set sync awaiting its reply and the
+// post-set redraw overlapped. Images wait for the sync and this quiet moment after it.
+const WORKOUT_QUIET_MS = 3000;
+// Failures that say nothing about the image itself; a later visible load asks again, spaced and bounded.
+const TEMPORARY_FAILURES = new Set([
+  'PHONE_NO_REPLY', 'FILE_NOT_RECEIVED', 'LOW_MEMORY', 'REQUEST_FAILED', 'TRANSFER_ERROR', 'TRANSFER_CANCELED',
+]);
+const AUTO_RETRY_AFTER_MS = 60000;
+const MAX_AUTO_RETRIES = 2;
+// The quiet moment a tap buys before the day preload asks for its next image.
+export const PRELOAD_TAP_QUIET_MS = 5000;
+
+// What a workout screen does to the day preload: a set under way stops it; the ready, rest and Prepare
+// screens feed it the day's images, the upcoming exercise first, then the rest in workout order.
+export function exerciseImagePreloadFor(view) {
+  if (!view) return null;
+  const timedSetRunning = view.timedSet && view.timedSet.phase !== 'READY' && view.timedSet.phase !== 'REST';
+  if (view.state === 'ACTIVE_SET' || timedSetRunning) return { pause: true };
+  if (view.state !== 'READY' && view.state !== 'REST') return null;
+  const exercises = Array.isArray(view.overviewExercises) ? view.overviewExercises : [];
+  const current = view.state === 'REST' ? (view.pending?.exerciseIndex ?? view.currentExerciseIndex) : view.currentExerciseIndex;
+  const start = Number.isInteger(current) && current >= 0 && current < exercises.length ? current : 0;
+  return { urls: [...exercises.slice(start), ...exercises.slice(0, start)].map((exercise) => exercise?.imageUrl) };
+}
+
+// A critical workout request never waits on an image: the image work waits on it instead.
+export function holdExerciseImagesDuring(images, type, start) {
+  if (type !== MESSAGE_TYPES.SYNC_WORKOUT_SETS || !images || typeof images.hold !== 'function') return start();
+  const release = images.hold();
+  let pending;
+  try {
+    pending = Promise.resolve(start());
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return pending.then((value) => { release(); return value; }, (error) => { release(); throw error; });
+}
 
 export function createExerciseImageClient({
   inbox,
@@ -18,6 +56,7 @@ export function createExerciseImageClient({
   onChange = () => {},
   storage = null,
   maxCachedImages = storage ? 32 : 4,
+  hasMemoryHeadroom = () => true,
 }) {
   let enabled = false;
   let disposed = false;
@@ -25,6 +64,15 @@ export function createExerciseImageClient({
   let transfer = null;
   let timer = null;
   let scheduled = false;
+  let holds = 0;
+  let quietUntil = 0;
+  let resumeTimer = null;
+  let arrival = null;
+  let preloadUrls = [];
+  let preloadStopped = false;
+  let preloadQuietUntil = 0;
+  let preloadTimer = null;
+  const preloadTried = new Set();
   const entries = new Map();
   const queue = [];
   const refusedUrls = new Set();
@@ -88,13 +136,37 @@ export function createExerciseImageClient({
     active = null;
   }
 
+  function clearResume() {
+    if (resumeTimer !== null) clearTimeout(resumeTimer);
+    resumeTimer = null;
+  }
+
+  function clearPreloadTimer() {
+    if (preloadTimer !== null) clearTimeout(preloadTimer);
+    preloadTimer = null;
+  }
+
+  function forgetPreload() {
+    clearPreloadTimer();
+    preloadUrls = [];
+    preloadTried.clear();
+  }
+
   function cleanup() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    clearResume();
+    if (arrival && !isCachedPath(arrival.path)) remove(arrival.path);
+    arrival = null;
     try { transfer?.cancel(); } catch {}
     transfer = null;
     active = null;
     queue.length = 0;
+    forgetPreload();
+    // A kept entry still loading would never be asked for again: load() skips loading entries.
+    for (const [url, entry] of entries) {
+      if (entry.status === 'loading') entries.delete(url);
+    }
     if (!storage) {
       const removed = new Set();
       for (const entry of entries.values()) {
@@ -111,10 +183,56 @@ export function createExerciseImageClient({
     enabled = false;
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    clearResume();
+    arrival = null;
     transfer = null;
     active = null;
     queue.length = 0;
+    forgetPreload();
     entries.clear();
+  }
+
+  function deferred() {
+    return holds > 0 || Date.now() < quietUntil;
+  }
+
+  // One timer per quiet moment, never a poll: it fires once the last hold has been released.
+  function armResume() {
+    if (resumeTimer !== null || holds > 0 || disposed) return;
+    const wait = quietUntil - Date.now();
+    if (wait <= 0) {
+      resume();
+      return;
+    }
+    resumeTimer = setTimeout(() => {
+      resumeTimer = null;
+      armResume();
+    }, wait);
+    if (resumeTimer && typeof resumeTimer.unref === 'function') resumeTimer.unref();
+  }
+
+  function resume() {
+    const pending = arrival;
+    arrival = null;
+    if (pending) pending.settle();
+    scheduleNext();
+  }
+
+  function defer(ms = WORKOUT_QUIET_MS) {
+    quietUntil = Math.max(quietUntil, Date.now() + ms);
+    clearResume();
+    armResume();
+  }
+
+  function hold() {
+    holds++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      holds--;
+      if (holds === 0) defer();
+    };
   }
 
   function touch(entry) {
@@ -140,7 +258,7 @@ export function createExerciseImageClient({
   }
 
   function scheduleNext() {
-    if (scheduled || active || disposed || !enabled || queue.length === 0) return;
+    if (scheduled || active || disposed || !enabled || (queue.length === 0 && preloadUrls.length === 0)) return;
     scheduled = true;
     Promise.resolve().then(() => {
       scheduled = false;
@@ -152,13 +270,26 @@ export function createExerciseImageClient({
   function finish(entry, status, src = null, failure = null) {
     if (active !== entry) return;
     clearTransfer();
+    if (entry.preload && status !== 'ready') {
+      // No screen showed this image, so its failure stays out of their way: a screen asks afresh.
+      entries.delete(entry.url);
+      if (failure?.reason === 'LOW_MEMORY') {
+        // Short memory ends this pass; the next idle screen preloads again and memory is read anew.
+        preloadTried.delete(entry.url);
+        preloadUrls = [];
+      }
+      scheduleNext();
+      return;
+    }
     entry.status = status;
     entry.src = src;
+    entry.failure = failure ? failure.reason : null;
+    entry.failedAt = failure ? Date.now() : 0;
     if (status === 'ready') {
       touch(entry);
       evictOldImages();
     }
-    onChange(entry.url, status, failure);
+    onChange(entry.url, status, failure, entry.preload ? { preload: true } : null);
     scheduleNext();
   }
 
@@ -180,7 +311,16 @@ export function createExerciseImageClient({
           transfer = null;
           // A slow first download often finishes on the phone meanwhile. A promised file that never
           // came usually means the phone's saved copy is gone, so that retry asks for a fresh one.
-          requestActive(entry, forceRefresh || queued);
+          const retry = () => {
+            if (isCurrent()) requestActive(entry, forceRefresh || queued);
+          };
+          if (!deferred()) {
+            retry();
+            return;
+          }
+          // Like a file landing during a set sync, the retry waits for the quiet moment after it.
+          arrival = { path: null, settle: retry };
+          armResume();
           return;
         }
         fail(queued ? 'FILE_NOT_RECEIVED' : 'PHONE_NO_REPLY');
@@ -215,15 +355,48 @@ export function createExerciseImageClient({
       .catch(() => fail('REQUEST_FAILED'));
   }
 
+  // A preload goes only when no screen waits on an image; a tap's quiet moment ends with one timer.
+  function nextPreload() {
+    if (preloadStopped) return null;
+    const wait = preloadQuietUntil - Date.now();
+    if (wait > 0) {
+      if (preloadTimer === null) {
+        preloadTimer = setTimeout(() => {
+          preloadTimer = null;
+          scheduleNext();
+        }, wait);
+        if (preloadTimer && typeof preloadTimer.unref === 'function') preloadTimer.unref();
+      }
+      return null;
+    }
+    for (const url of preloadUrls) {
+      if (entries.has(url) || preloadTried.has(url)) continue;
+      preloadTried.add(url);
+      const entry = { url, requestId: null, status: 'loading', src: null, autoRetries: 0, preload: true };
+      entries.set(url, entry);
+      return entry;
+    }
+    return null;
+  }
+
   function processNext() {
     if (active || disposed || !enabled) return;
-    const entry = queue.shift();
+    if (deferred()) {
+      armResume();
+      return;
+    }
+    const entry = queue.shift() || nextPreload();
     if (!entry) return;
     if (entries.get(entry.url) !== entry || entry.status !== 'loading') {
       scheduleNext();
       return;
     }
     active = entry;
+    // A refused request is not retried by timers; a later visible load asks again.
+    if (!hasMemoryHeadroom('request')) {
+      finish(entry, 'unavailable', null, { reason: 'LOW_MEMORY' });
+      return;
+    }
     requestActive(entry);
   }
 
@@ -257,8 +430,22 @@ export function createExerciseImageClient({
         && typeof file.filePath === 'string'
         && file.filePath.startsWith('data://');
       if (!valid && state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
-      if (valid) finish(expected, 'ready', file.filePath);
-      else finish(expected, 'unavailable', null, { reason: state === 'transferred' ? 'FILE_INVALID' : `TRANSFER_${state.toUpperCase()}` });
+      if (valid) {
+        // Showing the image redraws the screen, so that waits for any set sync. The file is kept whatever
+        // memory reads now: the transfer was the costly step and cached images are drawn without a check.
+        const settle = () => {
+          if (active !== expected || expected.status !== 'loading') return;
+          finish(expected, 'ready', file.filePath);
+        };
+        if (!deferred()) {
+          settle();
+          return;
+        }
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        arrival = { path: file.filePath, settle };
+        armResume();
+      } else finish(expected, 'unavailable', null, { reason: state === 'transferred' ? 'FILE_INVALID' : `TRANSFER_${state.toUpperCase()}` });
     }
 
     file.on('change', accept);
@@ -289,7 +476,12 @@ export function createExerciseImageClient({
       return;
     }
     const existing = entries.get(url);
-    if (existing && (existing.status !== 'unavailable' || !retry)) {
+    if (existing) existing.preload = false;
+    const autoRetry = !retry && existing && existing.status === 'unavailable'
+      && TEMPORARY_FAILURES.has(existing.failure)
+      && existing.autoRetries < MAX_AUTO_RETRIES
+      && Date.now() - existing.failedAt >= AUTO_RETRY_AFTER_MS;
+    if (existing && (existing.status !== 'unavailable' || !(retry || autoRetry))) {
       if (priority && existing.status === 'loading') {
         const idx = queue.indexOf(existing);
         if (idx > 0) {
@@ -305,7 +497,8 @@ export function createExerciseImageClient({
       if (idx >= 0) queue.splice(idx, 1);
       entries.delete(url);
     }
-    const entry = { url, requestId: null, status: 'loading', src: null };
+    const autoRetries = existing ? existing.autoRetries + (autoRetry ? 1 : 0) : 0;
+    const entry = { url, requestId: null, status: 'loading', src: null, autoRetries };
     entries.set(url, entry);
     if (priority) {
       queue.unshift(entry);
@@ -329,6 +522,37 @@ export function createExerciseImageClient({
     },
     load,
     prefetch(imageUrl) { load(imageUrl, { priority: true }); },
+    // The day's images, in workout order, fetched in the background into the flash cache. Only as many
+    // as the cache keeps: a longer day would evict its own first images and fetch them again later.
+    preload(imageUrls) {
+      if (!enabled || disposed || !Array.isArray(imageUrls)) return;
+      const urls = [];
+      for (const imageUrl of imageUrls) {
+        const url = normalizeExerciseImageUrl(imageUrl);
+        if (url && !urls.includes(url)) urls.push(url);
+        if (urls.length >= maxCachedImages) break;
+      }
+      // The day's cached images become the most recent, so the day's new arrivals evict other days.
+      const before = [...entries.keys()].join('\n');
+      for (const url of urls) {
+        const entry = entries.get(url);
+        if (entry?.status === 'ready') touch(entry);
+      }
+      if ([...entries.keys()].join('\n') !== before) saveStorage();
+      preloadUrls = urls;
+      preloadStopped = false;
+      scheduleNext();
+    },
+    // A set under way stops preloading until an idle screen preloads again; a tap only pauses it for `quietMs`.
+    pausePreload(quietMs) {
+      if (Number.isFinite(quietMs) && quietMs > 0) {
+        preloadQuietUntil = Math.max(preloadQuietUntil, Date.now() + quietMs);
+        clearPreloadTimer();
+        scheduleNext();
+      } else preloadStopped = true;
+    },
+    hold,
+    defer,
     dispose() {
       disposed = true;
       enabled = false;

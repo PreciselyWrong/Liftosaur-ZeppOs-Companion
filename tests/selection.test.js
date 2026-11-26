@@ -8,7 +8,23 @@ import {
   suggestedStart,
   withoutIndex,
   programForSavedPlan,
+  launchPlanFor,
 } from '../shared/selection.js';
+
+test('the next workout fetched at launch serves a pick of that same day while it is fresh', () => {
+  const plan = { programId: 'p1', week: 2, dayInWeek: 3, unit: 'kg', exercises: [{ name: 'Squat' }] };
+  const pick = { programId: 'p1', week: 2, dayInWeek: 3 };
+  assert.equal(launchPlanFor(plan, 1000, { ...pick, now: 1000 + 60000 }), plan);
+  for (const other of [{ programId: 'p2' }, { week: 1 }, { dayInWeek: 4 }]) {
+    assert.equal(launchPlanFor(plan, 1000, { ...pick, ...other, now: 1000 }), null, JSON.stringify(other));
+  }
+  // Older than a passive refresh, the phone is asked again, as a poll would.
+  assert.equal(launchPlanFor(plan, 1000, { ...pick, now: 1000 + 120000 }), null);
+  assert.equal(launchPlanFor(plan, null, { ...pick, now: 1000 }), null);
+  assert.equal(launchPlanFor(null, 1000, { ...pick, now: 1000 }), null);
+  assert.equal(launchPlanFor({ ...plan, exercises: [] }, 1000, { ...pick, now: 1000 }), null);
+  assert.equal(launchPlanFor({ ...plan, unit: null }, 1000, { ...pick, now: 1000 }), null);
+});
 
 const WEEKS = [
   { number: 1, name: 'Semaine 1', days: [{ number: 1, name: 'Mardi' }, { number: 2, name: 'Jeudi' }] },

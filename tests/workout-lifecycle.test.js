@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
-import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
+import { createWorkoutDiagnostics, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
+import { withRequestTimeout } from '../shared/request-timeout.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
 import { EXTENSION_SCREENS } from '../shared/workout-extension-nav.js';
@@ -44,7 +45,7 @@ function fixture() {
   const env = {
     stopRestPulseAnimation, restHaloWidgets: [], restPulseAnimHandles: [], restPulseAttempted: false,
     prop: { ANIM_STATUS: 1, ALPHA: 2 }, anim_status: { STOP: 3 },
-    hasBuilt: true, isTearingDown: false, isPaused: false, lifecycleGeneration: 0,
+    hasBuilt: true, isTearingDown: false, isPaused: false, lifecycleGeneration: 0, displaySettingsLoad: null,
     controllerUiDirty: false, renderScheduled: false, renderTimer: null,
     connectionRetryTimer: null, connectionRetryAttempt: 0,
     clockTimer: null, vibrationTimer: null, vibrator: null,
@@ -154,10 +155,12 @@ test('Workout action metadata is semantic, persisted, and removed before native 
 });
 
 test('destroy abandons controller work without saving or clearing the local journal', () => {
-  const { env, calls } = fixture();
+  const { env, calls, diagnostics } = fixture();
   env.scheduleRenderUI();
   env.lifecycle.onDestroy();
-  assert.deepEqual(calls, ['dispose']);
+  // The only write is the diagnostics EXIT marker, which tells a normal close from a kill.
+  assert.deepEqual(calls, ['storage', 'dispose']);
+  assert.equal(diagnostics.read().events.at(-1).code, 'EXIT');
 });
 
 test('late set sync success and failure cannot write diagnostics after destruction', async () => {
@@ -212,6 +215,31 @@ test('late phone success or error cannot escape the destroyed settings page', as
     await request;
     await assert.rejects(env.send(MESSAGE_TYPES.GET_SETTINGS), /closed/);
     assert.deepEqual(calls, []);
+  }
+});
+
+test('a late phone reply or timeout after destruction does not write diagnostics storage', async () => {
+  for (const outcome of ['reply', 'error', 'timeout']) {
+    const { env, calls } = fixture();
+    const reply = deferred();
+    let fireTimeout = null;
+    env.widgetInstance = { request: () => reply.promise };
+    env.createMessage = value => value;
+    env.phoneFailureReason = phoneFailureReason;
+    env.withRequestTimeout = (request, options) => withRequestTimeout(request, {
+      ...options,
+      setTimer: (callback) => { fireTimeout = callback; return 1; },
+      clearTimer() {},
+    });
+    vm.runInContext(extract('send'), env);
+    const request = env.send(MESSAGE_TYPES.GET_WORKOUT_NEXT).catch(() => {});
+    env.lifecycle.onDestroy();
+    calls.length = 0;
+    if (outcome === 'reply') reply.resolve({ type: MESSAGE_TYPES.WORKOUT_NEXT_DATA, payload: {} });
+    else if (outcome === 'error') reply.reject(new Error('Phone disconnected'));
+    else fireTimeout();
+    await request;
+    assert.deepEqual(calls, [], outcome);
   }
 });
 

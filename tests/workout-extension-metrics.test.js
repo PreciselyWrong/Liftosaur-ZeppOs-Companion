@@ -87,3 +87,45 @@ test('keeps the workout paused when duration is still stalled after returning', 
     { type: 'resume', timestamp: 33_000 },
   ]);
 });
+
+test('resumes a native pause it did not see start once duration progresses', () => {
+  // A rebuilt widget starts with a fresh reconciler while the restored session is still native-paused.
+  const reconciler = createNativePauseReconciler();
+  assert.deepEqual(reconciler.sample({ durationSeconds: 100, timestamp: 0, isNativePaused: true }), []);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 100, timestamp: 3_000, isNativePaused: true }), []);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 101, timestamp: 6_000, isNativePaused: true }), [
+    { type: 'resume', timestamp: 6_000 },
+  ]);
+});
+
+test('resumes a native pause after the native duration restarts lower', () => {
+  const reconciler = createNativePauseReconciler();
+  reconciler.sample({ durationSeconds: 50, timestamp: 0 });
+  assert.deepEqual(reconciler.sample({ durationSeconds: 50, timestamp: 3_000 }), [
+    { type: 'pause', timestamp: 1_000 },
+  ]);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 5, timestamp: 6_000, isNativePaused: true }), []);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 6, timestamp: 9_000, isNativePaused: true }), [
+    { type: 'resume', timestamp: 9_000 },
+  ]);
+});
+
+test('resumes a restored native pause across a focus gap with progress', () => {
+  const reconciler = createNativePauseReconciler();
+  reconciler.sample({ durationSeconds: 100, timestamp: 0, isNativePaused: true });
+  reconciler.loseFocus({ timestamp: 1_000 });
+  assert.deepEqual(reconciler.sample({ durationSeconds: 110, timestamp: 61_000, isNativePaused: true }), [
+    { type: 'resume', timestamp: 61_000 },
+  ]);
+});
+
+test('does not re-pause after a forced resume while duration is still stalled', () => {
+  const reconciler = createNativePauseReconciler();
+  reconciler.sample({ durationSeconds: 10, timestamp: 0 });
+  assert.equal(reconciler.sample({ durationSeconds: 10, timestamp: 3_000 })[0].type, 'pause');
+  assert.deepEqual(reconciler.sample({ durationSeconds: 10, timestamp: 6_000, isNativePaused: false }), []);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 10, timestamp: 60_000, isNativePaused: false }), []);
+  assert.deepEqual(reconciler.sample({ durationSeconds: 11, timestamp: 63_000, isNativePaused: false }), [
+    { type: 'resume', timestamp: 63_000 },
+  ]);
+});

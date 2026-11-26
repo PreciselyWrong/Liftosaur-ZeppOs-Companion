@@ -1,6 +1,6 @@
 # Lifto user guide
 
-Lifto is an unofficial Liftosaur client for Amazfit watches. The current release is 0.5.14 beta. Start in demo mode if you want to try the controls before connecting an account.
+Lifto is an unofficial Liftosaur client for Amazfit watches. The current release is 0.5.15 beta. Start in demo mode if you want to try the controls before connecting an account.
 
 ## Choose your app
 
@@ -35,7 +35,7 @@ For timed exercises, **Stop** records the held duration; expiry alerts but does 
 In the selected Lifto app's phone Settings, open **Workout display**:
 
 - **Workout progress** adds a bar showing completed sets across the workout. It starts off.
-- **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible.
+- **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible. When you change the weight on the watch, the line under it is recalculated at once from your gym's equipment, which the phone reads from Liftosaur once when the workout starts: the plates for a plate-loaded exercise, or `USE 12 KG` when a fixed weight such as a dumbbell exists. A weight your equipment cannot make exactly shows the nearest loadable weights instead, for example `NEAR 60/62.5 KG`. If the phone could not read the equipment, the breakdown falls back to the bar and plates Liftosaur already proposed in this workout, and a weight those plates cannot make, or a fixed weight, shows only the unit.
 - **Rest Info button** starts on. Turn it off to hide Info on the detailed rest screen; Info elsewhere is retained.
 
 Preferences are configured separately for Companion and Workout. Reopen the watch app while connected to receive the latest settings. These options do not change the workout prescription or rest deadline.
@@ -54,7 +54,7 @@ Preferences are configured separately for Companion and Workout. Reopen the watc
 | Sets remain pending | Keep the local workout, reconnect the phone and reopen Lifto. Check the recording status before finishing. |
 | Conflict or Recovery appears | Read the explanation and check the active workout on the phone. Do not discard unsynchronized watch work. |
 | The watch or Lifto restarts | Reopen the same app and inspect its restored session. Check pending writes before starting a replacement workout. |
-| An exercise image is missing | Keep training using the text. Check the image preference and phone connection; reopen Info to retry. |
+| An exercise image is missing | Keep training using the text. Check the image preference and phone connection; reopen Info to retry. The set screen shows only images already saved on the watch: the day's images load one by one on the ready, rest and Prepare screens, never during a set. |
 | Workout does not alert while hidden | Return to Lifto. An expired rest has a catch-up alert; background alert delivery is not confirmed on every device. |
 | The Workout page is missing | Follow the model-specific installation path. Installation package coverage does not prove native Workout support. |
 

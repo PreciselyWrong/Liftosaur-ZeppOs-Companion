@@ -11,7 +11,7 @@ installation with no API key does by default.
 | App ID | 1123411 |
 | App name | Lifto Companion |
 | Vendor | Sni3rs |
-| Version | 0.5.14, code 50 |
+| Version | 0.5.15, code 51 |
 | Category | Health and fitness |
 | Privacy policy URL | published `docs/privacy-policy.md` (raw or Pages URL of the public repository) |
 | Support | issue tracker of the public repository |
@@ -78,8 +78,9 @@ Paste this into the review notes field. It needs no credentials.
 > signing up for anything.
 >
 > To review: install, open the application on the watch, and use it. No setup at all. The
-> settings page in the Zepp app shows "Status: Demo mode" to confirm it. Nothing is sent to
-> any server in this mode, and nothing is saved to any account.
+> settings page in the Zepp app shows "Status: Demo mode" to confirm it. No workout or
+> account data is sent to any server in this mode, and nothing is saved to any account. Optional
+> exercise pictures are still downloaded when they are switched on.
 >
 > A real Liftosaur account with an active Premium subscription is required only for normal
 > use, because the public Liftosaur API is a Premium feature.

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
+import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
 import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES as C, WORKOUT_DIAGNOSTICS_KEY } from '../shared/workout-diagnostics.js';
 import { createWorkoutController } from '../shared/workout-controller.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
@@ -62,6 +63,7 @@ function renderer(product, setsCount = 2) {
   });
   const env = {
     isTearingDown: false, isPaused: false, hasBuilt: true, lifecycleGeneration: 0,
+    exerciseImages: null, exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS,
     isDispatchingClick: false, controllerUiDirty: false, renderTimer: null, clockTimer: null,
     activeWidgets: [], liveWidgets: {}, restHaloWidgets: [], preparationImageUrl: null,
     isNotesModalOpen: false, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false,

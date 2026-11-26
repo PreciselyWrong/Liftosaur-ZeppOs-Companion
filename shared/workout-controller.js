@@ -128,6 +128,8 @@ export function createWorkoutController({
   let sessionGeneration = 0;
   let disposed = false;
   let saveFailing = false;
+  // Set once Liftosaur saved the workout: a later tap or native pause must not write it back.
+  let savedToCloud = false;
   let getReadySeconds = 5;
 
   function hasActiveTimer() {
@@ -160,11 +162,15 @@ export function createWorkoutController({
 
   function setStatus(patch = {}) {
     if (disposed) return;
-    currentStatus = {
+    const next = {
       code: patch.code || SYNC_STATUS_CODES.IDLE,
       detail: patch.detail ?? null,
       error: patch.error ?? null,
     };
+    // Every acknowledged set reports idle again; an unchanged status must not cost a redraw.
+    if (currentStatus && next.code === currentStatus.code && next.detail === currentStatus.detail
+      && next.error === currentStatus.error) return;
+    currentStatus = next;
     if (typeof onStatus === 'function') {
       onStatus(currentStatus);
     }
@@ -178,7 +184,7 @@ export function createWorkoutController({
   }
 
   function persist() {
-    if (disposed || !dayPlan || !store) return false;
+    if (disposed || savedToCloud || !dayPlan || !store) return false;
     const saved = store.save({
       plan: dayPlan,
       journal: session.getJournal(),
@@ -292,12 +298,18 @@ export function createWorkoutController({
     }] : [];
   }
 
+  // A workout without entries cannot be run: adopting it would end the workout on NO_PLAN.
+  function isRunnableWorkout(workout) {
+    return Array.isArray(workout?.entries) && workout.entries.length > 0;
+  }
+
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
     if (disposed) return;
     if (hasActiveTimer()) {
       deferredServerWorkout = serverWorkout;
       return;
     }
+    if (!isRunnableWorkout(serverWorkout)) return;
     const capturedAt = now();
     const localView = session.view(capturedAt);
     const mappedPlan = mapWorkout(serverWorkout, {
@@ -469,6 +481,7 @@ export function createWorkoutController({
     directSync = normalizeDirectSync(sync, defaultMode);
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     currentStatus = { code: SYNC_STATUS_CODES.IDLE, detail: null, error: null };
 
     if (clearStore && store) {
@@ -514,6 +527,7 @@ export function createWorkoutController({
     directSync = normalizeDirectSync(snapshot.sync, defaultMode);
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     currentStatus = {
       code: directSync.conflict
         ? SYNC_STATUS_CODES.CONFLICT
@@ -596,6 +610,7 @@ export function createWorkoutController({
     directSync = defaultDirectSync('LEGACY');
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     setStatus({ code: SYNC_STATUS_CODES.IDLE });
     notifyChange();
   }
@@ -663,6 +678,34 @@ export function createWorkoutController({
     sessionGeneration += 1;
   }
 
+  // A start whose reply was lost leaves the phone running this very workout, so a retry is
+  // refused; binding it keeps the sets logged meanwhile instead of forcing a conflict.
+  // Resolves 'BOUND', 'OTHER' for a different or unusable workout, or 'UNREACHABLE'.
+  async function bindOwnRunningWorkout(startedAt, startingSession) {
+    let res;
+    try {
+      res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+    } catch (err) {
+      logError('running workout check failed', err);
+      return 'UNREACHABLE';
+    }
+    if (disposed || session !== startingSession) return 'OTHER';
+    const workout = res?.payload?.workout;
+    if (!workout || workout.startTime !== startedAt || workout.programId !== dayPlan?.programId) return 'OTHER';
+    try {
+      bindStartedWorkout(workout);
+    } catch (err) {
+      logError('running workout bind failed', err);
+      return 'OTHER';
+    }
+    policy.markAuthoritativeResponse();
+    directSync.startConfirmed = true;
+    persist();
+    setStatus({ code: SYNC_STATUS_CODES.IDLE });
+    notifyChange();
+    return 'BOUND';
+  }
+
   function ensureDirectWorkoutStarted() {
     if (disposed) return Promise.resolve(false);
     if (directSync.mode !== 'DIRECT' || directSync.startConfirmed) {
@@ -717,6 +760,15 @@ export function createWorkoutController({
       } catch (err) {
         if (disposed || session !== startingSession) return false;
         if (err?.code === 'workout_already_active' || err?.code === 'workout_start_time_taken') {
+          const bound = await bindOwnRunningWorkout(view.startedAt, startingSession);
+          if (bound === 'BOUND') return true;
+          if (disposed || session !== startingSession) return false;
+          if (bound === 'UNREACHABLE') {
+            setStatus({ code: SYNC_STATUS_CODES.PENDING, detail: 'START_PENDING', error: err });
+            const unreachable = new Error('Running workout check failed');
+            unreachable.code = 'NETWORK';
+            throw unreachable;
+          }
           directSync.conflict = true;
           persist();
           setStatus({ code: SYNC_STATUS_CODES.CONFLICT, detail: err.code, error: err });
@@ -794,13 +846,15 @@ export function createWorkoutController({
             }
           }
 
+          // The session view is unchanged: the pending count on screen is refreshed in place by the UI tick,
+          // so only the save is needed, not a full redraw.
           directSync.acknowledgedSetCount += batchLength;
           persist();
-          notifyChange();
 
           const remainingPendingCount =
             session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
-          if (returnedWorkout && remainingPendingCount === 0) {
+          // The phone replies with only startTime; a reply without entries is not a snapshot to adopt.
+          if (returnedWorkout && Array.isArray(returnedWorkout.entries) && remainingPendingCount === 0) {
             const currentState = session.view(now()).state;
             if (currentState === SESSION_STATES.REST) {
               deferredServerWorkout = returnedWorkout;
@@ -949,6 +1003,10 @@ export function createWorkoutController({
         notifyChange();
         return { success: false, reason: 'NO_REMOTE_WORKOUT' };
       }
+      if (!isRunnableWorkout(workout)) {
+        setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'EMPTY_REMOTE_WORKOUT' });
+        return { success: false, reason: 'EMPTY_REMOTE_WORKOUT' };
+      }
       directSync.conflict = false;
       directSync.remoteMissing = false;
       directSync.startConfirmed = true;
@@ -1026,6 +1084,7 @@ export function createWorkoutController({
 
       const res = await request(MESSAGE_TYPES.FINISH_WORKOUT, payload);
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
+      savedToCloud = true;
       if (store) {
         store.clear();
       }
@@ -1034,6 +1093,16 @@ export function createWorkoutController({
     } catch (err) {
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       logError('finish workout remote failed', err);
+      if (err?.code === 'no_active_workout') {
+        // A lost finish reply or a phone-side discard both end here: retrying cannot succeed,
+        // and only the lifter can tell which, so keep the session and ask.
+        directSync.conflict = true;
+        directSync.remoteMissing = true;
+        persist();
+        setStatus({ code: SYNC_STATUS_CODES.REMOTE_MISSING, detail: 'NO_REMOTE_WORKOUT', error: err });
+        notifyChange();
+        throw err;
+      }
       setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'FINISH_FAILED', error: err });
       throw err;
     } finally {
@@ -1181,6 +1250,8 @@ export function createWorkoutController({
         timestamp: options.timestamp ?? now(),
         source: options.source,
       })),
+    forceResumeWorkout: (options = {}) =>
+      mutateSession(() => session.forceResumeWorkout({ timestamp: options.timestamp ?? now() })),
     toggleRestPause: (options = {}) =>
       mutateSession(() =>
         session.toggleRestPause({ timestamp: options.timestamp ?? now() })
@@ -1324,7 +1395,12 @@ export function createWorkoutController({
     getLastWorkoutSetWrite: () => session.getLastWorkoutSetWrite(),
     getJournal: () => session.getJournal(),
     getWorkoutIntervals: (endTime) => session.getWorkoutIntervals(endTime),
-    clearPersisted: () => !disposed && store?.clear(),
+    // Only called once a legacy finish was saved.
+    clearPersisted: () => {
+      if (disposed) return false;
+      savedToCloud = true;
+      return store?.clear();
+    },
     isAllCompleted: () => session.isAllCompleted(),
   };
 }

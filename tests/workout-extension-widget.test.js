@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as watchLayout from '../shared/watch-layout.js';
 import { normalizeWorkoutDisplaySettings, weightStepperDisplay } from '../shared/workout-display-settings.js';
+import { programForSavedPlan } from '../shared/selection.js';
 
 function readWidgetSource() {
   return fs.readFileSync(
@@ -237,7 +238,7 @@ test('overview screen includes visible Sync action wired to requestRefresh and k
 
 test('Workout shares Companion connection wording and bounded automatic retry', () => {
   const source = readWidgetSource();
-  const load = extractFunction(source, 'startInitialNetworkLoad');
+  const load = extractFunction(source, 'startInitialNetworkLoad') + extractFunction(source, 'handleInitialLoadFailure');
   const retry = extractFunction(source, 'scheduleConnectionRetry');
   assert.match(source, /PHONE_CONNECTING_MESSAGE/);
   assert.match(source, /PHONE_CONNECTION_TITLE/);
@@ -760,4 +761,127 @@ test('tick updates prepared Start set action in place across zero, overtime, and
   assert.equal(liveWidgets.actionButton.props.text, 'Armed');
   assert.equal(uiRedrawn, false);
   assert.equal(nextSetCalled, false);
+});
+
+test('a failed program request shows the phone connection screen, not an empty account', async () => {
+  const source = readWidgetSource();
+  const state = {
+    screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: true, statusMessage: '', errorMessage: '',
+    EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME' },
+    MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS' },
+    PHONE_CONNECTING_MESSAGE: '', retries: 0, programForSavedPlan,
+    beginRequest() {}, renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {}, failRequest() {},
+    loadDisplaySettings: () => Promise.resolve(),
+    workoutController: { markAuthoritativeResponse() {} },
+    workoutToDayPlan: () => null,
+    isTemporaryPhoneError: (err) => err.code === 'TIMEOUT',
+    scheduleConnectionRetry() { state.retries += 1; },
+    send: (type) => {
+      if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+      if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: null } });
+      return Promise.reject(Object.assign(new Error('timeout'), { code: 'TIMEOUT' }));
+    },
+  };
+  const scope = new Proxy(state, { has: (target, key) => key in target });
+  const load = new Function('scope', `with (scope) { ${extractFunction(source, 'handleInitialLoadFailure')}; return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  load();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(state.screen, 'CONNECTION');
+  assert.equal(state.retries, 1);
+});
+
+test('a program list API failure still opens the next workout instead of Setup', async () => {
+  const source = readWidgetSource();
+  const nextWorkout = { programId: 'p1', programName: 'GZCLP', week: 2, dayInWeek: 3 };
+  const state = {
+    screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: true, statusMessage: '', errorMessage: '',
+    EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME' },
+    MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS' },
+    PHONE_CONNECTING_MESSAGE: '', retries: 0, failures: [], outlines: [], programForSavedPlan,
+    beginRequest() {}, renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {},
+    failRequest(err) { state.failures.push(err); },
+    loadOutline(program, options) { state.outlines.push({ program, options }); },
+    loadDisplaySettings: () => Promise.resolve(),
+    workoutController: { markAuthoritativeResponse() {} },
+    workoutToDayPlan: (workout) => ({ ...workout, unit: 'kg' }),
+    isTemporaryPhoneError: () => false,
+    scheduleConnectionRetry() { state.retries += 1; },
+    send: (type) => {
+      if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+      if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: nextWorkout } });
+      return Promise.reject(Object.assign(new Error('Internal server error'), { code: 'API_FAILED' }));
+    },
+  };
+  const scope = new Proxy(state, { has: (target, key) => key in target });
+  const load = new Function('scope', `with (scope) { ${extractFunction(source, 'handleInitialLoadFailure')}; return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  load();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.notEqual(state.screen, 'SETUP');
+  assert.deepEqual(state.failures, []);
+  assert.equal(state.outlines.length, 1);
+  assert.equal(state.outlines[0].program.id, 'p1');
+  assert.equal(state.outlines[0].options.nextScreen, 'HOME');
+  assert.deepEqual(state.programs.map((program) => program.id), ['p1']);
+});
+
+test('an outline failure during the first load leaves the loading screen for one with Retry', async () => {
+  const source = readWidgetSource();
+  for (const temporary of [true, false]) {
+    const state = {
+      screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: false, statusMessage: '', errorMessage: '',
+      selectedProgram: null, outline: null, listPage: 0, isTearingDown: false,
+      EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME', LOADING: 'LOADING', WEEKS: 'WEEKS' },
+      MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS', GET_PROGRAM_OUTLINE: 'GET_PROGRAM_OUTLINE' },
+      PHONE_CONNECTING_MESSAGE: '', retries: 0, programForSavedPlan, console: { log() {} },
+      renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {},
+      loadDisplaySettings: () => Promise.resolve(),
+      workoutController: { markAuthoritativeResponse() {} },
+      workoutToDayPlan: () => null,
+      suggestedProgramIndex: (programs) => programs.findIndex((program) => program.isCurrent),
+      isTemporaryPhoneError: (err) => err.message === 'Phone request timeout',
+      scheduleConnectionRetry() { state.retries += 1; },
+      send: (type) => {
+        if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+        if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: null } });
+        if (type === 'LIST_PROGRAMS') return Promise.resolve({ payload: { programs: [{ id: 'p1', name: 'A', isCurrent: true }] } });
+        return Promise.reject(new Error(temporary ? 'Phone request timeout' : 'Liftosaur API error'));
+      },
+    };
+    const scope = new Proxy(state, { has: (target, key) => key in target });
+    const names = ['startInitialNetworkLoad', 'loadOutline', 'failRequest', 'beginRequest'];
+    if (source.includes('function handleInitialLoadFailure(')) names.push('handleInitialLoadFailure');
+    const fns = new Function('scope', `with (scope) { ${names.map((name) => extractFunction(source, name)).join('\n')}; return startInitialNetworkLoad; }`)(scope);
+    fns();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.notEqual(state.screen, 'LOADING', `temporary=${temporary}`);
+    assert.equal(state.screen, temporary ? 'CONNECTION' : 'SETUP');
+    assert.equal(state.retries, temporary ? 1 : 0);
+  }
+});
+
+test('tapping Retry again while the first load is in flight starts no second load', () => {
+  const source = readWidgetSource();
+  for (const screenName of ['renderSetupScreen', 'renderConnectionScreen', 'renderEmptyScreen']) {
+    const buttons = [];
+    let loads = 0;
+    const state = {
+      screen: 'SETUP', isBusy: false, statusMessage: '', errorMessage: '', connectionRetryTimer: null, connectionRetryAttempt: 0,
+      EXTENSION_SCREENS: {}, MESSAGE_TYPES: {}, PHONE_CONNECTING_MESSAGE: '', PHONE_CONNECTION_TITLE: '',
+      widget: { FILL_RECT: 'rect', TEXT: 'text', BUTTON: 'button' }, align: {}, text_style: {}, THEME: {},
+      px: (value) => value, font: () => 20, renderTitle() {}, renderUI() {}, clearTimeout() {},
+      phoneConnectionMessage: () => '',
+      addWidget(type, props) { if (type === 'button') buttons.push(props); },
+      loadDisplaySettings() { loads += 1; return new Promise(() => {}); },
+      send: () => new Promise(() => {}),
+    };
+    const scope = new Proxy(state, { has: (target, key) => key in target });
+    const names = [screenName, 'startInitialNetworkLoad', 'handleInitialLoadFailure', 'beginRequest', 'retryConnection', 'resetConnectionRetry'];
+    const render = new Function('scope', `with (scope) { ${names.map((name) => extractFunction(source, name)).join('\n')}; return ${screenName}; }`)(scope);
+    render();
+    buttons.at(-1).click_func();
+    buttons.length = 0;
+    render();
+    buttons.at(-1).click_func();
+    assert.equal(loads, 1, screenName);
+  }
 });

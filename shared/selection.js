@@ -9,6 +9,8 @@
  * most recent history record. Nothing here reads a name or a date.
  */
 
+import { PASSIVE_REFRESH_INTERVAL_MS } from './workout-refresh-policy.js';
+
 /** The program Liftosaur marks as active. */
 export function suggestedProgramIndex(programs = []) {
   return programs.findIndex((program) => program.isCurrent);
@@ -31,6 +33,21 @@ export function programForSavedPlan(selectedProgram, programs = [], plan = null)
     name: plan.programName || 'Program',
     isCurrent: true,
   };
+}
+
+/**
+ * The next workout fetched at launch, when the lifter picks that very day soon after: asking the
+ * phone again cost a 3 s "Loading workout" on an Active 2 for the same answer. Past a passive
+ * refresh interval the phone is asked again, as a poll would. Showing it early is safe because
+ * START_WORKOUT names this program, week and day, and the phone's workout is bound only when its
+ * exercises and sets match this plan: a program edited meanwhile becomes a conflict, never sets
+ * logged into another workout.
+ */
+export function launchPlanFor(plan, fetchedAt, { programId, week, dayInWeek, now = Date.now() } = {}) {
+  if (!plan || !Number.isFinite(fetchedAt) || now - fetchedAt >= PASSIVE_REFRESH_INTERVAL_MS) return null;
+  if (!plan.programId || plan.programId !== programId || plan.week !== week || plan.dayInWeek !== dayInWeek) return null;
+  if (!plan.unit || !Array.isArray(plan.exercises) || plan.exercises.length === 0) return null;
+  return plan;
 }
 
 /**

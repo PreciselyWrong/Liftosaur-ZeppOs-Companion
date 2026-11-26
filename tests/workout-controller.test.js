@@ -215,6 +215,29 @@ test('guarantees critical local mutations persist to store before calling onChan
   ]);
 });
 
+test('forced workout resume clears a native pause and persists before onChange', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  let clock = 1000;
+  const saved = [];
+  const originalSave = store.save.bind(store);
+  store.save = (snapshot) => {
+    saved.push(snapshot.journal.length);
+    return originalSave(snapshot);
+  };
+  const controller = createWorkoutController({ store, now: () => clock });
+  controller.loadPlan(SAMPLE_PLAN);
+  controller.startWorkout();
+  clock = 5000;
+  controller.pauseWorkout({ source: 'native' });
+  assert.equal(controller.view().isNativeWorkoutPaused, true);
+  saved.length = 0;
+
+  clock = 9000;
+  controller.forceResumeWorkout();
+  assert.equal(controller.view().isWorkoutPaused, false);
+  assert.deepEqual(saved, [3]);
+});
+
 test('local action methods modify session state, update journal, and expose helper getters', () => {
   let currentTime = 1000;
   const controller = createWorkoutController({
@@ -666,6 +689,40 @@ test('local set persists before the first transport call', async () => {
   await controller.syncSets();
 
   assert.equal(completedSetCountInStoreAtTransportCall, 1);
+});
+
+test('a start-time-only set sync reply keeps the plan through rest and the next set', async () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const transport = createFakeTransport();
+
+  transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
+    Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
+  );
+  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
+    Promise.resolve({
+      type: 'SYNC_WORKOUT_SETS_RESULT',
+      payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
+    })
+  );
+
+  const controller = createWorkoutController({ store, request: transport.request, now: () => 1000 });
+  controller.loadPlan(SAMPLE_DIRECT_PLAN, { persist: true });
+  controller.startWorkout();
+  await controller.ensureStarted();
+  const exerciseCount = controller.plan().exercises.length;
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+
+  controller.nextSet();
+  assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+  assert.equal(controller.plan().exercises.length, exerciseCount);
+
+  controller.completeSet();
+  await controller.syncSets();
+  assert.equal(controller.sync().acknowledgedSetCount, 2);
+  assert.equal(controller.plan().exercises.length, exerciseCount);
 });
 
 test('concurrent drains share one promise and acknowledge only confirmed batch length', async () => {
@@ -2120,4 +2177,19 @@ test('coalesceIntervals merges overlapping and adjacent activity spans', () => {
   assert.deepEqual(coalesceIntervals(once), once);
   // Degenerate/invalid entries are dropped.
   assert.deepEqual(coalesceIntervals([[5, 5], [10, 8], 'x', [1, 4]]), [[1, 4]]);
+});
+
+test('a legacy session cleared after its save stays cleared through later taps', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const controller = createWorkoutController({ store, now: () => 1000 });
+  controller.loadPlan(SAMPLE_PLAN, { persist: true });
+  controller.startWorkout();
+  controller.completeSet();
+  controller.finishWorkout();
+
+  controller.clearPersisted();
+  controller.pauseWorkout({ source: 'native' });
+  controller.adjustWeight(1);
+
+  assert.equal(store.load(), null);
 });

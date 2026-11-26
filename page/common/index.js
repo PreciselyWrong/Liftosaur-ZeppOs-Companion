@@ -1,6 +1,6 @@
 import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
+import { ACTIVE_SET_ACTION_LAYOUT, ACTIVE_SET_IMAGE_TILE, activeSetHeaderLayout, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { createRestPresentationState, updateRestPresentation, readAutoPreparePreference, saveAutoPreparePreference } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
@@ -8,6 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, PRELOAD_TAP_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -100,6 +101,7 @@ import {
   suggestedStart,
   withoutIndex,
   programForSavedPlan,
+  launchPlanFor,
 } from '../../shared/selection.js';
 
 // ── Liftosaur palette ────────────────────────────────────────────────────────
@@ -233,7 +235,7 @@ const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefine
 let controllerUiDirty = false;
 const workoutController = createWorkoutController({
   store: sessionStore,
-  request: (type, payload) => send(type, payload),
+  request: (type, payload) => holdExerciseImagesDuring(exerciseImages, type, () => send(type, payload)),
   onChange: markControllerUiDirty,
   onStatus: markControllerUiDirty,
   mapWorkout: (workout, options) =>
@@ -261,6 +263,7 @@ let dayPlan = null;
 
 let accountSettings = { autoPrepare: readAutoPreparePreference(deviceStorage) };
 let defaultWorkoutPlan = null;
+let defaultWorkoutFetchedAt = null;
 let directSync = defaultDirectSync('LEGACY');
 let syncWarning = null;
 
@@ -427,6 +430,7 @@ function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
   return (button) => {
     if (isTearingDown || isDispatchingClick) return;
     workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
+    exerciseImages?.pausePreload(PRELOAD_TAP_QUIET_MS);
     isDispatchingClick = true;
     try {
       workoutDiagnostics.trace('ACTION', () => handler(button));
@@ -729,6 +733,8 @@ function scheduleConnectionRetry() {
 }
 
 function retryConnection() {
+  // A second launch load in flight could land on Home after the lifter has already started a workout.
+  if (isBusy) return;
   resetConnectionRetry();
   loadPrograms();
 }
@@ -740,7 +746,15 @@ function retryConnection() {
  */
 function loadPrograms() {
   beginRequest(PHONE_CONNECTING_MESSAGE);
-  send(MESSAGE_TYPES.LIST_PROGRAMS)
+  // The phone answers these in parallel: chained, they cost several seconds of round trips.
+  // Settings go last because they carry the diagnostics upload, the largest message of the launch.
+  const listRequest = send(MESSAGE_TYPES.LIST_PROGRAMS);
+  const currentRequest = send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+  const nextRequest = send(MESSAGE_TYPES.GET_WORKOUT_NEXT);
+  const settingsRequest = send(MESSAGE_TYPES.GET_SETTINGS);
+  // An empty account or demo mode never reads some of them.
+  for (const request of [currentRequest, nextRequest, settingsRequest]) request.catch(() => {});
+  listRequest
     .then((res) => {
       resetConnectionRetry();
       programs = res.payload?.programs || [];
@@ -756,8 +770,14 @@ function loadPrograms() {
         return;
       }
 
+      const currentIndex = suggestedProgramIndex(programs);
+      // The outline is the next slowest reply, so it is asked for as soon as the list names the program.
+      const outlineReply = currentIndex === -1
+        ? null
+        : send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: programs[currentIndex].id });
+      if (outlineReply) outlineReply.catch(() => {});
+
       if (serviceMode === 'DEMO') {
-        const currentIndex = suggestedProgramIndex(programs);
         if (currentIndex === -1) {
           isBusy = false;
           statusMessage = '';
@@ -766,16 +786,16 @@ function loadPrograms() {
           return;
         }
 
-        return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+        return settingsRequest.then((settingsRes) => {
           adoptAccountSettings(settingsRes.payload);
-          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME, reply: outlineReply });
         });
       }
 
-      return send(MESSAGE_TYPES.GET_SETTINGS)
+      return settingsRequest
         .then((settingsRes) => {
           adoptAccountSettings(settingsRes.payload);
-          return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+          return currentRequest;
         })
         .then((currentRes) => {
           workoutController.markAuthoritativeResponse();
@@ -813,18 +833,18 @@ function loadPrograms() {
             return;
           }
 
-          return send(MESSAGE_TYPES.GET_WORKOUT_NEXT).then((nextRes) => {
+          return nextRequest.then((nextRes) => {
             const nextWorkout = nextRes.payload?.workout || null;
             if (nextWorkout) {
               defaultWorkoutPlan = workoutToDayPlan(nextWorkout, {
                 units: accountSettings?.units || null,
                 isCurrent: false,
               });
+              defaultWorkoutFetchedAt = Date.now();
             } else {
               defaultWorkoutPlan = null;
             }
 
-            const currentIndex = suggestedProgramIndex(programs);
             if (currentIndex === -1) {
               isBusy = false;
               statusMessage = '';
@@ -833,30 +853,32 @@ function loadPrograms() {
               return;
             }
 
-            loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+            loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME, reply: outlineReply });
           });
         });
     })
-    .catch((err) => {
-      if (isTemporaryPhoneError(err)) {
-        isBusy = false;
-        statusMessage = '';
-        errorMessage = '';
-        screen = SCREEN.CONNECTION;
-        renderUI();
-        scheduleConnectionRetry();
-        return;
-      }
-      resetConnectionRetry();
-      screen = SCREEN.SETUP;
-      failRequest(err);
-    });
+    .catch(handleInitialLoadFailure);
 }
 
-function loadOutline(program, { nextScreen = SCREEN.WEEKS } = {}) {
+function handleInitialLoadFailure(err) {
+  if (isTemporaryPhoneError(err)) {
+    isBusy = false;
+    statusMessage = '';
+    errorMessage = '';
+    screen = SCREEN.CONNECTION;
+    renderUI();
+    scheduleConnectionRetry();
+    return;
+  }
+  resetConnectionRetry();
+  screen = SCREEN.SETUP;
+  failRequest(err);
+}
+
+function loadOutline(program, { nextScreen = SCREEN.WEEKS, reply = null } = {}) {
   selectedProgram = program;
   beginRequest('Loading weeks…');
-  send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id })
+  (reply || send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id }))
     .then((res) => {
       isBusy = false;
       statusMessage = '';
@@ -868,13 +890,25 @@ function loadOutline(program, { nextScreen = SCREEN.WEEKS } = {}) {
       }
       renderUI();
     })
-    .catch(failRequest);
+    .catch((err) => {
+      // The loading screen has no Retry, so a launch failure needs a screen that does.
+      if (screen === SCREEN.LOADING) handleInitialLoadFailure(err);
+      else failRequest(err);
+    });
 }
 
 function loadDayPlan(week, day) {
   // Also set when arriving from the home shortcut, so "Change" has a week to
   // go back to.
   selectedWeek = week;
+  const pick = { programId: selectedProgram.id, week: week.number, dayInWeek: day.number };
+  const launchPlan = serviceMode === 'DEMO' ? null : launchPlanFor(defaultWorkoutPlan, defaultWorkoutFetchedAt, pick);
+  if (launchPlan) {
+    // One workout per launch answer: a later pick of this day asks the phone again.
+    defaultWorkoutFetchedAt = null;
+    openDayPlan(launchPlan);
+    return;
+  }
   beginRequest('Building workout…');
 
   if (serviceMode === 'DEMO') {
@@ -900,11 +934,7 @@ function loadDayPlan(week, day) {
     return;
   }
 
-  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, {
-    programId: selectedProgram.id,
-    week: week.number,
-    dayInWeek: day.number,
-  })
+  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, pick)
     .then((res) => {
       const rawWorkout = res.payload?.workout || null;
       if (!rawWorkout) {
@@ -920,29 +950,33 @@ function loadDayPlan(week, day) {
       if (!plan.exercises || plan.exercises.length === 0) {
         throw new Error('This workout has no exercises');
       }
-      isBusy = false;
-      statusMessage = '';
-      dayPlan = plan;
-      directSync = {
-        mode: 'DIRECT',
-        startConfirmed: false,
-        acknowledgedSetCount: 0,
-        finishRequestedAt: null,
-        discardRequestedAt: null,
-        conflict: false,
-        remoteMissing: false,
-        preservedIntervals: [],
-        intervalsPreservedThrough: null,
-      };
-      workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
-      finishState = null;
-      isOverviewOpen = false;
-      overviewPage = 0;
-      readyPage = 0;
-      screen = SCREEN.SESSION;
-      renderUI();
+      openDayPlan(plan);
     })
     .catch(failRequest);
+}
+
+function openDayPlan(plan) {
+  isBusy = false;
+  statusMessage = '';
+  dayPlan = plan;
+  directSync = {
+    mode: 'DIRECT',
+    startConfirmed: false,
+    acknowledgedSetCount: 0,
+    finishRequestedAt: null,
+    discardRequestedAt: null,
+    conflict: false,
+    remoteMissing: false,
+    preservedIntervals: [],
+    intervalsPreservedThrough: null,
+  };
+  workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
+  finishState = null;
+  isOverviewOpen = false;
+  overviewPage = 0;
+  readyPage = 0;
+  screen = SCREEN.SESSION;
+  renderUI();
 }
 
 function updateControllerStatus() {
@@ -2911,7 +2945,6 @@ function renderTimedSetScreen(view) {
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
   renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
-  exerciseImages?.prefetch(view.exerciseImageUrl);
   addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), diagnosticAction: 'OPEN_INFO', click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.', view.exerciseImageUrl) });
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
@@ -3006,7 +3039,8 @@ function renderActiveSetScreen(view) {
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
   const canSkipWarmup = Boolean(set?.isWarmup && (!view.timedSet || view.timedSet.phase === 'READY'));
   const controls = activeSetLayout(set);
-  exerciseImages?.prefetch(isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
+  // A set under way never asks the phone for an image: the BLE transfer would overlap the set sync.
+  if (isResting && pending) exerciseImages?.prefetch(pending.exerciseImageUrl);
 
   if (isResting) {
     renderRestBezel(view.rest);
@@ -3021,9 +3055,13 @@ function renderActiveSetScreen(view) {
     });
   }
 
-  const showsPreparationImage = isResting && !canSkipWarmup && renderPreparationImage(pending?.exerciseImageUrl);
-  const headerX = (canSkipWarmup || showsPreparationImage) ? 132 : 64;
-  const headerWidth = (canSkipWarmup || showsPreparationImage) ? 216 : 282;
+  // During the set the image comes from the flash cache only; Prepare may still ask the phone for it.
+  const showsImage = renderPreparationImage(isResting ? pending?.exerciseImageUrl : view.exerciseImageUrl,
+    { fromFlashOnly: !isResting });
+  const infoButton = { x: 354, y: 88, w: 64, h: 38 };
+  const header = activeSetHeaderLayout({ showsImage, canSkipWarmup, info: infoButton });
+  const headerX = header.textX;
+  const headerWidth = header.textWidth;
   const hasPurpleBezel = isPurpleRestRing({ isResting, rest: view.rest });
 
   addLiveLabel('exerciseTitle', {
@@ -3040,11 +3078,11 @@ function renderActiveSetScreen(view) {
   });
 
   addWidget(widget.BUTTON, {
-    x: px(354),
-    y: px(88),
-    w: px(64),
-    h: px(38),
-    radius: px(19),
+    x: px(infoButton.x),
+    y: px(infoButton.y),
+    w: px(infoButton.w),
+    h: px(infoButton.h),
+    radius: px(infoButton.h / 2),
     normal_color: THEME.cardActive,
     press_color: THEME.card,
     color: THEME.primaryLight,
@@ -3054,13 +3092,13 @@ function renderActiveSetScreen(view) {
     click_func: () => openTextModal(exerciseName, exerciseDetails || 'No exercise details available.', isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl),
   });
 
-  if (canSkipWarmup) {
+  if (header.skip) {
     addWidget(widget.BUTTON, {
-      x: px(62),
-      y: px(88),
-      w: px(64),
-      h: px(38),
-      radius: px(19),
+      x: px(header.skip.x),
+      y: px(header.skip.y),
+      w: px(header.skip.w),
+      h: px(header.skip.h),
+      radius: px(header.skip.h / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       color: 0xffb544,
@@ -3479,25 +3517,31 @@ function renderRestScreen(view) {
   });
 }
 
-function renderPreparationImage(apiImageUrl) {
+function renderPreparationImage(apiImageUrl, { fromFlashOnly = false } = {}) {
+  // Returns whether the image owns the header corner. Prepare keeps it while the image loads, so Skip does
+  // not jump; the set screen draws only an image already in flash and never asks the phone.
   if (!normalizeExerciseImages(accountSettings?.exerciseImages)) return false;
   const imageUrl = exerciseDisplayImageUrl(apiImageUrl);
   if (!imageUrl) return false;
-  preparationImageUrl = imageUrl;
-  exerciseImages?.load(imageUrl);
+  if (!fromFlashOnly) {
+    preparationImageUrl = imageUrl;
+    exerciseImages?.load(imageUrl);
+  }
   const image = exerciseImages?.get(imageUrl);
   if (image?.status === 'unavailable') return false;
+  if (fromFlashOnly && image?.status !== 'ready') return false;
   if (image?.status === 'ready') {
+    const tile = ACTIVE_SET_IMAGE_TILE;
     addWidget(widget.FILL_RECT, {
-      x: px(62),
-      y: px(88),
-      w: px(64),
-      h: px(64),
+      x: px(tile.x),
+      y: px(tile.y),
+      w: px(tile.w),
+      h: px(tile.h),
       radius: px(12),
       color: 0xffffff,
     });
     addWidget(widget.IMG, {
-      x: px(66), y: px(92), w: px(56), h: px(56), src: image.src,
+      x: px(tile.inner.x), y: px(tile.inner.y), w: px(tile.inner.w), h: px(tile.inner.h), src: image.src,
       auto_scale: true, auto_scale_obj_fit: false,
     });
   }
@@ -3571,18 +3615,15 @@ function renderWorkoutTimerControlsModal(view) {
     w: px(layout.pauseWidth),
     h: px(layout.pauseHeight),
     radius: px(layout.pauseHeight / 2),
-    normal_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primary,
-    press_color: view.isManualWorkoutPaused ? THEME.yellow : THEME.primaryDark,
-    color: view.isManualWorkoutPaused ? 0x000000 : THEME.textPrimary,
-    text: view.isNativeWorkoutPaused && !view.isManualWorkoutPaused
-      ? 'Zepp paused'
-      : (view.isManualWorkoutPaused ? 'Resume' : 'Pause'),
+    normal_color: view.isWorkoutPaused ? THEME.yellow : THEME.primary,
+    press_color: view.isWorkoutPaused ? THEME.yellow : THEME.primaryDark,
+    color: view.isWorkoutPaused ? 0x000000 : THEME.textPrimary,
+    text: view.isWorkoutPaused ? 'Resume' : 'Pause',
     text_size: font('button'),
-    diagnosticAction: view.isManualWorkoutPaused ? 'RESUME' : 'PAUSE',
+    diagnosticAction: view.isWorkoutPaused ? 'RESUME' : 'PAUSE',
     click_func: () => {
-      const current = workoutController.view();
-      if (current.isNativeWorkoutPaused && !current.isManualWorkoutPaused) return;
-      if (current.isManualWorkoutPaused) workoutController.resumeWorkout();
+      // Resume also clears an inferred Zepp pause so a missed native resume never traps the lifter.
+      if (workoutController.view().isWorkoutPaused) workoutController.forceResumeWorkout();
       else workoutController.pauseWorkout();
       requestWorkoutRefresh();
     },
@@ -4006,12 +4047,14 @@ function renderLoadingScreen() {
 
 // ── Root render ──────────────────────────────────────────────────────────────
 
-function handleExerciseImageChange(_imageUrl, status, failure) {
+function handleExerciseImageChange(_imageUrl, status, failure, origin) {
   if (isTearingDown) return;
   if (status === 'ready' || status === 'unavailable') {
     if (status === 'ready') workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY);
     else workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE, { image: failure?.reason, httpStatus: failure?.httpStatus });
   }
+  // A preloaded image no screen asked for waits in flash for the screen that draws it: no redraw now.
+  if (origin?.preload) return;
   if (isNotesModalOpen) {
     if (!_imageUrl || _imageUrl === activeNotesImageUrl) {
       const hasImageNow = Boolean(currentNotesPages()[0]?.image);
@@ -4088,6 +4131,9 @@ function renderScreen() {
   if (screen === SCREEN.LOADING) return renderLoadingScreen();
   if (screen === SCREEN.HOME) {
     if (isBusy) return renderLoadingScreen();
+    // The day Home offers is the likeliest pick: its images reach the flash cache while the lifter
+    // decides, instead of 2 to 3 s after the day opens. The image client keeps one transfer at a time.
+    if (defaultWorkoutPlan?.exercises) exerciseImages?.preload(defaultWorkoutPlan.exercises.map((exercise) => exercise?.imageUrl));
     return renderHomeScreen();
   }
   if (screen === SCREEN.PROGRAMS) return renderProgramsScreen();
@@ -4108,6 +4154,10 @@ function renderScreen() {
   // rather than rebuilding what was just drawn.
   lastRenderedState = view.state;
   lastRenderedSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
+  // The day's images fill the flash cache while the lifter is idle; a set under way stops it.
+  const imagePreload = exerciseImagePreloadFor(view);
+  if (imagePreload?.pause) exerciseImages?.pausePreload();
+  else if (imagePreload) exerciseImages?.preload(imagePreload.urls);
 
   if (view.state === SESSION_STATES.NO_PLAN) {
     screen = SCREEN.PROGRAMS;
@@ -4141,7 +4191,8 @@ function updateClock() {
   ].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
-  if (Boolean(liveWidgets.clockTarget) !== canOpenSyncDetails()) {
+  // An acknowledged set changes only this label; the open Sync status modal shows the same count.
+  if (isSyncDetailsOpen || Boolean(liveWidgets.clockTarget) !== canOpenSyncDetails()) {
     renderUI();
     return;
   }
@@ -4281,7 +4332,10 @@ Page(
         request: (type, payload) => send(type, payload, { timeoutMs: 45000 }),
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
-        maxCachedImages: 4,
+        readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
+        // Cached images are files in watch flash and only drawn ones are decoded; 12 converted 140 px
+        // images is about 480 KB of flash, enough for a long day's preload.
+        maxCachedImages: 12,
       });
       pageInstance = this;
       console.log('[liftosaur] page init');

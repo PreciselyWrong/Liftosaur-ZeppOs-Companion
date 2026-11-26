@@ -178,6 +178,19 @@ export function createWorkoutSession({
     for (let exerciseIdx = 0; exerciseIdx < exercises.length; exerciseIdx++) {
       const exercise = exercises[exerciseIdx];
       const prog = progress[exerciseIdx];
+      // A skipped warmup stays open on the server while later sets complete; it would end the
+      // completed prefix below and drop every set logged after it.
+      const lastCompleted = exercise.sets.map((set) => Boolean(set.completed)).lastIndexOf(true);
+      if (exercise.sets.slice(0, lastCompleted).some((set) => set.isWarmup && !set.completed)) {
+        exercise.sets = exercise.sets.filter((set, index) => !set.isWarmup || set.completed || index > lastCompleted);
+        exercise.warmupSetsCount = exercise.sets.filter((set) => set.isWarmup).length;
+        let warmupIndex = 0;
+        exercise.sets.forEach((set, index) => {
+          set.index = index + 1;
+          set.totalWarmups = exercise.warmupSetsCount;
+          if (set.isWarmup) set.warmupIndex = ++warmupIndex;
+        });
+      }
       for (let setIdx = 0; setIdx < exercise.sets.length; setIdx++) {
         const target = exercise.sets[setIdx];
         if (!target.completed) break;
@@ -1417,6 +1430,15 @@ export function createWorkoutSession({
       const reason = source === 'native' ? 'native-workout' : 'manual-workout';
       if (!activePauseReasons.has(reason)) return;
       applyEvent({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source }, timestamp });
+    },
+
+    // The lifter overrides an inferred native pause that Zepp data never shows ending (#106).
+    forceResumeWorkout({ timestamp = Date.now() } = {}) {
+      for (const source of ['native', 'manual']) {
+        if (activePauseReasons.has(source === 'native' ? 'native-workout' : 'manual-workout')) {
+          applyEvent({ type: EVENT_TYPES.RESUME_WORKOUT, payload: { source }, timestamp });
+        }
+      }
     },
 
     toggleRestPause({ timestamp = Date.now() } = {}) {
