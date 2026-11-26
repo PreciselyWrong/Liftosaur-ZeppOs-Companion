@@ -416,7 +416,7 @@ test('An image file arriving during a set sync is shown only after the sync sett
   h.client.dispose();
 });
 
-test('An image file arriving while memory is exhausted is dropped as a retryable failure', async () => {
+test('A delivered image file is kept and shown even when memory reads low as it lands', async () => {
   let headroom = true;
   const changes = [];
   const requests = [];
@@ -430,11 +430,13 @@ test('An image file arriving while memory is exhausted is dropped as a retryable
   client.setEnabled(true);
   client.load(url);
   await flush();
+  // The transfer was the costly step and cached images are drawn without a check, so dropping
+  // a fresh file protects nothing and left the exercise without its image.
   headroom = false;
   client.receive(fileFor(requests[0]));
-  assert.equal(client.get(url).status, 'unavailable');
-  assert.deepEqual(removed, ['data://download/squat.png']);
-  assert.deepEqual(changes, [{ status: 'unavailable', failure: { reason: 'LOW_MEMORY' } }]);
+  assert.equal(client.get(url).status, 'ready');
+  assert.deepEqual(removed, []);
+  assert.deepEqual(changes, [{ status: 'ready', failure: null }]);
   client.dispose();
 });
 
@@ -502,4 +504,32 @@ test('Images are held only while a set sync awaits its reply, failed or not', as
     async () => { calls.push('send'); throw new Error('offline'); }));
   assert.deepEqual(calls, ['hold', 'send', 'release']);
   assert.equal(await holdExerciseImagesDuring(null, MESSAGE_TYPES.SYNC_WORKOUT_SETS, async () => 'ok'), 'ok');
+});
+
+test('Images still loading when images are switched off are asked for again once they are back', async () => {
+  const map = new Map();
+  const storage = { getItem: (key) => map.get(key) || null, setItem: (key, value) => map.set(key, value) };
+  const bench = '/externalimages/exercises/single/small/bench.png';
+  const requests = [];
+  const client = createExerciseImageClient({
+    request: (_, payload) => { requests.push(payload.imageUrl); return new Promise(() => {}); },
+    removeFile() {},
+    fileSize: () => 100,
+    storage,
+  });
+  client.setEnabled(true);
+  client.load(url);
+  client.load(bench);
+  await flush();
+  assert.equal(requests.length, 1);
+  // A settings reply without the image setting switches images off for a moment.
+  client.setEnabled(false);
+  client.setEnabled(true);
+  client.load(url);
+  client.load(bench);
+  await flush();
+  assert.equal(requests.length, 2, 'the cancelled image is not left loading forever');
+  assert.equal(client.get(url).status, 'loading');
+  assert.equal(client.get(bench).status, 'loading');
+  client.dispose();
 });

@@ -131,6 +131,10 @@ export function createExerciseImageClient({
     transfer = null;
     active = null;
     queue.length = 0;
+    // A kept entry still loading would never be asked for again: load() skips loading entries.
+    for (const [url, entry] of entries) {
+      if (entry.status === 'loading') entries.delete(url);
+    }
     if (!storage) {
       const removed = new Set();
       for (const entry of entries.values()) {
@@ -350,15 +354,11 @@ export function createExerciseImageClient({
         && file.filePath.startsWith('data://');
       if (!valid && state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
       if (valid) {
-        // Showing the image decodes it: that waits for any set sync, then checks memory again.
+        // Showing the image redraws the screen, so that waits for any set sync. The file is kept whatever
+        // memory reads now: the transfer was the costly step and cached images are drawn without a check.
         const settle = () => {
           if (active !== expected || expected.status !== 'loading') return;
-          if (hasMemoryHeadroom('file')) {
-            finish(expected, 'ready', file.filePath);
-            return;
-          }
-          if (!isCachedPath(file.filePath)) remove(file.filePath);
-          finish(expected, 'unavailable', null, { reason: 'LOW_MEMORY' });
+          finish(expected, 'ready', file.filePath);
         };
         if (!deferred()) {
           settle();
