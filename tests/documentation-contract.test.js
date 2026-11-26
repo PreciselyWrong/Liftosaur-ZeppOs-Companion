@@ -17,6 +17,7 @@ test('publishes only documentation useful to users, testers, and maintainers', (
 
   assert.deepEqual(markdownFiles, [
     'active-2-workout-integration-test.md',
+    'device-smoke-checklist.md',
     'privacy-policy.md',
     'set-corrections.md',
     'store-listing.md',
@@ -69,4 +70,15 @@ test('GitHub Issues and Project own the work backlog', () => {
 
   const config = read(path.join('.github', 'ISSUE_TEMPLATE', 'config.yml'));
   assert.match(config, /^blank_issues_enabled: false$/m);
+});
+
+test('the tester guide links a device smoke checklist that explains log capture', () => {
+  assert.match(read('docs/tester-guide.md'), /\(device-smoke-checklist\.md\)/);
+  const checklist = read('docs/device-smoke-checklist.md');
+  for (const step of [/zeus bridge/, /`connect`/, /`install`/, /`screenshot`/, /unlocked/, /Developer Mode Bridge/, /stop it first/]) {
+    assert.match(checklist, step);
+  }
+  for (const scenario of [/Home/, /background/, /set sync/, /Plate breakdown/, /Bluetooth/, /force-close/, /native Workout pause/, /discard/]) {
+    assert.match(checklist, scenario);
+  }
 });

@@ -5,6 +5,7 @@ import {
   parseWorkoutExtensionAppId,
   generateWorkoutExtensionProject,
 } from './generate-workout-extension.js';
+import { prepareProjectSync } from './prepare-dev-project.js';
 
 export const SUPPORTED_PREVIEW_PRODUCTS = ['companion', 'workout'];
 
@@ -42,6 +43,8 @@ export function planPreview(productInput, {
   const resolvedRootDir = rootDir || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const resolvedTargetDir = targetDir || path.join(resolvedRootDir, 'build', 'workout-extension');
   const resolvedBuilderScript = builderScript || path.join(resolvedRootDir, 'tools', 'build-preview.mjs');
+  // Testers get the same minified copy that development and release builds compile.
+  const releaseDir = path.join(resolvedRootDir, 'build', 'release', product);
   const resolvedScale = Number(scale);
   if (!Number.isFinite(resolvedScale) || resolvedScale <= 0) {
     throw new Error('Preview scale must be a positive number');
@@ -64,7 +67,8 @@ export function planPreview(productInput, {
       product: 'companion',
       command: execPath,
       args: [resolvedBuilderScript, resolvedOutPath, String(resolvedScale)],
-      cwd: resolvedRootDir,
+      prepareFrom: resolvedRootDir,
+      cwd: releaseDir,
       generate: false,
       outPath: resolvedOutPath,
       scale: resolvedScale,
@@ -74,7 +78,8 @@ export function planPreview(productInput, {
       product: 'workout',
       command: execPath,
       args: [resolvedBuilderScript, resolvedOutPath, String(resolvedScale)],
-      cwd: resolvedTargetDir,
+      prepareFrom: resolvedTargetDir,
+      cwd: releaseDir,
       generate: true,
       appId: parsedAppId,
       rootDir: resolvedRootDir,
@@ -103,6 +108,7 @@ export function executePreview(productInput, {
   execPath = process.execPath,
   spawn = spawnSync,
   generator = generateWorkoutExtensionProject,
+  prepare = prepareProjectSync,
   stdio = 'inherit',
   spawnOptions = {},
 } = {}) {
@@ -125,6 +131,7 @@ export function executePreview(productInput, {
         rootDir: step.rootDir,
       });
     }
+    prepare(step.prepareFrom, step.cwd);
 
     const options = {
       cwd: step.cwd,

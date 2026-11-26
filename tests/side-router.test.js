@@ -214,9 +214,9 @@ function fakeWorkoutService(overrides = {}) {
   return {
     listPrograms: async () => [{ id: 'p1', name: 'Workout Prog' }],
     getProgramOutline: async (id) => ({ programId: id, weeks: [] }),
-    getNextWorkout: async (selection) => ({ workout: { id: 'next', selection } }),
-    getCurrentWorkout: async () => ({ workout: { id: 'current' } }),
-    startWorkout: async (payload) => ({ workout: { id: 'started', payload } }),
+    getNextWorkout: async (selection) => ({ workout: { id: 'next', selection, entries: [] } }),
+    getCurrentWorkout: async () => ({ workout: { id: 'current', startTime: 1700000000000, entries: [] } }),
+    startWorkout: async (payload) => ({ workout: { id: 'started', payload, startTime: 1700000000000, entries: [] } }),
     syncWorkoutSets: async () => ({ workout: { startTime: 1700000000000, exercises: [] } }),
     finishWorkout: async (payload) => ({ workout: { id: payload.startTime, finished: true } }),
     discardWorkout: async (startTime) => ({ deleted: true, startTime }),

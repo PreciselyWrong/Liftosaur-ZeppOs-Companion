@@ -45,6 +45,8 @@ test('runtime logs contain no workout names or completed-set counts', () => {
 
   assert.doesNotMatch(sideSource, /console\.log\([^\n]*dayName/);
   assert.doesNotMatch(watchSource, /console\.log\([^\n]*view\.dayName/);
+  // Diagnostics and the always-on health summary keep codes and counters, never a log line.
+  assert.doesNotMatch(read('shared/workout-diagnostics.js'), /console\./);
 });
 
 test('the npm lockfile is publishable for reproducible installs', () => {

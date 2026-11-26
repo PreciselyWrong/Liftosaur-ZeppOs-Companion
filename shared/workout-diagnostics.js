@@ -6,6 +6,8 @@ export const WORKOUT_DIAGNOSTICS_ENABLED_KEY = 'liftosaur.workout.diagnostics.en
 
 const DIAGNOSTICS_FILES = ['lifto-diagnostics-a.json', 'lifto-diagnostics-b.json'];
 const DIAGNOSTICS_LOG = 'lifto-diagnostics.log';
+const HEALTH_FILES = ['lifto-health-a.json', 'lifto-health-b.json'];
+export const WORKOUT_HEALTH_KEY = 'liftosaur.workout.health.v1';
 
 function readDiagnosticsCopy(readFileSync, path) {
   try {
@@ -33,7 +35,36 @@ function asciiBuffer(text) {
 // Rewriting that report on every tap cost the watch over half a second, so each step is appended
 // to a log instead and folded into the report only from time to time.
 export function createFileDiagnosticsStorage(fs, paths = DIAGNOSTICS_FILES, logPath = DIAGNOSTICS_LOG) {
-  const { readFileSync, writeFileSync } = fs;
+  const { writeFileSync } = fs;
+  const copies = createCopyStorage(fs, paths);
+  return {
+    ...copies,
+    // The always-on health summary has its own small files, so it never rewrites the opt-in report.
+    health: createCopyStorage(fs, HEALTH_FILES),
+    // Each batch starts a new line, so a line cut short by a restart never swallows the next one.
+    appendLines(lines) {
+      const fd = fs.openSync({ path: logPath, flag: fs.O_WRONLY | fs.O_CREAT | fs.O_APPEND });
+      try {
+        fs.writeSync({ fd, buffer: asciiBuffer(`\n${lines.join('\n')}`) });
+      } finally {
+        fs.closeSync({ fd });
+      }
+    },
+    readLines() {
+      try {
+        const text = fs.readFileSync({ path: logPath, options: { encoding: 'utf8' } });
+        return typeof text === 'string' ? text.split('\n').filter(Boolean) : [];
+      } catch {
+        return [];
+      }
+    },
+    clearLines() {
+      writeFileSync({ path: logPath, data: '', options: { encoding: 'utf8' } });
+    },
+  };
+}
+
+function createCopyStorage({ readFileSync, writeFileSync }, paths) {
   let values = null;
   let sequence = 0;
   let target = 0;
@@ -63,26 +94,6 @@ export function createFileDiagnosticsStorage(fs, paths = DIAGNOSTICS_FILES, logP
       // A cleared report must not linger in the older copy.
       save();
       save();
-    },
-    // Each batch starts a new line, so a line cut short by a restart never swallows the next one.
-    appendLines(lines) {
-      const fd = fs.openSync({ path: logPath, flag: fs.O_WRONLY | fs.O_CREAT | fs.O_APPEND });
-      try {
-        fs.writeSync({ fd, buffer: asciiBuffer(`\n${lines.join('\n')}`) });
-      } finally {
-        fs.closeSync({ fd });
-      }
-    },
-    readLines() {
-      try {
-        const text = readFileSync({ path: logPath, options: { encoding: 'utf8' } });
-        return typeof text === 'string' ? text.split('\n').filter(Boolean) : [];
-      } catch {
-        return [];
-      }
-    },
-    clearLines() {
-      writeFileSync({ path: logPath, data: '', options: { encoding: 'utf8' } });
     },
   };
 }
@@ -141,6 +152,12 @@ const MAX_REPORT_BYTES = 16 * 1024;
 // Folding rewrites the whole report, so it waits for a few hundred short steps.
 const FOLD_AFTER_LINES = 400;
 const HEARTBEAT_INTERVAL_MS = 30_000;
+const HEALTH_MEMORY_INTERVAL_MS = 30_000;
+// Durations need a clock even while the opt-in report is off.
+const HEALTH_TIMED_CODES = new Set([
+  WORKOUT_DIAGNOSTIC_CODES.RENDER_START, WORKOUT_DIAGNOSTIC_CODES.RENDER_END,
+  WORKOUT_DIAGNOSTIC_CODES.SET_TAP, WORKOUT_DIAGNOSTIC_CODES.SET_SAVED,
+]);
 const VALID_ACTIONS = new Set([
   'START_SET', 'COMPLETE_SET', 'INCREASE_WEIGHT', 'DECREASE_WEIGHT', 'INCREASE_REPS', 'DECREASE_REPS',
   'INCREASE_RPE', 'DECREASE_RPE', 'PAUSE', 'RESUME', 'SKIP_WARMUP', 'NEXT_EXERCISE', 'PREVIOUS_EXERCISE',
@@ -273,6 +290,86 @@ function sanitizeMemory(raw) {
   return Object.keys(memory).length > 0 ? memory : null;
 }
 
+const HEALTH_VERSION = 1;
+const HEALTH_NUMBERS = [
+  'at', 'renderMs', 'renderWorstMs', 'saveMs', 'saveWorstMs', 'persistMs', 'persistWorstMs', 'persistBytes',
+  'persistWorstBytes', 'journal', 'replyBytes', 'appPeak', 'minFree', 'imageRequests', 'imageRefusals',
+  'imageFailures', 'imageOverlaps',
+];
+const REPLY_KINDS = new Set([
+  'EMPTY', 'DATA', 'WORKOUT', 'WORKOUT_REF', 'NO_WORKOUT', 'TIMEOUT', 'ERROR_UNKNOWN',
+  ...Object.values(ERROR_CODES).map((code) => `ERROR_${code}`),
+]);
+const REPLY_TYPES = new Set([...Object.values(MESSAGE_TYPES), 'NONE']);
+// Durations, sizes and counts only; anything else a caller passes is dropped.
+function sanitizeHealthRun(raw, withClean) {
+  if (!raw || typeof raw !== 'object') return null;
+  const run = {};
+  for (const field of HEALTH_NUMBERS) {
+    if (Number.isSafeInteger(raw[field]) && raw[field] >= 0) run[field] = raw[field];
+  }
+  const step = safeEnum(raw.step, VALID_CODES);
+  if (step) run.step = step;
+  const replyRequest = safeEnum(raw.replyRequest, VALID_REQUESTS);
+  if (replyRequest) run.replyRequest = replyRequest;
+  const replyType = safeEnum(raw.replyType, REPLY_TYPES);
+  if (replyType) run.replyType = replyType;
+  const replyKind = safeEnum(raw.replyKind, REPLY_KINDS);
+  if (replyKind) run.replyKind = replyKind;
+  if (withClean && typeof raw.clean === 'boolean') run.clean = raw.clean;
+  return run;
+}
+
+function sanitizeHealth(raw) {
+  if (!raw || typeof raw !== 'object' || raw.version !== HEALTH_VERSION) return undefined;
+  const run = sanitizeHealthRun(raw.run, false);
+  if (!run || !Number.isSafeInteger(raw.seq) || raw.seq < 0) return undefined;
+  const previous = sanitizeHealthRun(raw.previous, true);
+  return {
+    version: HEALTH_VERSION,
+    seq: raw.seq,
+    unclean: Number.isSafeInteger(raw.unclean) && raw.unclean >= 0 ? raw.unclean : 0,
+    run,
+    ...(previous ? { previous } : {}),
+  };
+}
+
+// The watch copy also remembers whether the run is still on screen and what the phone already has.
+function sanitizeHealthFile(raw) {
+  const health = sanitizeHealth(raw);
+  if (!health) return null;
+  const uploaded = raw.uploaded;
+  return {
+    ...health,
+    open: raw.open === true,
+    uploaded: {
+      report: typeof uploaded?.report === 'string' && /^\d{1,16}(?::\d{1,16}){2}$/.test(uploaded.report) ? uploaded.report : null,
+      health: Number.isSafeInteger(uploaded?.health) ? uploaded.health : -1,
+    },
+  };
+}
+
+// The shape of a reply, never its content: a reply adopted with the wrong shape shows here.
+function replyKind(reply) {
+  const payload = reply?.payload;
+  if (reply?.type === MESSAGE_TYPES.ERROR) return REPLY_KINDS.has(`ERROR_${payload?.code}`) ? `ERROR_${payload.code}` : 'ERROR_UNKNOWN';
+  if (!payload || typeof payload !== 'object' || Object.keys(payload).length === 0) return 'EMPTY';
+  if (!('workout' in payload)) return 'DATA';
+  const workout = payload.workout;
+  if (!workout || typeof workout !== 'object') return 'NO_WORKOUT';
+  const keys = Object.keys(workout);
+  return keys.length === 1 && keys[0] === 'startTime' ? 'WORKOUT_REF' : 'WORKOUT';
+}
+
+function replyBytes(reply) {
+  try {
+    const text = JSON.stringify(reply);
+    return typeof text === 'string' ? text.length : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function readWorkoutMemory(getPackageInfo, getPerformance) {
   if (typeof getPackageInfo !== 'function' || typeof getPerformance !== 'function') return null;
   try {
@@ -307,12 +404,13 @@ function sanitizeEvents(raw) {
   return events;
 }
 
-function buildReport(events, details, previousRuns = []) {
+function buildReport(events, details, previousRuns = [], health = undefined) {
   return {
     version: VERSION,
     events,
     ...(details ? { details } : {}),
     ...(previousRuns.length > 0 ? { previousRuns } : {}),
+    ...(health ? { health } : {}),
   };
 }
 
@@ -328,12 +426,12 @@ function fitReport(report) {
   if (fits(report)) return report;
   let runs = (report.previousRuns || []).map((run) => ({ ...run, events: run.events.slice(-EVENTS_PER_RUN_WHEN_FULL) }));
   const events = report.events.slice(-EVENTS_PER_RUN_WHEN_FULL);
-  let trimmed = buildReport(events, report.details, runs);
+  let trimmed = buildReport(events, report.details, runs, report.health);
   while (!fits(trimmed) && runs.length > 0) {
     runs = runs.slice(0, -1);
-    trimmed = buildReport(events, report.details, runs);
+    trimmed = buildReport(events, report.details, runs, report.health);
   }
-  return fits(trimmed) ? trimmed : buildReport(events.slice(-4));
+  return fits(trimmed) ? trimmed : buildReport(events.slice(-4), undefined, [], report.health);
 }
 
 function sanitizeReport(raw) {
@@ -350,7 +448,7 @@ function sanitizeReport(raw) {
     .slice(0, MAX_PREVIOUS_RUNS)
     .map(sanitizeRun)
     .filter(Boolean);
-  return fitReport(buildReport(sanitizeEvents(report.events), sanitizeDetail(report.details), previousRuns));
+  return fitReport(buildReport(sanitizeEvents(report.events), sanitizeDetail(report.details), previousRuns, sanitizeHealth(report.health)));
 }
 
 // One recorded step: an event, or the memory sampled right after the previous event.
@@ -478,6 +576,172 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     // Diagnostics must never interfere with the durable workout journal.
   }
 
+  // Always-on health: a few counters kept in memory and written only when the page is left or a
+  // workout is saved, so a set save or a redraw never costs a file write. It leaves the watch only
+  // with the opt-in report.
+  const healthStore = providers?.persistHealth === true && typeof storage?.health?.setItem === 'function' ? storage.health : null;
+  let healthLoaded = false;
+  let healthSeq = 0;
+  let uncleanExits = 0;
+  let previousRun = null;
+  let run = {};
+  let onScreen = false;
+  let uploaded = { report: null, health: -1 };
+  let renderStartedAt = null;
+  let saveStartedAt = null;
+  let lastHealthMemoryAt = -Infinity;
+  let healthTimer = null;
+  const inFlight = new Map();
+
+  // Read lazily: the launch draws its first frame before the summary file is touched.
+  function loadHealth() {
+    if (healthLoaded) return;
+    healthLoaded = true;
+    let stored = null;
+    try { stored = healthStore ? sanitizeHealthFile(healthStore.getItem(WORKOUT_HEALTH_KEY)) : null; } catch {}
+    if (!stored) return;
+    healthSeq = stored.seq + 1;
+    uploaded = stored.uploaded;
+    // A run still marked on screen was closed without onPause: the watch killed it.
+    uncleanExits = stored.unclean + (stored.open ? 1 : 0);
+    previousRun = { ...stored.run, clean: !stored.open };
+  }
+
+  function changeHealth(update) {
+    try {
+      update();
+      healthSeq += 1;
+    } catch {}
+  }
+
+  function keepWorst(lastField, worstField, value) {
+    if (!Number.isSafeInteger(value) || value < 0) return;
+    run[lastField] = value;
+    run[worstField] = Math.max(run[worstField] || 0, value);
+  }
+
+  function noteHealthMemory(raw) {
+    const sample = sanitizeMemory(raw);
+    if (!sample) return;
+    changeHealth(() => {
+      const peak = sample.appPeak ?? sample.appUsed;
+      if (Number.isSafeInteger(peak)) run.appPeak = Math.max(run.appPeak || 0, peak);
+      if (Number.isSafeInteger(sample.systemTotal) && Number.isSafeInteger(sample.systemUsed) && sample.systemTotal >= sample.systemUsed) {
+        const free = sample.systemTotal - sample.systemUsed;
+        run.minFree = Number.isSafeInteger(run.minFree) ? Math.min(run.minFree, free) : free;
+      }
+    });
+  }
+
+  function healthSummary() {
+    return sanitizeHealth({ version: HEALTH_VERSION, seq: healthSeq, unclean: uncleanExits, run, previous: previousRun });
+  }
+
+  function cancelHealthWrite() {
+    if (healthTimer === null) return;
+    try { clearTimer(healthTimer); } catch {}
+    healthTimer = null;
+  }
+
+  function writeHealth() {
+    if (!healthStore) return;
+    cancelHealthWrite();
+    loadHealth();
+    try { noteHealthMemory(sampleMemory('HEALTH')); } catch {}
+    try {
+      const length = typeof providers.journalLength === 'function' ? providers.journalLength() : undefined;
+      if (Number.isSafeInteger(length) && length >= 0) run.journal = length;
+    } catch {}
+    try {
+      const at = Math.trunc(now());
+      if (Number.isSafeInteger(at) && at >= 0) run.at = at;
+    } catch {}
+    try {
+      healthStore.setItem(WORKOUT_HEALTH_KEY, { ...healthSummary(), open: onScreen, uploaded });
+    } catch {
+      // Health must never block a pause or a save.
+    }
+  }
+
+  function scheduleHealthWrite() {
+    if (!healthStore || healthTimer !== null) return;
+    try {
+      healthTimer = setTimer(() => {
+        healthTimer = null;
+        writeHealth();
+      }, flushDelayMs);
+    } catch {
+      healthTimer = null;
+    }
+  }
+
+  const IMAGE_REQUEST = MESSAGE_TYPES.GET_EXERCISE_IMAGE;
+  const SET_SYNC = MESSAGE_TYPES.SYNC_WORKOUT_SETS;
+  function settle(request) {
+    if (request && inFlight.get(request) > 0) inFlight.set(request, inFlight.get(request) - 1);
+  }
+
+  function observeHealth(code, context, reply, at) {
+    const request = safeEnum(context?.request, VALID_REQUESTS);
+    changeHealth(() => {
+      run.step = code;
+      if (code === WORKOUT_DIAGNOSTIC_CODES.RENDER_START) renderStartedAt = at;
+      else if (code === WORKOUT_DIAGNOSTIC_CODES.RENDER_END && renderStartedAt !== null) {
+        keepWorst('renderMs', 'renderWorstMs', at - renderStartedAt);
+        renderStartedAt = null;
+      } else if (code === WORKOUT_DIAGNOSTIC_CODES.SET_TAP) saveStartedAt = at;
+      else if (code === WORKOUT_DIAGNOSTIC_CODES.SET_SAVED && saveStartedAt !== null) {
+        keepWorst('saveMs', 'saveWorstMs', at - saveStartedAt);
+        saveStartedAt = null;
+      } else if (code === WORKOUT_DIAGNOSTIC_CODES.PHONE_REQUEST && request) {
+        // The watch was killed once while an image transfer overlapped a set sync.
+        const other = request === IMAGE_REQUEST ? SET_SYNC : (request === SET_SYNC ? IMAGE_REQUEST : null);
+        if (other && inFlight.get(other) > 0) run.imageOverlaps = (run.imageOverlaps || 0) + 1;
+        if (request === IMAGE_REQUEST) run.imageRequests = (run.imageRequests || 0) + 1;
+        inFlight.set(request, (inFlight.get(request) || 0) + 1);
+      } else if (code === WORKOUT_DIAGNOSTIC_CODES.PHONE_REPLY) {
+        settle(request);
+        run.replyRequest = request;
+        run.replyType = safeEnum(reply?.type, REPLY_TYPES);
+        run.replyKind = replyKind(reply);
+        run.replyBytes = replyBytes(reply);
+      } else if (code === WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED) {
+        settle(request);
+        // An error reply was already counted as a reply; only a missing reply is new.
+        if (context?.failure === 'TIMEOUT') {
+          Object.assign(run, { replyRequest: request, replyType: 'NONE', replyKind: 'TIMEOUT', replyBytes: 0 });
+        }
+      } else if (code === WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE) {
+        const field = context?.image === 'LOW_MEMORY' ? 'imageRefusals' : 'imageFailures';
+        run[field] = (run[field] || 0) + 1;
+      }
+    });
+    if (code === WORKOUT_DIAGNOSTIC_CODES.RENDER_END && !enabled && at - lastHealthMemoryAt >= HEALTH_MEMORY_INTERVAL_MS) {
+      lastHealthMemoryAt = at;
+      try { noteHealthMemory(sampleMemory(code)); } catch {}
+    }
+    if (code === WORKOUT_DIAGNOSTIC_CODES.BUILD || code === WORKOUT_DIAGNOSTIC_CODES.RESUME) {
+      // Marking the run as started waits for the first frame instead of delaying it.
+      onScreen = true;
+      scheduleHealthWrite();
+    } else if (code === WORKOUT_DIAGNOSTIC_CODES.PAUSE) {
+      onScreen = false;
+      writeHealth();
+    } else if (code === WORKOUT_DIAGNOSTIC_CODES.FINISH_SAVED) {
+      writeHealth();
+    } else if (code === WORKOUT_DIAGNOSTIC_CODES.EXIT) {
+      // onDestroy must not touch files: an exit after onPause is already recorded as clean.
+      cancelHealthWrite();
+    }
+  }
+
+  // Only a new run in the report makes it worth sending again; the current run grows on every tap.
+  function reportFingerprint(report) {
+    const runs = report?.previousRuns || [];
+    const newest = runs[0]?.events || [];
+    return `${runs.length}:${newest.at(-1)?.at || 0}:${newest.length}`;
+  }
+
   function writeStorage(report) {
     cancelFlush();
     memory = sanitizeReport(report) || { version: VERSION, events: [] };
@@ -562,6 +826,8 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
         loggedLines = 0;
       }
       if (next !== wasEnabled) {
+        // The phone report was just created or cleared: the next upload sends the whole report.
+        uploaded = { report: null, health: -1 };
         runtimeReadAttempted = false;
         lastHeartbeatAt = -Infinity;
         lastMemoryAttemptAt = -Infinity;
@@ -582,12 +848,16 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
       }
       return enabled;
     },
-    record(code, rawContext) {
-      if (!enabled) return false;
+    record(code, rawContext, reply) {
       if (!VALID_CODES.has(code)) return false;
-      try {
-        const at = Math.trunc(now());
+      let at = null;
+      if (enabled || HEALTH_TIMED_CODES.has(code)) {
+        try { at = Math.trunc(now()); } catch { return false; }
         if (!Number.isSafeInteger(at) || at < 0 || at > MAX_DATE_MILLISECONDS) return false;
+      }
+      try { observeHealth(code, rawContext, reply, at); } catch {}
+      if (!enabled) return false;
+      try {
         let baseContext = null;
         if (!CONTEXT_FREE_CODES.has(code)) {
           try { baseContext = typeof providers.context === 'function' ? providers.context() : null; } catch {}
@@ -611,6 +881,7 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
           lastMemoryAttemptAt = at;
           let sampled = null;
           try { sampled = sanitizeMemory(sampleMemory(code)); } catch {}
+          noteHealthMemory(sampled);
           if (sampled) {
             const sample = { seq: ++sequence, at, memory: sampled };
             memory = applyStep(memory, sample);
@@ -627,11 +898,53 @@ export function createWorkoutDiagnostics(storage, now = () => Date.now(), sample
     },
     replace(report) {
       if (!enabled) return false;
+      // A health patch from the watch updates the summary and keeps the steps already received.
+      if (report && typeof report === 'object' && report.version === VERSION && !Array.isArray(report.events)) {
+        const health = sanitizeHealth(report.health);
+        return health ? writeStorage({ ...memory, health }) : false;
+      }
       const sanitized = sanitizeReport(report);
       return sanitized ? writeStorage(sanitized) : false;
     },
     cancel() {
       cancelFlush();
+      cancelHealthWrite();
+    },
+    notePersist(durationMs, bytes) {
+      changeHealth(() => {
+        keepWorst('persistMs', 'persistWorstMs', durationMs);
+        keepWorst('persistBytes', 'persistWorstBytes', bytes);
+      });
+    },
+    // Passes the sample through, so a memory read the app already makes also feeds the summary.
+    noteMemory(sample) {
+      noteHealthMemory(sample);
+      return sample;
+    },
+    // The opt-in report goes once per new run; afterwards only the health summary, when it changed.
+    prepareUpload() {
+      const none = { payload: {}, commit() {} };
+      if (!enabled) return none;
+      try {
+        loadHealth();
+        const report = sanitizeReport(memory) || { version: VERSION, events: [] };
+        const fingerprint = reportFingerprint(report);
+        const health = healthSummary();
+        const seq = healthSeq;
+        if (fingerprint !== uploaded.report) {
+          return {
+            payload: { diagnostics: { ...report, ...(health ? { health } : {}) } },
+            commit() { uploaded = { report: fingerprint, health: seq }; },
+          };
+        }
+        if (health && seq !== uploaded.health) {
+          return {
+            payload: { diagnostics: { version: VERSION, health } },
+            commit() { uploaded = { ...uploaded, health: seq }; },
+          };
+        }
+      } catch {}
+      return none;
     },
     heartbeat() {
       if (!enabled) return false;
@@ -664,7 +977,7 @@ export const WORKOUT_DIAGNOSTICS_EMPTY = 'No watch diagnostics yet';
 
 export function formatWorkoutDiagnostics(raw) {
   const report = sanitizeReport(raw);
-  if (!report || (report.events.length === 0 && !report.previousRuns?.length)) return WORKOUT_DIAGNOSTICS_EMPTY;
+  if (!report || (report.events.length === 0 && !report.previousRuns?.length && !report.health)) return WORKOUT_DIAGNOSTICS_EMPTY;
   const mib = (bytes) => (bytes / (1024 * 1024)).toFixed(1);
   const formatEvent = (event, index, runEvents) => {
     const elapsedMs = index === 0 ? null : event.at - runEvents[index - 1].at;
@@ -734,6 +1047,33 @@ export function formatWorkoutDiagnostics(raw) {
     formatRun(`Previous run ${index + 1}`, previousRuns[index]);
   }
   formatRun('Current run', report);
+  if (report.health) lines.push(...formatHealth(report.health, mib));
 
   return lines.join('\n');
+}
+
+function formatHealth(health, mib) {
+  const ms = (run, last, worst) => (Number.isSafeInteger(run[last]) ? `last ${run[last]} ms worst ${run[worst]} ms` : 'not measured');
+  const kb = (bytes) => `${(bytes / 1024).toFixed(1)} KB`;
+  const formatRun = (label, run) => {
+    const parts = [
+      `render ${ms(run, 'renderMs', 'renderWorstMs')}`,
+      `save ${ms(run, 'saveMs', 'saveWorstMs')}`,
+      `persist ${ms(run, 'persistMs', 'persistWorstMs')}${Number.isSafeInteger(run.persistBytes) ? ` ${kb(run.persistBytes)} (largest ${kb(run.persistWorstBytes)})` : ''}`,
+      Number.isSafeInteger(run.journal) && `journal ${run.journal} entries`,
+      run.replyRequest && `last reply ${run.replyRequest} -> ${run.replyType || 'unknown'} ${run.replyKind || 'unknown'} ${run.replyBytes ?? 0} B`,
+      Number.isSafeInteger(run.appPeak) && `app peak ${mib(run.appPeak)} MiB`,
+      Number.isSafeInteger(run.minFree) && `lowest system free ${mib(run.minFree)} MiB`,
+      `images ${run.imageRequests || 0} requested, ${run.imageRefusals || 0} refused for memory, ${run.imageFailures || 0} failed, ${run.imageOverlaps || 0} overlapping a set sync`,
+      run.step && `last step ${run.step}${Number.isSafeInteger(run.at) ? ` at ${new Date(run.at).toISOString()} UTC` : ''}`,
+    ];
+    return `${label}: ${parts.filter(Boolean).join('; ')}`;
+  };
+  const lines = [`Health summary (always on, ${health.unclean} ${health.unclean === 1 ? 'run' : 'runs'} ended without a clean exit):`];
+  if (health.previous) {
+    const ending = health.previous.clean === false ? 'Previous run ended without a clean exit' : 'Previous run closed normally';
+    lines.push(formatRun(ending, health.previous));
+  }
+  lines.push(formatRun('This run', health.run));
+  return lines;
 }

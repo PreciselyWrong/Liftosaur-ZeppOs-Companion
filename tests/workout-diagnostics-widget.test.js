@@ -15,8 +15,18 @@ test('Workout records bounded steps around set completion and terminal save', ()
 });
 
 test('Workout sends only the sanitized diagnostic report during settings refresh', () => {
-  assert.match(source, /workoutDiagnostics\.isEnabled\(\)\s*\? \{ diagnostics: workoutDiagnostics\.read\(\) \} : \{\}/);
+  // The upload is decided by the recorder, which sends nothing while the phone setting is off.
+  assert.match(source, /send\(MESSAGE_TYPES\.GET_SETTINGS, diagnosticsUpload\.payload\)/);
+  assert.match(source, /if \(workoutDiagnostics\.isEnabled\(\)\) diagnosticsUpload\.commit\(\)/);
   assert.match(source, /workoutDiagnostics\.setEnabled\(normalizeWorkoutDiagnosticsEnabled\(settingsRes\.payload\?\.workoutDiagnosticsEnabled\)\)/);
   assert.match(source, /onResume\(\)[\s\S]*loadDisplaySettings\(\)/);
   assert.doesNotMatch(source, /workoutDiagnostics\.record\([^)]*(?:dayName|exerciseName|apiKey|weight|reps)/);
+});
+
+test('only Workout persists the health summary, because only its page has an onPause', () => {
+  const companion = readFileSync(new URL('../page/common/index.js', import.meta.url), 'utf8');
+  assert.match(source, /persistHealth: true/);
+  assert.match(source, /onPause\(\) \{[\s\S]*workoutDiagnostics\.record\(WORKOUT_DIAGNOSTIC_CODES\.PAUSE\)/);
+  assert.doesNotMatch(companion, /persistHealth/);
+  assert.doesNotMatch(companion, /onPause\(\)/);
 });

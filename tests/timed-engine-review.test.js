@@ -74,7 +74,7 @@ test('late set synchronization preserves the next active side and its partial du
   controller.nextSet();
   controller.startTimedSet();
   clock = 31000; controller.stopTimedSide();
-  resolveSync({ payload: { workout: remote } });
+  resolveSync({ payload: { workout: { startTime: remote.startTime } } });
   await controller.syncSets();
   assert.equal(controller.view().currentSet.setId, 's2');
   assert.equal(controller.view().timedSet.side, 'RIGHT');
