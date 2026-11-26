@@ -3922,7 +3922,9 @@ DataWidget(
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
         readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
-        maxCachedImages: OVERVIEW_PAGE_SIZE,
+        // Cached images are files in watch flash and only drawn ones are decoded, so a whole day fits
+        // without more RAM; each eviction cost a 40 KB BLE transfer again, the riskiest image step.
+        maxCachedImages: 8,
       });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');
