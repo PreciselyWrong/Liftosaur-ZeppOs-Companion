@@ -8,7 +8,7 @@ import { createReferenceData } from '../app-side/reference-data.js';
 import { createLiftosaurApiClient } from '../app-side/liftosaur-api-client.js';
 import { MESSAGE_TYPES, PROTOCOL_VERSION, createMessage } from '../shared/protocol.js';
 
-const API_KEY = 'zz-test-key-0123456789';
+const API_KEY = 'zz-test-key';
 const LFTSK_KEY = 'lftsk_abuse_0123456789';
 
 function response(status, body, { statusText = status < 400 ? 'OK' : 'Error', textError = null } = {}) {
