@@ -8,8 +8,8 @@ import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { buildApiWorkout, createFakeCloud, createPhoneLink, flush } from './helpers/phone-harness.js';
 
-async function startDirectWorkout(shape, { time = () => 1_000_000, auto = true } = {}) {
-  const cloud = createFakeCloud(buildApiWorkout(shape));
+async function startDirectWorkout(shape, { time = () => 1_000_000, auto = true, cloudOptions = {} } = {}) {
+  const cloud = createFakeCloud(buildApiWorkout(shape), cloudOptions);
   const link = createPhoneLink(cloud);
   link.setAuto(auto);
   const store = createSessionStore(createMemoryStorageAdapter());
@@ -99,3 +99,49 @@ for (const [label, strip] of [
     assert.equal(controller.plan().exercises.length, exerciseCount);
   });
 }
+
+for (const code of ['workout_start_time_taken', 'workout_already_active']) {
+  test(`a start retry refused with ${code} after a lost reply binds the phone workout it created`, async () => {
+    let time = 1_000_000;
+    const { cloud, link, controller } = await startDirectWorkout([[0, 3]], {
+      time: () => time,
+      auto: false,
+      cloudOptions: { strictStart: true },
+    });
+    if (code === 'workout_already_active') {
+      const create = cloud.client.startRunningWorkout;
+      cloud.client.startRunningWorkout = async (payload) => {
+        if (cloud.current()) throw Object.assign(new Error(code), { code });
+        return create(payload);
+      };
+    }
+    await link.deliver(0, 'noReply');
+    await flush();
+    controller.completeSet();
+    time += 100_000;
+    controller.nextSet();
+    controller.completeSet();
+    await flush();
+
+    link.setAuto(true);
+    while (link.queue.length) await link.deliver(0, 'ok');
+    await controller.retryPendingWrites().catch(() => {});
+    await flush();
+
+    assert.equal(controller.sync().conflict, false);
+    assert.equal(controller.sync().startConfirmed, true);
+    assert.equal(controller.sync().acknowledgedSetCount, 2);
+    assert.deepEqual(cloud.completedSets().map((set) => set.setId), ['live1-entry-1-work-1', 'live1-entry-1-work-2']);
+  });
+}
+
+test('a start refused for a different running phone workout still raises the conflict', async () => {
+  const { cloud, link, controller } = await startDirectWorkout([[0, 2]], { auto: false });
+  cloud.setCurrent({ ...buildApiWorkout([[0, 2]]), startTime: 5 });
+  link.setAuto(true);
+  await link.deliver(0, 'ok');
+  await flush();
+
+  assert.equal(controller.sync().conflict, true);
+  assert.equal(controller.status().detail, 'workout_already_active');
+});

@@ -669,6 +669,27 @@ export function createWorkoutController({
     sessionGeneration += 1;
   }
 
+  // A start whose reply was lost leaves the phone running this very workout, so a retry is
+  // refused; binding it keeps the sets logged meanwhile instead of forcing a conflict.
+  async function bindOwnRunningWorkout(startedAt, startingSession) {
+    try {
+      const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+      if (disposed || session !== startingSession) return false;
+      const workout = res?.payload?.workout;
+      if (!workout || workout.startTime !== startedAt || workout.programId !== dayPlan?.programId) return false;
+      bindStartedWorkout(workout);
+    } catch (err) {
+      logError('running workout bind failed', err);
+      return false;
+    }
+    policy.markAuthoritativeResponse();
+    directSync.startConfirmed = true;
+    persist();
+    setStatus({ code: SYNC_STATUS_CODES.IDLE });
+    notifyChange();
+    return true;
+  }
+
   function ensureDirectWorkoutStarted() {
     if (disposed) return Promise.resolve(false);
     if (directSync.mode !== 'DIRECT' || directSync.startConfirmed) {
@@ -723,6 +744,8 @@ export function createWorkoutController({
       } catch (err) {
         if (disposed || session !== startingSession) return false;
         if (err?.code === 'workout_already_active' || err?.code === 'workout_start_time_taken') {
+          if (await bindOwnRunningWorkout(view.startedAt, startingSession)) return true;
+          if (disposed || session !== startingSession) return false;
           directSync.conflict = true;
           persist();
           setStatus({ code: SYNC_STATUS_CODES.CONFLICT, detail: err.code, error: err });
