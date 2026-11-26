@@ -6,7 +6,14 @@ import { createMemoryStorageAdapter, createSessionStore } from '../shared/sessio
 import { SESSION_STATES } from '../shared/workout-session.js';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
-import { buildApiWorkout, createFakeCloud, createPhoneLink, flush } from './helpers/phone-harness.js';
+import { PROTOCOL_SCHEMA, isValidReply } from '../shared/protocol-schema.js';
+import { createExerciseImageClient } from '../shared/exercise-image-client.js';
+import { createWorkoutService } from '../app-side/workout-service.js';
+import { createDummyProgramService } from '../app-side/dummy-program-service.js';
+import { createExerciseImageService } from '../app-side/exercise-image-service.js';
+import {
+  buildApiWorkout, createCompanionPage, createDemoPhoneServices, createFakeCloud, createPhoneLink, flush,
+} from './helpers/phone-harness.js';
 
 async function startDirectWorkout(shape, { time = () => 1_000_000, auto = true, cloudOptions = {} } = {}) {
   const cloud = createFakeCloud(buildApiWorkout(shape), cloudOptions);
@@ -247,3 +254,182 @@ test('a native pause after the workout is saved does not bring it back on the ne
   const relaunched = createWorkoutController({ store, request: link.request, now: () => 2_000_000 });
   assert.equal(relaunched.restore().success, false);
 });
+
+// One end-to-end case per request type: the real watch code sends it through the real phone
+// router and services, and uses the reply. Each case returns the link it talked over.
+const T = MESSAGE_TYPES;
+
+function cloudCompanion(template = buildApiWorkout([[0, 2]])) {
+  const cloud = createFakeCloud(template);
+  const catalogService = { ...createDummyProgramService(), mode: 'CLOUD' };
+  const link = createPhoneLink(cloud, { workoutService: createWorkoutService({ client: cloud.client, catalogService }) });
+  link.setAuto(true);
+  return { cloud, link, page: createCompanionPage(link) };
+}
+
+async function demoCompanionDay() {
+  const link = createPhoneLink(null, { ...createDemoPhoneServices(), workoutAbandoner: async () => {} });
+  link.setAuto(true);
+  const page = createCompanionPage(link);
+  page.loadPrograms();
+  await flush();
+  assert.equal(page.screen, 'HOME');
+  const [week] = page.outline.weeks;
+  page.loadDayPlan(week, week.days[0]);
+  await flush();
+  assert.equal(page.screen, 'SESSION');
+  page.workoutController.startWorkout();
+  page.workoutController.completeSet();
+  return { link, page };
+}
+
+async function directWorkout() {
+  let time = 1_000_000;
+  const { cloud, link, controller } = await startDirectWorkout([[0, 2]], { time: () => time });
+  controller.completeSet();
+  await flush();
+  time += 200_000;
+  controller.nextSet();
+  await flush();
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+  return { cloud, link, controller };
+}
+
+const END_TO_END = {
+  async [T.PING]() {
+    // No watch screen pings; the reply still has to match the schema.
+    const link = createPhoneLink(createFakeCloud(buildApiWorkout([[0, 1]])));
+    link.setAuto(true);
+    assert.deepEqual((await link.request(T.PING, {})).payload.echo, {});
+    return link;
+  },
+  async [T.LIST_PROGRAMS]() {
+    const { link, page } = cloudCompanion();
+    page.loadPrograms();
+    await flush();
+    assert.equal(page.screen, 'HOME');
+    assert.ok(page.programs.length > 0);
+    assert.equal(page.serviceMode, 'CLOUD');
+    return link;
+  },
+  async [T.GET_PROGRAM_OUTLINE]() {
+    const { link, page } = cloudCompanion();
+    page.loadPrograms();
+    await flush();
+    assert.ok(page.outline.weeks.length > 0);
+    assert.equal(page.outline.programId, page.selectedProgram.id);
+    return link;
+  },
+  async [T.GET_SETTINGS]() {
+    const { link, page } = cloudCompanion();
+    page.loadPrograms();
+    await flush();
+    assert.equal(page.accountSettings.units, 'kg');
+    assert.equal(page.accountSettings.workoutDiagnosticsEnabled, false);
+    return link;
+  },
+  async [T.GET_WORKOUT_NEXT]() {
+    const { link, page } = cloudCompanion(buildApiWorkout([[1, 2], [0, 1]]));
+    page.loadPrograms();
+    await flush();
+    assert.deepEqual(page.defaultWorkoutPlan.exercises.map((exercise) => exercise.sets.length), [2, 1]);
+    return link;
+  },
+  async [T.GET_WORKOUT_CURRENT]() {
+    const { cloud, link, page } = cloudCompanion();
+    cloud.setCurrent({ ...buildApiWorkout([[0, 3]]), startTime: 5 });
+    page.loadPrograms();
+    await flush();
+    assert.equal(page.screen, 'SESSION');
+    assert.equal(page.workoutController.sync().startConfirmed, true);
+    assert.equal(page.workoutController.view().startedAt, 5);
+    return link;
+  },
+  async [T.GET_DAY_PLAN]() {
+    const { link, page } = await demoCompanionDay();
+    assert.ok(page.dayPlan.exercises.length > 0);
+    assert.equal(page.workoutController.sync().mode, 'LEGACY');
+    return link;
+  },
+  async [T.START_WORKOUT]() {
+    const { cloud, link, controller } = await directWorkout();
+    assert.equal(controller.sync().startConfirmed, true);
+    assert.equal(cloud.current().startTime, 1_000_000);
+    return link;
+  },
+  async [T.SYNC_WORKOUT_SETS]() {
+    const { cloud, link } = await directWorkout();
+    assert.deepEqual(cloud.completedSets().map((set) => set.setId), ['live1-entry-1-work-1']);
+    return link;
+  },
+  async [T.FINISH_WORKOUT]() {
+    const { cloud, link, controller } = await directWorkout();
+    assert.equal((await controller.finishWorkoutRemote()).success, true);
+    assert.equal(cloud.history.length, 1);
+    // The legacy finish of a demo day goes through the page itself.
+    const demo = await demoCompanionDay();
+    demo.page.submitWorkout();
+    await flush();
+    assert.equal(demo.page.finishState.status, 'SAVED');
+    link.exchanges.push(...demo.link.exchanges);
+    return link;
+  },
+  async [T.DISCARD_WORKOUT]() {
+    const { cloud, link, controller } = await directWorkout();
+    assert.deepEqual(await controller.discardWorkoutRemote(), { success: true });
+    assert.equal(cloud.current(), null);
+    return link;
+  },
+  async [T.ABANDON_WORKOUT]() {
+    const { link, page } = await demoCompanionDay();
+    page.abandonWorkout();
+    await flush();
+    return link;
+  },
+  async [T.GET_EXERCISE_IMAGE]() {
+    const link = createPhoneLink(null, {
+      exerciseImageService: createExerciseImageService({
+        isEnabled: () => false, storage: { getItem: () => null, setItem() {} },
+        download() {}, convert() {}, sendFile() {},
+      }),
+    });
+    link.setAuto(true);
+    const changes = [];
+    const client = createExerciseImageClient({
+      inbox: { on() {}, getNextFile() {} },
+      request: link.request,
+      removeFile() {},
+      onChange: (url, status, failure) => changes.push([status, failure?.reason]),
+    });
+    client.setEnabled(true);
+    client.load('https://www.liftosaur.com/externalimages/exercises/single/small/squat.png');
+    await flush();
+    client.dispose();
+    assert.deepEqual(changes, [['unavailable', 'PHONE_DISABLED']]);
+    return link;
+  },
+};
+
+test('every message type has a schema entry and every request an end-to-end case', () => {
+  const requests = Object.keys(PROTOCOL_SCHEMA);
+  const replies = Object.values(PROTOCOL_SCHEMA).map(([reply]) => reply);
+  assert.deepEqual([...requests, ...replies, T.ERROR].sort(), Object.values(MESSAGE_TYPES).sort());
+  assert.deepEqual(Object.keys(END_TO_END).sort(), requests.sort());
+});
+
+for (const [type, run] of Object.entries(END_TO_END)) {
+  test(`end to end: ${type} goes from the watch through the phone router and its reply is used`, async () => {
+    const link = await run();
+    const own = link.exchanges.filter((exchange) => exchange.type === type);
+    assert.ok(own.length > 0, `${type} never reached the phone`);
+    assert.ok(own.some(({ reply }) => reply.type === PROTOCOL_SCHEMA[type][0]), `${type} never got its reply`);
+    for (const { type: sentType, payload, reply } of link.exchanges) {
+      assert.ok(isValidReply(sentType, reply), `${sentType} answered with ${reply.type}`);
+      assert.notEqual(reply.type, T.ERROR, `${sentType} failed: ${reply.payload && reply.payload.message}`);
+      const fields = PROTOCOL_SCHEMA[sentType][2].split(' ');
+      for (const field of Object.keys(payload || {})) {
+        assert.ok(fields.includes(field), `${sentType} sent the undeclared field ${field}`);
+      }
+    }
+  });
+}
