@@ -1,4 +1,5 @@
 import { stopRestPulseAnimation } from '../shared/rest-visual.js';
+import { holdExerciseImagesWhile, UI_WORK_QUIET_MS } from '../shared/exercise-image-client.js';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
@@ -75,11 +76,13 @@ function fixture() {
     setTimeout(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
     clearTimeout: id => timers.delete(id),
     console: { log() {} }, Date,
+    holdExerciseImagesWhile, UI_WORK_QUIET_MS, canPlanScreen: () => false,
+    widgetPlan: null, widgetSpecs: new Map(), plannedBuild: false, controllerChanges: 0,
   };
   vm.createContext(env);
   const functions = ['loadDisplaySettings', 'selectedScreenOnDuration', 'applyDisplayHold',
-    'stopRestBezelAnimation', 'resetDisplayHold', 'scheduleRenderUI', 'renderUI', 'clearWidgets', 'addRawWidget',
-    'addActionWidget', 'resetConnectionRetry', 'syncCompletedSets'];
+    'stopRestBezelAnimation', 'resetDisplayHold', 'scheduleRenderUI', 'renderUI', 'drawScreen', 'clearWidgets', 'addRawWidget',
+    'createSpecWidget', 'addActionWidget', 'resetConnectionRetry', 'syncCompletedSets'];
   if (source.includes('function cancelScheduledRender(')) functions.push('cancelScheduledRender');
   vm.runInContext(functions.map(extract).join('\n'), env);
   const lifecycle = source.slice(source.lastIndexOf('    onResume() {'), source.lastIndexOf('\n  })'));

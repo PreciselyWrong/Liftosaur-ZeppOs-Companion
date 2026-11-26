@@ -198,10 +198,11 @@ test('ready-screen actions render above the demo badge and below the disabled fo
     path.join(root, 'page', 'common', 'index.js'),
     'utf8',
   );
-  const renderUi = source.slice(source.indexOf('function renderUI()'), source.indexOf('function renderScreen()'));
-  assert.ok(renderUi.indexOf('renderClock()') > renderUi.indexOf("trace('SCREEN', renderScreen)"));
-  const target = renderUi.indexOf('renderClockTarget()');
-  assert.ok(target >= 0 && target < renderUi.indexOf("trace('SCREEN', renderScreen)"));
+  const drawScreen = source.slice(source.indexOf('function drawScreen()'), source.indexOf('function renderScreen()'));
+  const screen = drawScreen.indexOf('renderScreen()');
+  assert.ok(screen >= 0 && drawScreen.indexOf('renderClock()') > screen);
+  const target = drawScreen.indexOf('renderClockTarget()');
+  assert.ok(target >= 0 && target < screen);
   assert.match(source, /function renderReadyScreen[\s\S]*?text_size:\s*font\('body'\)/);
 });
 
@@ -210,8 +211,8 @@ test('button actions run in the native Zepp click callback', () => {
   const addWidget = source.slice(source.indexOf('function addActionWidget'), source.indexOf('function addLiveLabel'));
 
   assert.doesNotMatch(source, /function deferAction\(clickFunc\)/);
-  assert.match(addWidget, /const onClick = wrapNativeAction\(nativeProps\.click_func, diagnosticAction \|\| 'BUTTON'\)/);
-  assert.match(addWidget, /click_func: \(button\) => \{[^}]*onClick\(button\)/);
+  assert.match(addWidget, /const slot = \{ handler: nativeProps\.click_func, action: diagnosticAction \|\| 'BUTTON' \}/);
+  assert.match(addWidget, /click_func: \(button\) => \{[^}]*wrapNativeAction\(slot\.handler, slot\.action\)\(button\)/);
   assert.doesNotMatch(addWidget, /setEnable\(false\)/);
   assert.match(source, /function addLiveButton[\s\S]*?addActionWidget\(fitted\)/);
 });
@@ -224,7 +225,10 @@ test('the Zepp view is redrawn after the replacement tree is complete', () => {
   assert.match(source, /import \{[^}]*redraw[^}]*\} from '@zos\/ui'/);
   assert.match(clearWidgets, /deleteWidget\(w\)/);
   assert.doesNotMatch(clearWidgets, /redraw\(\)/);
-  assert.ok(renderUi.indexOf("trace('SCREEN', renderScreen)") < renderUi.indexOf("trace('REDRAW', redraw)"));
+  const drawn = renderUi.indexOf("trace('SCREEN', drawScreen)");
+  assert.ok(drawn >= 0 && drawn < renderUi.indexOf("trace('REDRAW', redraw)"));
+  const planned = renderUi.indexOf('buildPlannedScreen(plan)');
+  assert.ok(planned >= 0 && planned < renderUi.indexOf("trace('REDRAW', redraw)"));
 });
 
 test('live labels use mutable buttons so timer ticks cannot recreate action targets', () => {

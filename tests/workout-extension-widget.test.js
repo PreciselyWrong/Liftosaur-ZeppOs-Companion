@@ -424,8 +424,10 @@ test('saved extension finish shows a rightward hint instead of a misleading Done
     widget: { TEXT: 'TEXT' }, THEME: {}, font: () => 40, align: {}, text_style: {},
     prop: { MORE: 'MORE' }, LIVE_WIDGET_MUTABLE_KEYS: ['x', 'y', 'w', 'h', 'text'],
     addRawWidget: () => ({ setProperty: (_, props) => nativeUpdates.push(props) }),
+    widgetPlan: null, widgetSpecs: new Map(),
   };
   const renderHint = new Function('env', `with (env) {
+    ${extractFunction(source, 'setWidgetProps')}
     ${extractFunction(source, 'updateLiveWidget')}
     ${extractFunction(source, 'updateFinishSwipeHint')}
     ${extractFunction(source, 'renderFinishSwipeHint')}

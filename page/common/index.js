@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { exerciseImagePreloadFor, holdExerciseImagesDuring, PRELOAD_TAP_QUIET_MS } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -63,7 +63,7 @@ import {
 } from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
-import { createScreenLayout } from '../../shared/screen-layout.js';
+import { createScreenLayout, pairWidgetSpecs } from '../../shared/screen-layout.js';
 import { formatLoadoutLabel } from '../../shared/weight-rounding.js';
 import {
   MENU_LABEL,
@@ -401,14 +401,37 @@ function clearWidgets() {
   }
   activeWidgets = [];
   liveWidgets = {};
+  widgetSpecs = new Map();
+  plannedBuild = false;
 }
 
-/** Creates a widget from props already expressed in real screen pixels. */
-function addRawWidget(type, props) {
-  const w = createWidget(type, props);
+// Every native widget keeps the spec it was created from, kept current by in-place updates: a redraw
+// first plans the screen as specs, then updates the few values that changed or, when the widget tree
+// itself changed, rebuilds from the plan. A full rebuild costs 430 to 550 ms on an Active 2.
+let widgetSpecs = new Map();
+let widgetPlan = null;
+let plannedBuild = false;
+
+// `extra` carries an action's handler slot or a transparent label's key.
+function addRawWidget(type, props, extra = {}) {
+  const spec = Object.assign(extra, { type, props });
+  if (widgetPlan) {
+    widgetPlan.push(spec);
+    return spec;
+  }
+  return createSpecWidget(spec);
+}
+
+function createSpecWidget(spec) {
+  const w = createWidget(spec.type, spec.props);
+  // A transparent label lets taps through to the widgets under it.
+  if (spec.key) w.setEnable(false);
+  spec.widget = w;
   activeWidgets.push(w);
+  widgetSpecs.set(w, spec);
   return w;
 }
+
 
 let isDispatchingClick = false;
 let renderTimer = null;
@@ -431,11 +454,14 @@ function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
     if (isTearingDown || isDispatchingClick) return;
     workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
     exerciseImages?.pausePreload(PRELOAD_TAP_QUIET_MS);
+    const changes = controllerChanges;
     isDispatchingClick = true;
     try {
       workoutDiagnostics.trace('ACTION', () => handler(button));
     } finally {
       isDispatchingClick = false;
+      // A tap that changed the workout saved the session: image work waits for the flash write.
+      if (changes !== controllerChanges) exerciseImages?.defer?.(UI_WORK_QUIET_MS);
       if (controllerUiDirty) scheduleRenderUI();
     }
   };
@@ -443,15 +469,15 @@ function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
 
 function addActionWidget(props) {
   const { diagnosticAction, ...nativeProps } = props;
-  const onClick = wrapNativeAction(nativeProps.click_func, diagnosticAction || 'BUTTON');
-  const actionWidget = addRawWidget(widget.BUTTON, {
+  // An in-place redraw keeps this native button and hands it the handler of the screen it now shows.
+  const slot = { handler: nativeProps.click_func, action: diagnosticAction || 'BUTTON' };
+  return addRawWidget(widget.BUTTON, {
     ...nativeProps,
     click_func: (button) => {
-      if (!activeWidgets.includes(actionWidget)) return;
-      onClick(button);
+      if (!activeWidgets.includes(slot.widget)) return;
+      wrapNativeAction(slot.handler, slot.action)(button);
     },
-  });
-  return actionWidget;
+  }, slot);
 }
 
 function addWidget(type, props) {
@@ -619,10 +645,18 @@ function addLiveButton(key, props) {
 
 function addTransparentLabel(key, props) {
   const fitted = LAYOUT.fit(props);
-  const w = addRawWidget(widget.TEXT, fitted);
-  w.setEnable(false);
+  const w = addRawWidget(widget.TEXT, fitted, { key });
   liveWidgets[key] = { widget: w, props: { ...fitted } };
   return w;
+}
+
+// This runtime does not reliably repaint TEXT after setProperty: a changed label is replaced.
+function replaceTransparentLabel(key, previousWidget, props) {
+  const nextWidget = addRawWidget(widget.TEXT, props, { key });
+  deleteWidget(previousWidget);
+  activeWidgets = activeWidgets.filter(w => w !== previousWidget);
+  widgetSpecs.delete(previousWidget);
+  return nextWidget;
 }
 
 function updateTransparentLabel(key, changes) {
@@ -630,36 +664,110 @@ function updateTransparentLabel(key, changes) {
   if (!entry || Object.keys(changes).every(key => entry.props[key] === changes[key])) return true;
   const nextProps = { ...entry.props, ...changes };
   try {
-    // This runtime does not reliably repaint TEXT after setProperty.
-    const nextWidget = addRawWidget(widget.TEXT, nextProps);
-    nextWidget.setEnable(false);
-    deleteWidget(entry.widget);
-    activeWidgets = activeWidgets.filter(w => w !== entry.widget);
-    liveWidgets[key] = { widget: nextWidget, props: nextProps };
+    liveWidgets[key] = { widget: replaceTransparentLabel(key, entry.widget, nextProps), props: nextProps };
     return true;
   } catch (err) {
+    plannedBuild = false;
     return false;
   }
 }
 
 const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width', 'start_angle', 'end_angle'];
+// What an in-place redraw may change, per widget type: values setProperty already updates on the watch.
+const IN_PLACE_PROPS = {
+  [widget.BUTTON]: ['text', 'color', 'text_size'],
+  [widget.FILL_RECT]: ['color'],
+  [widget.ARC]: ['color', 'start_angle'],
+  [widget.STROKE_RECT]: ['color'],
+};
+
+function setWidgetProps(nativeWidget, props, changes) {
+  Object.assign(props, changes);
+  // A planned widget is its own spec, created later with these props.
+  const spec = widgetPlan ? nativeWidget : widgetSpecs.get(nativeWidget);
+  if (spec && spec.props !== props) Object.assign(spec.props, changes);
+  if (widgetPlan) return;
+  const mutableProps = {};
+  for (const property of LIVE_WIDGET_MUTABLE_KEYS) {
+    if (property in props) mutableProps[property] = props[property];
+  }
+  nativeWidget.setProperty(prop.MORE, mutableProps);
+}
 
 /** Returns false when the runtime refused the in-place update, so the caller can fall back. */
 function updateLiveWidget(key, changes) {
   const entry = liveWidgets[key];
   if (!entry) return true;
   try {
-    Object.assign(entry.props, changes);
-    const mutableProps = {};
-    for (const property of LIVE_WIDGET_MUTABLE_KEYS) {
-      if (property in entry.props) mutableProps[property] = entry.props[property];
-    }
-    entry.widget.setProperty(prop.MORE, mutableProps);
+    setWidgetProps(entry.widget, entry.props, changes);
     return true;
   } catch (err) {
     console.log('[liftosaur] in-place text update unavailable:', err?.message || String(err));
+    // The spec may now claim a value the screen does not show: only a rebuild is sure to be right.
+    plannedBuild = false;
     return false;
   }
+}
+
+// Draws the screen as specs only, without touching a native widget.
+function planScreen() {
+  const drawn = { live: liveWidgets, halo: restHaloWidgets };
+  widgetPlan = [];
+  liveWidgets = {};
+  restHaloWidgets = [];
+  try {
+    drawScreen();
+    return { widgets: widgetPlan, live: liveWidgets, halo: restHaloWidgets, pulse: widgetPlan.pulse };
+  } catch (err) {
+    // The full rebuild draws again and reports the error the way it always has.
+    return null;
+  } finally {
+    widgetPlan = null;
+    liveWidgets = drawn.live;
+    restHaloWidgets = drawn.halo;
+  }
+}
+
+function adoptPlan(plan) {
+  for (const key in plan.live) plan.live[key].widget = plan.live[key].widget.widget;
+  for (const halo of plan.halo) halo.widget = halo.widget.widget;
+  liveWidgets = plan.live;
+  restHaloWidgets = plan.halo;
+}
+
+// Returns false, having changed nothing the rebuild cannot replace, when the plan needs a rebuild.
+// Without `canReplaceLabels`, a changed transparent label, replaced by a new widget, needs one too.
+function updateScreenInPlace(plan, canReplaceLabels = true) {
+  if (!plannedBuild) return false;
+  const pairs = pairWidgetSpecs(activeWidgets.map(w => widgetSpecs.get(w)), plan.widgets, IN_PLACE_PROPS);
+  if (!pairs || (!canReplaceLabels && pairs.some(({ next, changes }) => next.key && Object.keys(changes).length))) return false;
+  try {
+    for (const { previous, next, changes } of pairs) {
+      if (next.handler !== undefined) {
+        previous.handler = next.handler;
+        previous.action = next.action;
+      }
+      if (Object.keys(changes).length === 0) next.widget = previous.widget;
+      else if (next.key) next.widget = replaceTransparentLabel(next.key, previous.widget, next.props);
+      else {
+        setWidgetProps(previous.widget, previous.props, changes);
+        next.widget = previous.widget;
+      }
+    }
+  } catch (err) {
+    return false;
+  }
+  adoptPlan(plan);
+  if (!plan.pulse) stopRestBezelAnimation();
+  else if (restPulseAnimHandles.length === 0) startRestBezelPulse();
+  return true;
+}
+
+function buildPlannedScreen(plan) {
+  for (const spec of plan.widgets) createSpecWidget(spec);
+  adoptPlan(plan);
+  if (plan.pulse) startRestBezelPulse();
+  plannedBuild = true;
 }
 
 // ── Side Service calls ───────────────────────────────────────────────────────
@@ -1001,8 +1109,11 @@ function updateControllerStatus() {
   }
 }
 
+let controllerChanges = 0;
+
 function markControllerUiDirty() {
   controllerUiDirty = true;
+  controllerChanges += 1;
 }
 
 function consumeControllerUiChange() {
@@ -2661,13 +2772,19 @@ function updateRestBezelAndHalo(rest) {
   if (rest?.isPaused) {
     stopRestBezelAnimation();
   } else if (!restPulseAttempted && restHaloWidgets.length > 0) {
-    restPulseAttempted = true;
-    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+    startRestBezelPulse();
   }
 }
 
+function startRestBezelPulse() {
+  restPulseAttempted = true;
+  // A planned screen pulses once its widgets exist.
+  if (widgetPlan) widgetPlan.pulse = true;
+  else restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+}
+
 function renderRestBezel(rest) {
-  stopRestBezelAnimation();
+  if (!widgetPlan) stopRestBezelAnimation();
   restHaloWidgets = [];
 
   const { layers } = createRestHaloLayers({
@@ -2702,10 +2819,7 @@ function renderRestBezel(rest) {
     }
   }
 
-  if (!rest?.isPaused) {
-    restPulseAttempted = true;
-    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
-  }
+  if (!rest?.isPaused) startRestBezelPulse();
 }
 
 function updatePreparedRestVisuals(view) {
@@ -4082,34 +4196,66 @@ function handleExerciseImageChange(_imageUrl, status, failure, origin) {
 function renderUI() {
   if (isTearingDown) return;
   if (isDispatchingClick) {
-    // The tapped native button must outlive its click callback.
-    scheduleRenderUI();
+    // The tapped native button must outlive its click callback: only an update in place, which
+    // deletes none of the screen's widgets, runs inside it, so a stepper shows its value at once.
+    if (!updateScreenDuringTap()) scheduleRenderUI();
     return;
   }
   cancelScheduledRender();
   workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_START);
   consumeControllerUiChange();
   preparationImageUrl = null;
-  if (isNotesModalOpen) destroyModalControls();
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_START);
-  workoutDiagnostics.trace('CLEAR', clearWidgets);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_END);
-  if (!isNotesModalOpen) hideModalControls();
+  // No image request starts and no arrived image is shown while the screen is drawn, nor just after.
+  holdExerciseImagesWhile(exerciseImages, () => {
+    const plan = canPlanScreen() ? workoutDiagnostics.trace('SCREEN', planScreen) : null;
+    if (plan && updateScreenInPlace(plan)) {
+      // A redraw ends the bezel flash, in place or not.
+      clearFlash();
+      return;
+    }
+    if (isNotesModalOpen) destroyModalControls();
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_START);
+    workoutDiagnostics.trace('CLEAR', clearWidgets);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_END);
+    if (!isNotesModalOpen) hideModalControls();
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
+    if (plan) workoutDiagnostics.trace('SCREEN', () => buildPlannedScreen(plan));
+    else workoutDiagnostics.trace('SCREEN', drawScreen);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_END);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_START);
+    workoutDiagnostics.trace('REDRAW', redraw);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_END);
+  }, UI_WORK_QUIET_MS);
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
+}
+
+function updateScreenDuringTap() {
+  if (!plannedBuild || !canPlanScreen()) return false;
+  consumeControllerUiChange();
+  preparationImageUrl = null;
+  return holdExerciseImagesWhile(exerciseImages, () => {
+    const plan = planScreen();
+    if (!plan || !updateScreenInPlace(plan, false)) return false;
+    clearFlash();
+    return true;
+  }, UI_WORK_QUIET_MS);
+}
+
+// The workout screens a set, a rest or a sync reply redraws; modals and menus always rebuild.
+function canPlanScreen() {
+  return screen === SCREEN.SESSION && !isEditLastSetOpen && !isSyncDetailsOpen && !isWorkoutTimerControlsOpen
+    && !isNotesModalOpen && !isOverviewOpen;
+}
+
+function drawScreen() {
   // The backdrop is the one widget already in screen pixels: it must cover the
   // whole panel, fitted content included.
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
   renderClockTarget();
-
   renderDemoBadge();
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
-  workoutDiagnostics.trace('SCREEN', renderScreen);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_END);
+  renderScreen();
   // Keep the transparent footer above perimeter effects and outside action targets.
   renderClock();
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_START);
-  workoutDiagnostics.trace('REDRAW', redraw);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_END);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
 }
 
 function renderScreen() {

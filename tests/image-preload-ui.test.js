@@ -48,10 +48,15 @@ for (const [product, dispatcher] of [['data-widget', 'addActionWidget'], ['page'
       exerciseImages: { pausePreload: (ms) => calls.push(['pause', ms]) },
       PRELOAD_TAP_QUIET_MS,
       isTearingDown: false, isPaused: false, hasBuilt: true, isDispatchingClick: false, controllerUiDirty: false,
-      activeWidgets: [], widget: { BUTTON: 'button' },
+      activeWidgets: [], widget: { BUTTON: 'button' }, controllerChanges: 0,
       workoutDiagnostics: { record() {}, trace: (_, run) => run() }, WORKOUT_DIAGNOSTIC_CODES: {},
       scheduleRenderUI() {},
-      addRawWidget: (type, props) => { const entry = { type, ...props }; env.activeWidgets.push(entry); return entry; },
+      addRawWidget: (type, props, slot) => {
+        const entry = Object.assign(slot, { type, ...props });
+        entry.widget = entry;
+        env.activeWidgets.push(entry);
+        return entry;
+      },
     };
     const code = product === 'page'
       ? `${extractFunction(source, 'wrapNativeAction')}; return wrapNativeAction(() => calls.push(['tap']));`

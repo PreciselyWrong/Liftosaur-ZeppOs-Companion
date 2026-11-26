@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../shared/exercise-image-client.js';
 
 const source = readFileSync(new URL('../page/common/index.js', import.meta.url), 'utf8');
 
@@ -38,9 +38,12 @@ function fixture() {
     redraw: () => calls.push('redraw'),
     setTimeout(callback) { const id = ++nextTimer; timers.set(id, callback); return id; },
     clearTimeout(id) { timers.delete(id); },
+    widgetPlan: null, widgetSpecs: new Map(), plannedBuild: false, controllerChanges: 0,
+    holdExerciseImagesWhile, UI_WORK_QUIET_MS, canPlanScreen: () => false,
   };
   vm.createContext(env);
-  vm.runInContext(['addRawWidget', 'wrapNativeAction', 'addActionWidget', 'renderUI', 'scheduleRenderUI', 'cancelScheduledRender'].map(extract).join('\n'), env);
+  vm.runInContext(['addRawWidget', 'createSpecWidget', 'wrapNativeAction', 'addActionWidget', 'renderUI', 'updateScreenDuringTap',
+    'drawScreen', 'scheduleRenderUI', 'cancelScheduledRender'].map(extract).join('\n'), env);
   return { env, calls, timers, events, get buttonProps() { return buttonProps; }, set inClick(value) { inClick = value; } };
 }
 

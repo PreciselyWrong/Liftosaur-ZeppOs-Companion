@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exe
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { exerciseImagePreloadFor, holdExerciseImagesDuring, PRELOAD_TAP_QUIET_MS } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -43,7 +43,7 @@ import {
 } from '@zos/display';
 import { BasePage } from '@zeppos/zml/base-page';
 
-import { createScreenLayout } from '../../shared/screen-layout.js';
+import { createScreenLayout, pairWidgetSpecs } from '../../shared/screen-layout.js';
 import { createMessage, MESSAGE_TYPES } from '../../shared/protocol.js';
 import { SESSION_STATES } from '../../shared/workout-session.js';
 import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
@@ -430,9 +430,12 @@ function updateSyncWarning() {
 let isDispatchingClick = false;
 let renderTimer = null;
 
+let controllerChanges = 0;
+
 function markControllerUiDirty() {
   if (isTearingDown) return;
   controllerUiDirty = true;
+  controllerChanges += 1;
 }
 
 function scheduleRenderUI() {
@@ -618,34 +621,61 @@ function clearWidgets() {
   }
   activeWidgets = [];
   liveWidgets = {};
+  widgetSpecs = new Map();
+  plannedBuild = false;
 }
 
-function addRawWidget(type, props) {
-  const w = createWidget(type, props);
+// Every native widget keeps the spec it was created from, kept current by in-place updates: a redraw
+// first plans the screen as specs, then updates the few values that changed or, when the widget tree
+// itself changed, rebuilds from the plan. A full rebuild costs 430 to 550 ms on an Active 2.
+let widgetSpecs = new Map();
+let widgetPlan = null;
+let plannedBuild = false;
+
+// `extra` carries an action's handler slot or a transparent label's key.
+function addRawWidget(type, props, extra = {}) {
+  const spec = Object.assign(extra, { type, props });
+  if (widgetPlan) {
+    widgetPlan.push(spec);
+    return spec;
+  }
+  return createSpecWidget(spec);
+}
+
+function createSpecWidget(spec) {
+  const w = createWidget(spec.type, spec.props);
+  // A transparent label lets taps through to the widgets under it.
+  if (spec.key) w.setEnable(false);
+  spec.widget = w;
   activeWidgets.push(w);
+  widgetSpecs.set(w, spec);
   return w;
 }
 
 function addActionWidget(props) {
   const { diagnosticAction = 'BUTTON', click_func: handler, ...nativeProps } = props;
-  const actionWidget = addRawWidget(widget.BUTTON, {
+  // An in-place redraw keeps this native button and hands it the handler of the screen it now shows.
+  const slot = { handler, action: diagnosticAction };
+  return addRawWidget(widget.BUTTON, {
     ...nativeProps,
     click_func: typeof handler === 'function' ? (w) => {
-      if (isTearingDown || isPaused || !hasBuilt || isDispatchingClick || !activeWidgets.includes(actionWidget)) return;
-      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
+      if (isTearingDown || isPaused || !hasBuilt || isDispatchingClick || !activeWidgets.includes(slot.widget)) return;
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: slot.action });
       exerciseImages?.pausePreload(PRELOAD_TAP_QUIET_MS);
+      const changes = controllerChanges;
       isDispatchingClick = true;
       try {
-        workoutDiagnostics.trace('ACTION', () => handler(w));
+        workoutDiagnostics.trace('ACTION', () => slot.handler(w));
       } finally {
         isDispatchingClick = false;
+        // A tap that changed the workout saved the session: image work waits for the flash write.
+        if (changes !== controllerChanges) exerciseImages?.defer?.(UI_WORK_QUIET_MS);
       }
       if (controllerUiDirty) {
         scheduleRenderUI();
       }
     } : undefined,
-  });
-  return actionWidget;
+  }, slot);
 }
 
 function addWidget(type, props) {
@@ -672,10 +702,18 @@ function addLiveButton(key, props) {
 
 function addTransparentLabel(key, props) {
   const fitted = LAYOUT.fit(props);
-  const w = addRawWidget(widget.TEXT, fitted);
-  w.setEnable(false);
+  const w = addRawWidget(widget.TEXT, fitted, { key });
   liveWidgets[key] = { widget: w, props: { ...fitted } };
   return w;
+}
+
+// This runtime does not reliably repaint TEXT after setProperty: a changed label is replaced.
+function replaceTransparentLabel(key, previousWidget, props) {
+  const nextWidget = addRawWidget(widget.TEXT, props, { key });
+  deleteWidget(previousWidget);
+  activeWidgets = activeWidgets.filter(w => w !== previousWidget);
+  widgetSpecs.delete(previousWidget);
+  return nextWidget;
 }
 
 function updateTransparentLabel(key, changes) {
@@ -683,35 +721,108 @@ function updateTransparentLabel(key, changes) {
   if (!entry || Object.keys(changes).every(key => entry.props[key] === changes[key])) return true;
   const nextProps = { ...entry.props, ...changes };
   try {
-    // This runtime does not reliably repaint TEXT after setProperty.
-    const nextWidget = addRawWidget(widget.TEXT, nextProps);
-    nextWidget.setEnable(false);
-    deleteWidget(entry.widget);
-    activeWidgets = activeWidgets.filter(w => w !== entry.widget);
-    liveWidgets[key] = { widget: nextWidget, props: nextProps };
+    liveWidgets[key] = { widget: replaceTransparentLabel(key, entry.widget, nextProps), props: nextProps };
     return true;
   } catch (err) {
+    plannedBuild = false;
     return false;
   }
 }
 
 const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width', 'start_angle', 'end_angle'];
+// What an in-place redraw may change, per widget type: values setProperty already updates on the watch.
+const IN_PLACE_PROPS = {
+  [widget.BUTTON]: ['text', 'color', 'text_size'],
+  [widget.FILL_RECT]: ['color'],
+  [widget.ARC]: ['color', 'start_angle'],
+  [widget.STROKE_RECT]: ['color'],
+};
+
+function setWidgetProps(nativeWidget, props, changes) {
+  Object.assign(props, changes);
+  // A planned widget is its own spec, created later with these props.
+  const spec = widgetPlan ? nativeWidget : widgetSpecs.get(nativeWidget);
+  if (spec && spec.props !== props) Object.assign(spec.props, changes);
+  if (widgetPlan) return;
+  const mutableProps = {};
+  for (const property of LIVE_WIDGET_MUTABLE_KEYS) {
+    if (property in props) mutableProps[property] = props[property];
+  }
+  nativeWidget.setProperty(prop.MORE, mutableProps);
+}
 
 function updateLiveWidget(key, changes) {
   if (isTearingDown || isPaused || !hasBuilt) return false;
   const entry = liveWidgets[key];
   if (!entry) return true;
   try {
-    Object.assign(entry.props, changes);
-    const mutableProps = {};
-    for (const property of LIVE_WIDGET_MUTABLE_KEYS) {
-      if (property in entry.props) mutableProps[property] = entry.props[property];
-    }
-    entry.widget.setProperty(prop.MORE, mutableProps);
+    setWidgetProps(entry.widget, entry.props, changes);
     return true;
+  } catch (err) {
+    // The spec may now claim a value the screen does not show: only a rebuild is sure to be right.
+    plannedBuild = false;
+    return false;
+  }
+}
+
+// Draws the screen as specs only, without touching a native widget.
+function planScreen() {
+  const drawn = { live: liveWidgets, halo: restHaloWidgets };
+  widgetPlan = [];
+  liveWidgets = {};
+  restHaloWidgets = [];
+  try {
+    drawScreen();
+    return { widgets: widgetPlan, live: liveWidgets, halo: restHaloWidgets, pulse: widgetPlan.pulse };
+  } catch (err) {
+    // The full rebuild draws again and reports the error the way it always has.
+    return null;
+  } finally {
+    widgetPlan = null;
+    liveWidgets = drawn.live;
+    restHaloWidgets = drawn.halo;
+  }
+}
+
+function adoptPlan(plan) {
+  for (const key in plan.live) plan.live[key].widget = plan.live[key].widget.widget;
+  for (const halo of plan.halo) halo.widget = halo.widget.widget;
+  liveWidgets = plan.live;
+  restHaloWidgets = plan.halo;
+}
+
+// Returns false, having changed nothing the rebuild cannot replace, when the plan needs a rebuild.
+function updateScreenInPlace(plan) {
+  if (!plannedBuild) return false;
+  const pairs = pairWidgetSpecs(activeWidgets.map(w => widgetSpecs.get(w)), plan.widgets, IN_PLACE_PROPS);
+  if (!pairs) return false;
+  try {
+    for (const { previous, next, changes } of pairs) {
+      if (next.handler !== undefined) {
+        previous.handler = next.handler;
+        previous.action = next.action;
+      }
+      if (Object.keys(changes).length === 0) next.widget = previous.widget;
+      else if (next.key) next.widget = replaceTransparentLabel(next.key, previous.widget, next.props);
+      else {
+        setWidgetProps(previous.widget, previous.props, changes);
+        next.widget = previous.widget;
+      }
+    }
   } catch (err) {
     return false;
   }
+  adoptPlan(plan);
+  if (!plan.pulse) stopRestBezelAnimation();
+  else if (restPulseAnimHandles.length === 0) startRestBezelPulse();
+  return true;
+}
+
+function buildPlannedScreen(plan) {
+  for (const spec of plan.widgets) createSpecWidget(spec);
+  adoptPlan(plan);
+  if (plan.pulse) startRestBezelPulse();
+  plannedBuild = true;
 }
 
 function currentClockLabel() {
@@ -974,13 +1085,19 @@ function updateRestBezelAndHalo(rest) {
   if (rest?.isPaused) {
     stopRestBezelAnimation();
   } else if (!restPulseAttempted && restHaloWidgets.length > 0) {
-    restPulseAttempted = true;
-    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+    startRestBezelPulse();
   }
 }
 
+function startRestBezelPulse() {
+  restPulseAttempted = true;
+  // A planned screen pulses once its widgets exist.
+  if (widgetPlan) widgetPlan.pulse = true;
+  else restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
+}
+
 function renderRestBezel(rest) {
-  stopRestBezelAnimation();
+  if (!widgetPlan) stopRestBezelAnimation();
   restHaloWidgets = [];
 
   const { layers } = createRestHaloLayers({
@@ -1015,10 +1132,7 @@ function renderRestBezel(rest) {
     }
   }
 
-  if (!rest?.isPaused) {
-    restPulseAttempted = true;
-    restPulseAnimHandles = startRestPulseAnimation(restHaloWidgets.map((h) => h.widget), prop);
-  }
+  if (!rest?.isPaused) startRestBezelPulse();
 }
 
 function updatePreparedRestVisuals(view) {
@@ -3449,23 +3563,37 @@ function renderUI() {
   consumeControllerUiChange();
   preparationImageUrl = null;
   updateSyncWarning();
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_START);
-  workoutDiagnostics.trace('CLEAR', clearWidgets);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_END);
+  // No image request starts and no arrived image is shown while the screen is drawn, nor just after.
+  holdExerciseImagesWhile(exerciseImages, () => {
+    const plan = canPlanScreen() ? workoutDiagnostics.trace('SCREEN', planScreen) : null;
+    if (plan && updateScreenInPlace(plan)) return;
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_START);
+    workoutDiagnostics.trace('CLEAR', clearWidgets);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.CLEAR_END);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
+    if (plan) workoutDiagnostics.trace('SCREEN', () => buildPlannedScreen(plan));
+    else workoutDiagnostics.trace('SCREEN', drawScreen);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_END);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_START);
+    workoutDiagnostics.trace('REDRAW', redraw);
+    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_END);
+  }, UI_WORK_QUIET_MS);
+  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
+}
 
+// The workout screens a set, a rest or a sync reply redraws; modals and menus always rebuild.
+function canPlanScreen() {
+  return screen === EXTENSION_SCREENS.SESSION && !isEditLastSetOpen && !isSyncDetailsOpen && !isWorkoutTimerControlsOpen
+    && !discardConfirmationRequested && !phoneRequiredReason && !isNotesModalOpen && !isOverviewOpen;
+}
+
+function drawScreen() {
   // Full-screen background
   addRawWidget(widget.FILL_RECT, { x: 0, y: 0, w: W, h: H, color: THEME.bg });
   renderClockTarget();
-
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_START);
-  workoutDiagnostics.trace('SCREEN', renderScreen);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.SCREEN_END);
+  renderScreen();
   // Keep the transparent footer above perimeter effects and outside action targets.
   renderClock();
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_START);
-  workoutDiagnostics.trace('REDRAW', redraw);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.REDRAW_END);
-  workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.RENDER_END);
 }
 
 function renderScreen() {
@@ -4110,7 +4238,7 @@ DataWidget(
       stopClock();
       stopVibration();
       if (workoutController) {
-        workoutController.persist();
+        holdExerciseImagesWhile(exerciseImages, () => workoutController.persist());
       }
     },
 

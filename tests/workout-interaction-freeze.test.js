@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../shared/exercise-image-client.js';
 import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES as C, WORKOUT_DIAGNOSTICS_KEY } from '../shared/workout-diagnostics.js';
 import { createWorkoutController } from '../shared/workout-controller.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
@@ -102,13 +102,16 @@ function renderer(product, setsCount = 2) {
     synchronizeDirectSets() { calls.push('sync'); return new Promise(() => {}); },
     submitWorkout() { finishRequests++; calls.push('finish'); },
     ensureDirectWorkoutStarted: () => new Promise(() => {}),
+    widgetPlan: null, widgetSpecs: new Map(), plannedBuild: false, controllerChanges: 0,
+    holdExerciseImagesWhile, UI_WORK_QUIET_MS, canPlanScreen: () => false,
   };
   vm.createContext(env);
   const configStart = source.indexOf('const workoutDiagnostics = createWorkoutDiagnostics(');
   const configEnd = source.indexOf('\n});', configStart) + '\n});'.length;
   vm.runInContext(source.slice(configStart, configEnd).replace('const workoutDiagnostics', 'globalThis.workoutDiagnostics'), env);
-  const functions = ['addRawWidget', 'addActionWidget', 'clearWidgets', 'scheduleRenderUI', 'cancelScheduledRender', 'renderUI'];
-  if (product === 'companion') functions.push('wrapNativeAction', 'completeCurrentSet', 'persistAndRender', 'handleStartWorkout');
+  const functions = ['addRawWidget', 'addActionWidget', 'clearWidgets', 'scheduleRenderUI', 'cancelScheduledRender', 'renderUI', 'drawScreen'];
+  functions.push('createSpecWidget');
+  if (product === 'companion') functions.push('wrapNativeAction', 'completeCurrentSet', 'persistAndRender', 'handleStartWorkout', 'updateScreenDuringTap');
   vm.runInContext(functions.map(name => extract(source, name)).join('\n'), env);
   const active = extract(source, 'renderActiveSetScreen');
   const propsStart = active.indexOf("addLiveButton('actionButton', {") + "addLiveButton('actionButton', ".length;
