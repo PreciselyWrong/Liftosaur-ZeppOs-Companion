@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 export const GENERATED_PATHS = Object.freeze([
   'build/workout-extension',
+  'build/release',
   'build/lifto-companion-qr.png',
   'build/lifto-workout-qr.png',
   'dist',

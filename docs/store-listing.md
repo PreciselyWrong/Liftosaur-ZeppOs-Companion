@@ -106,4 +106,4 @@ day plan and a simulated finish response, performing no HTTP requests.
 - [ ] `version.code` higher than the last submitted version
 - [ ] `npm test` green
 - [ ] `/public-release-audit` passed, no credentials in the repository
-- [ ] `zeus build` run, the `.zab` in `dist/` matches the declared version
+- [ ] `npm run build:all` run, the `.zab` files in `build/release/companion/dist/` and `build/release/workout/dist/` match the declared version

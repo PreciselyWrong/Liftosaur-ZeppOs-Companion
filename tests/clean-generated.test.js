@@ -14,6 +14,7 @@ test('clean removes only reproducible output and is exposed through npm', () => 
   try {
     const generatedPaths = [
       'build/workout-extension/app.json',
+      'build/release/companion/app.json',
       'build/lifto-companion-qr.png',
       'build/lifto-workout-qr.png',
       'dist/lifto.zab',
