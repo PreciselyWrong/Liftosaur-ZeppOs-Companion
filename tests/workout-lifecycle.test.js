@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
-import { createWorkoutDiagnostics, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
+import { createWorkoutDiagnostics, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES } from '../shared/workout-diagnostics.js';
+import { withRequestTimeout } from '../shared/request-timeout.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
 import { EXTENSION_SCREENS } from '../shared/workout-extension-nav.js';
@@ -214,6 +215,31 @@ test('late phone success or error cannot escape the destroyed settings page', as
     await request;
     await assert.rejects(env.send(MESSAGE_TYPES.GET_SETTINGS), /closed/);
     assert.deepEqual(calls, []);
+  }
+});
+
+test('a late phone reply or timeout after destruction does not write diagnostics storage', async () => {
+  for (const outcome of ['reply', 'error', 'timeout']) {
+    const { env, calls } = fixture();
+    const reply = deferred();
+    let fireTimeout = null;
+    env.widgetInstance = { request: () => reply.promise };
+    env.createMessage = value => value;
+    env.phoneFailureReason = phoneFailureReason;
+    env.withRequestTimeout = (request, options) => withRequestTimeout(request, {
+      ...options,
+      setTimer: (callback) => { fireTimeout = callback; return 1; },
+      clearTimer() {},
+    });
+    vm.runInContext(extract('send'), env);
+    const request = env.send(MESSAGE_TYPES.GET_WORKOUT_NEXT).catch(() => {});
+    env.lifecycle.onDestroy();
+    calls.length = 0;
+    if (outcome === 'reply') reply.resolve({ type: MESSAGE_TYPES.WORKOUT_NEXT_DATA, payload: {} });
+    else if (outcome === 'error') reply.reject(new Error('Phone disconnected'));
+    else fireTimeout();
+    await request;
+    assert.deepEqual(calls, [], outcome);
   }
 });
 
