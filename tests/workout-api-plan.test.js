@@ -316,4 +316,40 @@ describe('Workout API plan model adapter', () => {
       rpe: 9,
     });
   });
+
+  test('each warmup rests for its own timer, and null timed fields stay untimed', () => {
+    // Shape of real 2026-11 payloads: warmups carry their own `timer`, distinct
+    // from the work sets', no `restSeconds`, and `setTimer`, `minReps` and the
+    // completed timed fields are null rather than missing.
+    const set = (setId, index, isWarmup, timer, completed = null) => ({
+      setId, index, isWarmup, reps: 10, minReps: null, isAmrap: false, weight: '10kg', originalWeight: '9kg',
+      plates: [], rpe: null, logRpe: false, askWeight: false, isUnilateral: false, timer, setTimer: null, completed,
+    });
+    const workout = {
+      startTime: 1,
+      entries: [{
+        entryId: 'row', exerciseId: 'row', name: 'Row', equipment: 'cable',
+        warmupSets: [
+          set('w1', 0, true, 45, { reps: 10, repsLeft: null, rpe: null, setTimer: null, setTimerLeft: null, weight: '10kg' }),
+          set('w2', 1, true, 30),
+        ],
+        sets: [set('s1', 0, false, 120), set('s2', 1, false, 120)],
+      }],
+    };
+
+    const plan = workoutToDayPlan(workout, { isCurrent: true });
+    assert.deepEqual(plan.exercises[0].warmupSets.map((s) => s.restSeconds), [45, 30]);
+    assert.equal(plan.exercises[0].warmupSets[0].setTimer, null);
+    assert.equal(plan.exercises[0].warmupSets[0].targetRepsMax, null);
+
+    const session = createWorkoutSession({ plan });
+    session.startWorkout({ timestamp: 0 });
+    assert.equal(session.view(0).currentSet.setId, 'w2');
+    assert.equal(session.view(0).currentSet.setTimer, null);
+    session.completeSet({ timestamp: 1000 });
+    assert.equal(session.view(1000).rest.duration, 30);
+    session.nextSet({ timestamp: 2000 });
+    session.completeSet({ timestamp: 3000 });
+    assert.equal(session.view(3000).rest.duration, 120);
+  });
 });
