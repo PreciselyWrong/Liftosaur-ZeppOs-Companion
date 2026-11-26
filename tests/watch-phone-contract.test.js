@@ -129,9 +129,10 @@ test('a finish retry after a lost reply reports the missing phone workout and ke
   assert.notEqual(store.load(), null);
 });
 
-for (const [label, strip] of [
-  ['without entries', (workout) => { delete workout.entries; }],
-  ['with no entries', (workout) => { workout.entries = []; }],
+// Without entries the reply breaks the protocol, so the phone sends a retryable error instead.
+for (const [label, strip, adoptOutcome] of [
+  ['without entries', (workout) => { delete workout.entries; }, (adopt) => assert.rejects(adopt, { code: 'API_FAILED' })],
+  ['with no entries', (workout) => { workout.entries = []; }, async (adopt) => assert.equal((await adopt).success, false)],
 ]) {
   test(`a current workout reply ${label} keeps the running plan and its sets`, async () => {
     let time = 1_000_000;
@@ -154,8 +155,7 @@ for (const [label, strip] of [
     assert.equal(controller.plan().exercises.length, exerciseCount);
     assert.equal(controller.getWorkoutSetWrites().length, 1);
 
-    const adopted = await controller.adoptCurrent({ preserveNavigation: false });
-    assert.equal(adopted.success, false);
+    await adoptOutcome(controller.adoptCurrent({ preserveNavigation: false }));
     assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
     assert.equal(controller.plan().exercises.length, exerciseCount);
   });
