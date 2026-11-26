@@ -267,7 +267,16 @@ export function createExerciseImageClient({
           transfer = null;
           // A slow first download often finishes on the phone meanwhile. A promised file that never
           // came usually means the phone's saved copy is gone, so that retry asks for a fresh one.
-          requestActive(entry, forceRefresh || queued);
+          const retry = () => {
+            if (isCurrent()) requestActive(entry, forceRefresh || queued);
+          };
+          if (!deferred()) {
+            retry();
+            return;
+          }
+          // Like a file landing during a set sync, the retry waits for the quiet moment after it.
+          arrival = { path: null, settle: retry };
+          armResume();
           return;
         }
         fail(queued ? 'FILE_NOT_RECEIVED' : 'PHONE_NO_REPLY');
