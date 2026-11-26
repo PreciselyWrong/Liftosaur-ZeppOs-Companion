@@ -35,7 +35,7 @@ For timed exercises, **Stop** records the held duration; expiry alerts but does 
 In the selected Lifto app's phone Settings, open **Workout display**:
 
 - **Workout progress** adds a bar showing completed sets across the workout. It starts off.
-- **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible.
+- **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible. When you change the weight of a plate-loaded exercise on the watch, the breakdown is recalculated at once from the bar and the plates Liftosaur already proposed in this workout. If those plates cannot make the new weight exactly, or the exercise uses fixed weights such as dumbbells, only the unit is shown.
 - **Rest Info button** starts on. Turn it off to hide Info on the detailed rest screen; Info elsewhere is retained.
 
 Preferences are configured separately for Companion and Workout. Reopen the watch app while connected to receive the latest settings. These options do not change the workout prescription or rest deadline.

@@ -179,8 +179,19 @@ export function formatPlatesObject(plates, unit = 'kg') {
   return `${formattedPlates} ${suffix}`;
 }
 
-/** A compact watch label, returned only when the requested weight is exact. */
+/**
+ * A compact watch label, returned only when the requested weight is exact.
+ * The server's own breakdown wins while the weight is the one it was made for;
+ * an edited weight is broken down from the equipment.
+ */
 export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null, targetWeight = null) {
+  const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
+  const edited = Number.isFinite(target) && Number.isFinite(targetWeight) && Math.abs(target - targetWeight) > 1e-9;
+  if (Array.isArray(directPlates) && !edited) {
+    const direct = formatPlatesObject(directPlates, unit);
+    if (direct) return direct;
+  }
+
   if (equipment && typeof equipment === 'object') {
     if (Array.isArray(equipment.plates) || equipment.bar || equipment.isFixed) {
       const loadout = resolveLoadout(target, equipment, unit);
@@ -201,18 +212,6 @@ export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null
         return `${formattedPlates} ${suffix}`;
       }
     }
-  }
-
-  const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
-  if (Array.isArray(directPlates)) {
-    if (
-      Number.isFinite(target) &&
-      Number.isFinite(targetWeight) &&
-      Math.abs(target - targetWeight) > 1e-9
-    ) {
-      return null;
-    }
-    return formatPlatesObject(directPlates, unit);
   }
 
   return null;
