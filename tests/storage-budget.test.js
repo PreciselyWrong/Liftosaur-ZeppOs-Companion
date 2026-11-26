@@ -112,6 +112,60 @@ for (const [name, budget] of Object.entries(BUDGETS)) {
   });
 }
 
+/**
+ * A long workout, 10 x 6 sets with eight weight and rep taps before each and the sync state
+ * changing after each set as an acknowledgement does. The phone never answers, so no adopted
+ * phone snapshot rewrites the plan. Returns the bytes each set cost and the total.
+ */
+async function longWorkoutCost() {
+  const cloud = createFakeCloud(buildApiWorkout(Array.from({ length: 10 }, () => [0, 6])));
+  const link = createPhoneLink(cloud);
+  link.setAuto(false);
+  const adapter = createCountingAdapter();
+  const store = createSessionStore(adapter);
+  let time = 1_000_000;
+  const controller = createWorkoutController({ store, request: link.request, now: () => time });
+  const next = await link.phoneHandle(MESSAGE_TYPES.GET_WORKOUT_NEXT, {});
+  controller.loadPlan(workoutToDayPlan(next.payload.workout), { clearStore: true });
+  controller.startWorkout();
+  await flush();
+  const perSet = [];
+  for (let set = 0; set < 60; set++) {
+    const before = adapter.stats.bytes;
+    for (let tap = 0; tap < 8; tap++) {
+      time += 1_000;
+      if (tap % 2) controller.adjustReps(tap % 4 === 1 ? 1 : -1);
+      else controller.adjustWeight(tap % 4 === 0 ? 1 : -1);
+      await flush();
+    }
+    time += 30_000;
+    controller.completeSet();
+    await flush();
+    if (controller.view().state === SESSION_STATES.REST) {
+      time += 60_000;
+      controller.nextSet();
+      await flush();
+    }
+    controller.updateSync({ startConfirmed: true, acknowledgedSetCount: set + 1 });
+    perSet.push(adapter.stats.bytes - before);
+  }
+  assert.deepEqual(createSessionStore(adapter).load().journal, controller.getJournal(), 'after a restart');
+  return { perSet, total: adapter.stats.bytes };
+}
+
+// Measured: 3,226 bytes per set over sets 6 to 15, 1,468 over the last ten, 214 KB in all.
+// Before the log was folded relative to its copy and the journal compared by identity: 4,401
+// early, 14,972 late (a fold of the whole journal about every set) and 528 KB in all.
+test('a long workout costs the same per set at its end as at its start', async () => {
+  const { perSet, total } = await longWorkoutCost();
+  const late = perSet.slice(-10).reduce((sum, bytes) => sum + bytes, 0) / 10;
+  const early = perSet.slice(5, 15).reduce((sum, bytes) => sum + bytes, 0) / 10;
+  const measured = `${Math.round(early)} bytes per set early, ${Math.round(late)} late, ${total} in all`;
+  assert.ok(late <= 2_500, measured);
+  assert.ok(late <= early * 2, measured);
+  assert.ok(total <= 240_000, measured);
+});
+
 async function startedController(store) {
   const cloud = createFakeCloud(buildApiWorkout([[0, 2]]));
   const link = createPhoneLink(cloud);
