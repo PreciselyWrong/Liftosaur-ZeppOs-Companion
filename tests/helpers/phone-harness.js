@@ -74,8 +74,12 @@ export function buildApiWorkout(shape, { programId = 'prog-1', restSeconds = 60,
   };
 }
 
-/** `strictStart`: a repeated start is refused even for the running workout's own start time. */
-export function createFakeCloud(template, { strictStart = false } = {}) {
+/**
+ * `strictStart`: a repeated start is refused even for the running workout's own start time.
+ * `account`: `{ currentGymId, equipment, exerciseData }` answers GET /gyms, GET
+ * /gyms/:id/equipment and GET /exercise-data; without it those endpoints are absent.
+ */
+export function createFakeCloud(template, { strictStart = false, account = null } = {}) {
   let current = null;
   let startCount = 0;
   const history = [];
@@ -128,7 +132,11 @@ export function createFakeCloud(template, { strictStart = false } = {}) {
       current = null;
       return { deleted: true };
     },
-    async listExerciseData() { return []; },
+    async listExerciseData() { return clone(account?.exerciseData || []); },
+    ...(account ? {
+      async listGyms() { return { currentGymId: account.currentGymId, gyms: [] }; },
+      async listEquipment(gymId) { return gymId === account.currentGymId ? clone(account.equipment) : []; },
+    } : {}),
     async listHistory() { return { records: [] }; },
     async getSettings() { return { units: 'kg' }; },
   };

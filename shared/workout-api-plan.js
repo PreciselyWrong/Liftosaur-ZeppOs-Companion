@@ -169,6 +169,35 @@ function inferLoadingEquipment(rawSets) {
 }
 
 /**
+ * Expands the compact equipment the phone attached (`workout.gymEquipment`,
+ * indexed by `entry.gymEquipment`) into the `GET /gyms/:id/equipment` shape.
+ * Anything malformed yields null so the inferred equipment is used instead.
+ */
+function attachedEquipment(workout, entry) {
+  const compact = Array.isArray(workout.gymEquipment) && Number.isInteger(entry.gymEquipment)
+    ? workout.gymEquipment[entry.gymEquipment]
+    : null;
+  const unit = normalizeUnit(compact?.unit);
+  if (!unit) return null;
+  const isWeight = (value) => Number.isFinite(value) && value >= 0;
+
+  if (Array.isArray(compact.fixed)) {
+    if (!compact.fixed.length || !compact.fixed.every(isWeight)) return null;
+    return { bar: {}, multiplier: 1, isFixed: true, plates: [], fixed: compact.fixed.map((weight) => `${weight}${unit}`) };
+  }
+
+  if (!isWeight(compact.bar) || !Number.isInteger(compact.sides) || compact.sides < 1 || !Array.isArray(compact.plates)
+    || !compact.plates.every((plate) => Array.isArray(plate) && isWeight(plate[0]) && Number.isInteger(plate[1]))) return null;
+  return {
+    bar: { [unit]: `${compact.bar}${unit}` },
+    multiplier: compact.sides,
+    isFixed: false,
+    plates: compact.plates.map(([weight, num]) => ({ weight: `${weight}${unit}`, num })),
+    fixed: [],
+  };
+}
+
+/**
  * Translates a Liftosaur Running Workout object into a Day Plan.
  *
  * @param {object} workout Unmodified `data.workout` from GET /workout/next or /current
@@ -195,7 +224,7 @@ export function workoutToDayPlan(workout, { units = null, isCurrent = false } = 
       exerciseId: entry.exerciseId ?? null,
       name: entry.name || `Exercise ${index + 1}`,
       equipment: entry.equipment ?? null,
-      loadingEquipment: inferLoadingEquipment([...rawWarmupSets, ...rawSets]),
+      loadingEquipment: attachedEquipment(workout, entry) || inferLoadingEquipment([...rawWarmupSets, ...rawSets]),
       supersetGroup: entry.superset ?? null,
       supersetTag: entry.superset ?? null,
       notes: entry.notes ?? null,
