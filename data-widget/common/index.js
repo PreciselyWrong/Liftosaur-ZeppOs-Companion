@@ -98,6 +98,7 @@ import {
   suggestedDayIndex,
   suggestedStart,
   withoutIndex,
+  programForSavedPlan,
 } from '../../shared/selection.js';
 
 const THEME = {
@@ -3534,8 +3535,7 @@ function startInitialNetworkLoad() {
           logRecoverableError('[lifto-ext] next workout unavailable', err);
           return null;
         }),
-        // A failed list is a phone problem, not an empty account, so it reaches the retry path below.
-        send(MESSAGE_TYPES.LIST_PROGRAMS),
+        send(MESSAGE_TYPES.LIST_PROGRAMS).catch((listError) => ({ listError })),
       ]).then(([nextRes, listRes]) => {
         const nextWorkout = nextRes?.payload?.workout || null;
         if (nextWorkout) {
@@ -3545,6 +3545,18 @@ function startInitialNetworkLoad() {
           });
         } else {
           defaultWorkoutPlan = null;
+        }
+
+        if (listRes?.listError) {
+          // A failed list is a phone problem, not an empty account. The next workout
+          // still names its program, so the home screen survives; without it the
+          // failure reaches the retry path below.
+          const nextProgram = programForSavedPlan(null, [], defaultWorkoutPlan);
+          if (!nextProgram) throw listRes.listError;
+          logRecoverableError('[lifto-ext] program list unavailable', listRes.listError);
+          programs = [nextProgram];
+          loadOutline(nextProgram, { nextScreen: EXTENSION_SCREENS.HOME });
+          return;
         }
 
         programs = listRes?.payload?.programs || [];

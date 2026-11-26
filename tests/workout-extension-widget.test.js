@@ -5,6 +5,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as watchLayout from '../shared/watch-layout.js';
 import { normalizeWorkoutDisplaySettings, weightStepperDisplay } from '../shared/workout-display-settings.js';
+import { programForSavedPlan } from '../shared/selection.js';
 
 function readWidgetSource() {
   return fs.readFileSync(
@@ -768,7 +769,7 @@ test('a failed program request shows the phone connection screen, not an empty a
     screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: true, statusMessage: '', errorMessage: '',
     EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME' },
     MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS' },
-    PHONE_CONNECTING_MESSAGE: '', retries: 0,
+    PHONE_CONNECTING_MESSAGE: '', retries: 0, programForSavedPlan,
     beginRequest() {}, renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {}, failRequest() {},
     loadDisplaySettings: () => Promise.resolve(),
     workoutController: { markAuthoritativeResponse() {} },
@@ -787,4 +788,38 @@ test('a failed program request shows the phone connection screen, not an empty a
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(state.screen, 'CONNECTION');
   assert.equal(state.retries, 1);
+});
+
+test('a program list API failure still opens the next workout instead of Setup', async () => {
+  const source = readWidgetSource();
+  const nextWorkout = { programId: 'p1', programName: 'GZCLP', week: 2, dayInWeek: 3 };
+  const state = {
+    screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: true, statusMessage: '', errorMessage: '',
+    EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME' },
+    MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS' },
+    PHONE_CONNECTING_MESSAGE: '', retries: 0, failures: [], outlines: [], programForSavedPlan,
+    beginRequest() {}, renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {},
+    failRequest(err) { state.failures.push(err); },
+    loadOutline(program, options) { state.outlines.push({ program, options }); },
+    loadDisplaySettings: () => Promise.resolve(),
+    workoutController: { markAuthoritativeResponse() {} },
+    workoutToDayPlan: (workout) => ({ ...workout, unit: 'kg' }),
+    isTemporaryPhoneError: () => false,
+    scheduleConnectionRetry() { state.retries += 1; },
+    send: (type) => {
+      if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+      if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: nextWorkout } });
+      return Promise.reject(Object.assign(new Error('Internal server error'), { code: 'API_FAILED' }));
+    },
+  };
+  const scope = new Proxy(state, { has: (target, key) => key in target });
+  const load = new Function('scope', `with (scope) { return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  load();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.notEqual(state.screen, 'SETUP');
+  assert.deepEqual(state.failures, []);
+  assert.equal(state.outlines.length, 1);
+  assert.equal(state.outlines[0].program.id, 'p1');
+  assert.equal(state.outlines[0].options.nextScreen, 'HOME');
+  assert.deepEqual(state.programs.map((program) => program.id), ['p1']);
 });
