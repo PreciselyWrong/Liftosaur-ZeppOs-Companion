@@ -98,3 +98,26 @@ test('development staging watch refreshes changed JavaScript', async () => {
     fs.rmSync(destination, { recursive: true, force: true });
   }
 });
+
+test('release staging writes the same minified copy and refuses paths outside build output', async () => {
+  const { prepareProjectSync, minifyModule } = await import('../tools/prepare-dev-project.js');
+  const source = path.join(root, 'build', 'release-test-source');
+  const destination = path.join(root, 'build', 'release', 'test', 'destination');
+  const javascript = 'export function answer() { const unnecessarilyLongName = 40; return unnecessarilyLongName + 2; }';
+  try {
+    fs.rmSync(source, { recursive: true, force: true });
+    fs.mkdirSync(path.join(source, 'shared'), { recursive: true });
+    fs.writeFileSync(path.join(source, 'shared', 'answer.js'), javascript);
+    prepareProjectSync(source, destination);
+    const staged = fs.readFileSync(path.join(destination, 'shared', 'answer.js'), 'utf8');
+    assert.equal(staged, minifyModule(javascript));
+    assert.ok(staged.length < javascript.length);
+    assert.equal(fs.readFileSync(path.join(source, 'shared', 'answer.js'), 'utf8'), javascript, 'the source of truth is untouched');
+    for (const outside of [root, path.join(root, 'build', 'workout-extension'), path.join(root, 'build', 'release')]) {
+      assert.throws(() => prepareProjectSync(source, outside), /must be inside/);
+    }
+  } finally {
+    fs.rmSync(source, { recursive: true, force: true });
+    fs.rmSync(path.join(root, 'build', 'release', 'test'), { recursive: true, force: true });
+  }
+});

@@ -110,6 +110,6 @@ Repeat the same path after selecting **Free Training**. This path is ASSUMED unt
 
 Once hardware validation passes:
 1. Generate the final release build (`npm run build:workout`).
-2. In Zepp Developer Console, upload the `.zab` package from `build/workout-extension/dist/`.
+2. In Zepp Developer Console, upload the `.zab` package from `build/release/workout/dist/`. Release builds compile the same minified copy that development builds run (`tools/prepare-dev-project.js`).
 3. Provide store listing metadata, screenshots, icon, and link to privacy policy ([docs/privacy-policy.md](privacy-policy.md)).
 4. Submit for Zepp App Store review.

@@ -6,6 +6,7 @@ import {
   parseWorkoutExtensionAppId,
   generateWorkoutExtensionProject,
 } from './generate-workout-extension.js';
+import { prepareProjectSync } from './prepare-dev-project.js';
 
 export const SUPPORTED_PRODUCTS = ['companion', 'workout', 'all'];
 const PRESERVED_ROOT_FILES = ['AGENTS.md', 'CLAUDE.md'];
@@ -46,6 +47,8 @@ export function planBuild(productInput, {
   const product = normalizeProduct(productInput);
   const resolvedRootDir = rootDir || path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
   const resolvedTargetDir = targetDir || path.join(resolvedRootDir, 'build', 'workout-extension');
+  // Zeus compiles the minified copy that development builds also run.
+  const releaseDir = (product) => path.join(resolvedRootDir, 'build', 'release', product);
   const resolvedAppId = appId !== undefined ? appId : env?.ZEPP_WORKOUT_EXTENSION_APP_ID;
 
   let parsedAppId = null;
@@ -60,7 +63,8 @@ export function planBuild(productInput, {
       product: 'companion',
       command: 'zeus',
       args: ['build'],
-      cwd: resolvedRootDir,
+      prepareFrom: resolvedRootDir,
+      cwd: releaseDir('companion'),
       generate: false,
     });
   }
@@ -70,7 +74,8 @@ export function planBuild(productInput, {
       product: 'workout',
       command: 'zeus',
       args: ['build'],
-      cwd: resolvedTargetDir,
+      prepareFrom: resolvedTargetDir,
+      cwd: releaseDir('workout'),
       generate: true,
       appId: parsedAppId,
       rootDir: resolvedRootDir,
@@ -93,6 +98,7 @@ export function executeBuild(productInput, {
   env = process.env,
   spawn = spawnSync,
   generator = generateWorkoutExtensionProject,
+  prepare = prepareProjectSync,
   stdio = 'inherit',
   spawnOptions = {},
   platform = process.platform,
@@ -107,6 +113,7 @@ export function executeBuild(productInput, {
         rootDir: step.rootDir,
       });
     }
+    prepare(step.prepareFrom, step.cwd);
 
     const usesWindowsShim = platform === 'win32';
     const command = usesWindowsShim ? `${step.command} ${step.args.join(' ')}` : step.command;

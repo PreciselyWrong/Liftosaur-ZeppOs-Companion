@@ -1,11 +1,19 @@
-import { watch } from 'node:fs';
-import fs from 'node:fs/promises';
+import fs, { watch } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { transform } from 'esbuild';
+import { transformSync } from 'esbuild';
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const allowedDestinationRoot = path.join(projectRoot, 'build', 'dev');
+// Development, release and preview builds all compile the same minified copy, so timings and
+// memory measured during development describe the shipped bytecode.
+const allowedDestinationRoots = [path.join(projectRoot, 'build', 'dev'), path.join(projectRoot, 'build', 'release')];
+export const MINIFY_OPTIONS = Object.freeze({
+  charset: 'ascii',
+  format: 'esm',
+  legalComments: 'none',
+  minify: true,
+  target: 'es2018',
+});
 const projectEntries = [
   'app-side',
   'assets',
@@ -25,54 +33,50 @@ function isWithin(parent, child) {
   return relative !== '' && !relative.startsWith('..') && !path.isAbsolute(relative);
 }
 
-async function copyEntry(sourcePath, destinationPath) {
-  const stat = await fs.stat(sourcePath);
-  if (stat.isDirectory()) {
-    await fs.mkdir(destinationPath, { recursive: true });
-    const entries = await fs.readdir(sourcePath);
-    await Promise.all(
-      entries.map((entry) =>
-        copyEntry(path.join(sourcePath, entry), path.join(destinationPath, entry)),
-      ),
-    );
-    return;
-  }
-
-  await fs.mkdir(path.dirname(destinationPath), { recursive: true });
-  if (path.extname(sourcePath) !== '.js') {
-    await fs.copyFile(sourcePath, destinationPath);
-    return;
-  }
-
-  const source = await fs.readFile(sourcePath, 'utf8');
-  const result = await transform(source, {
-    charset: 'ascii',
-    format: 'esm',
-    legalComments: 'none',
-    minify: true,
-    target: 'es2018',
-  });
-  await fs.writeFile(destinationPath, result.code);
+export function minifyModule(source) {
+  return transformSync(source, MINIFY_OPTIONS).code;
 }
 
-export async function prepareDevProject(source, destination) {
-  const sourceRoot = path.resolve(source);
-  const destinationRoot = path.resolve(destination);
-  if (!isWithin(allowedDestinationRoot, destinationRoot)) {
-    throw new Error(`Development output must be inside ${allowedDestinationRoot}`);
+function copyEntry(sourcePath, destinationPath) {
+  const stat = fs.statSync(sourcePath);
+  if (stat.isDirectory()) {
+    fs.mkdirSync(destinationPath, { recursive: true });
+    for (const entry of fs.readdirSync(sourcePath)) {
+      copyEntry(path.join(sourcePath, entry), path.join(destinationPath, entry));
+    }
+    return;
   }
 
-  await fs.rm(destinationRoot, { recursive: true, force: true });
-  await fs.mkdir(destinationRoot, { recursive: true });
+  fs.mkdirSync(path.dirname(destinationPath), { recursive: true });
+  if (path.extname(sourcePath) !== '.js') {
+    fs.copyFileSync(sourcePath, destinationPath);
+    return;
+  }
+  fs.writeFileSync(destinationPath, minifyModule(fs.readFileSync(sourcePath, 'utf8')));
+}
+
+export function prepareProjectSync(source, destination) {
+  const sourceRoot = path.resolve(source);
+  const destinationRoot = path.resolve(destination);
+  if (!allowedDestinationRoots.some((root) => isWithin(root, destinationRoot))) {
+    throw new Error(`Prepared output must be inside ${allowedDestinationRoots.join(' or ')}`);
+  }
+
+  fs.rmSync(destinationRoot, { recursive: true, force: true });
+  fs.mkdirSync(destinationRoot, { recursive: true });
   for (const entry of projectEntries) {
     const sourcePath = path.join(sourceRoot, entry);
     try {
-      await copyEntry(sourcePath, path.join(destinationRoot, entry));
+      copyEntry(sourcePath, path.join(destinationRoot, entry));
     } catch (error) {
       if (error.code !== 'ENOENT') throw error;
     }
   }
   return destinationRoot;
+}
+
+export async function prepareDevProject(source, destination) {
+  return prepareProjectSync(source, destination);
 }
 
 async function main(args = process.argv.slice(2)) {
