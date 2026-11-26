@@ -195,3 +195,85 @@ test('another day, or a launch answer past its freshness, is asked from the phon
     assert.equal(state.screen, 'SESSION');
   }
 });
+
+const pageSource = readFileSync(new URL('../page/common/index.js', import.meta.url), 'utf8');
+const SCREEN = { CONNECTION: 'CONNECTION', SETUP: 'SETUP', LOADING: 'LOADING', PROGRAMS: 'PROGRAMS', HOME: 'HOME', WEEKS: 'WEEKS', DAYS: 'DAYS', SESSION: 'SESSION' };
+
+function companionLaunch() {
+  const replies = {};
+  const sent = [];
+  const state = {
+    screen: 'LOADING', programs: [], serviceMode: 'CLOUD', listPage: 0, accountSettings: null,
+    defaultWorkoutPlan: null, defaultWorkoutFetchedAt: null, selectedProgram: null, outline: null,
+    isBusy: false, statusMessage: '', errorMessage: '', isTearingDown: false, console: { log() {} }, Date,
+    SCREEN, MESSAGE_TYPES, PHONE_CONNECTING_MESSAGE: 'Connecting', suggestedProgramIndex,
+    renderUI() {}, resetConnectionRetry() {}, scheduleConnectionRetry() {}, isTemporaryPhoneError: () => false,
+    adoptAccountSettings(value) { state.accountSettings = value || {}; },
+    workoutController: { markAuthoritativeResponse() {} },
+    workoutToDayPlan: (workout) => ({ ...workout, unit: 'kg' }),
+    send(type) { sent.push(type); return (replies[type] = deferred()).promise; },
+  };
+  const load = compile(pageSource,
+    ['loadPrograms', 'loadOutline', 'beginRequest', 'failRequest', 'handleInitialLoadFailure'], state, 'loadPrograms');
+  return { state, sent, replies, load };
+}
+
+test('Companion launch asks for the programs, settings and workouts at once', async () => {
+  const { sent, load } = companionLaunch();
+  load();
+  await settle();
+  assert.deepEqual([...sent].sort(), ['GET_SETTINGS', 'GET_WORKOUT_CURRENT', 'GET_WORKOUT_NEXT', 'LIST_PROGRAMS']);
+});
+
+test('Companion launch asks for the active outline as soon as the list names it and opens Home', async () => {
+  const { state, sent, replies, load } = companionLaunch();
+  load();
+  replies.LIST_PROGRAMS.resolve({ payload: { programs: [{ id: 'p1', isCurrent: true }], serviceMode: 'CLOUD' } });
+  await settle();
+  assert.equal(sent.filter((type) => type === 'GET_PROGRAM_OUTLINE').length, 1);
+  replies.GET_PROGRAM_OUTLINE.resolve({ payload: { programId: 'p1', weeks: [{ number: 1, days: [{ number: 1 }] }] } });
+  replies.GET_SETTINGS.resolve({ payload: { units: 'kg' } });
+  replies.GET_WORKOUT_CURRENT.resolve({ payload: { workout: null } });
+  replies.GET_WORKOUT_NEXT.resolve({ payload: { workout: { programId: 'p1', week: 1, dayInWeek: 1, exercises: [{}] } } });
+  await settle();
+  assert.equal(state.screen, 'HOME');
+  assert.equal(state.defaultWorkoutPlan.programId, 'p1');
+  assert.equal(sent.filter((type) => type === 'GET_PROGRAM_OUTLINE').length, 1);
+});
+
+test('Companion opens the day its launch already fetched without asking the phone again', () => {
+  const sent = [];
+  const loaded = [];
+  const plan = { programId: 'p1', week: 6, dayInWeek: 5, unit: 'kg', exercises: [{ name: 'Pull Up' }] };
+  const state = {
+    selectedWeek: null, selectedProgram: { id: 'p1' }, serviceMode: 'CLOUD', dayPlan: null, directSync: null,
+    defaultWorkoutPlan: plan, defaultWorkoutFetchedAt: Date.now(), accountSettings: {}, launchPlanFor,
+    isBusy: false, statusMessage: '', errorMessage: '', finishState: null, isOverviewOpen: false,
+    overviewPage: 0, readyPage: 0, screen: 'DAYS', isTearingDown: false, console: { log() {} }, Date,
+    SCREEN, MESSAGE_TYPES, renderUI() {},
+    workoutController: { loadPlan: (value) => loaded.push(value) },
+    send(type) { sent.push(type); return new Promise(() => {}); },
+  };
+  const names = ['loadDayPlan', 'beginRequest', 'failRequest'];
+  if (pageSource.includes('function openDayPlan(')) names.push('openDayPlan');
+  const loadDayPlan = compile(pageSource, names, state, 'loadDayPlan');
+  loadDayPlan({ number: 6 }, { number: 5 });
+  assert.deepEqual(sent, []);
+  assert.equal(state.screen, 'SESSION');
+  assert.equal(loaded[0], plan);
+  assert.equal(state.directSync.startConfirmed, false);
+});
+
+test('Companion Home preloads the images of the next workout it offers', () => {
+  const preloads = [];
+  const state = {
+    isEditLastSetOpen: false, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false, isNotesModalOpen: false,
+    screen: 'HOME', isBusy: false, SCREEN,
+    defaultWorkoutPlan: { exercises: [{ imageUrl: 'https://example.com/a.png' }] },
+    exerciseImages: { preload: (urls) => preloads.push(urls) },
+    renderHomeScreen: () => 'home', renderLoadingScreen: () => 'loading',
+  };
+  const renderScreen = compile(pageSource, ['renderScreen'], state, 'renderScreen');
+  assert.equal(renderScreen(), 'home');
+  assert.deepEqual(preloads, [['https://example.com/a.png']]);
+});

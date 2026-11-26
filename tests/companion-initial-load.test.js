@@ -16,7 +16,8 @@ test('a second Companion Retry tap during a launch load starts no second load', 
     isBusy: false, errorMessage: '', statusMessage: '', connectionRetryTimer: null, connectionRetryAttempt: 0,
     PHONE_CONNECTING_MESSAGE: '', MESSAGE_TYPES: { LIST_PROGRAMS: 'LIST_PROGRAMS' },
     renderUI() {}, clearTimeout() {},
-    send() { loads += 1; return new Promise(() => {}); },
+    // One launch load sends its requests together; each load starts with the program list.
+    send(type) { if (type === 'LIST_PROGRAMS') loads += 1; return new Promise(() => {}); },
   };
   const names = ['retryConnection', 'resetConnectionRetry', 'loadPrograms', 'beginRequest', 'handleInitialLoadFailure'];
   const scope = new Proxy(state, { has: (target, key) => key in target });

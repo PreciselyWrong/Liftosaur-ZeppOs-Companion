@@ -101,6 +101,7 @@ import {
   suggestedStart,
   withoutIndex,
   programForSavedPlan,
+  launchPlanFor,
 } from '../../shared/selection.js';
 
 // ── Liftosaur palette ────────────────────────────────────────────────────────
@@ -262,6 +263,7 @@ let dayPlan = null;
 
 let accountSettings = { autoPrepare: readAutoPreparePreference(deviceStorage) };
 let defaultWorkoutPlan = null;
+let defaultWorkoutFetchedAt = null;
 let directSync = defaultDirectSync('LEGACY');
 let syncWarning = null;
 
@@ -744,7 +746,15 @@ function retryConnection() {
  */
 function loadPrograms() {
   beginRequest(PHONE_CONNECTING_MESSAGE);
-  send(MESSAGE_TYPES.LIST_PROGRAMS)
+  // The phone answers these in parallel: chained, they cost several seconds of round trips.
+  // Settings go last because they carry the diagnostics upload, the largest message of the launch.
+  const listRequest = send(MESSAGE_TYPES.LIST_PROGRAMS);
+  const currentRequest = send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+  const nextRequest = send(MESSAGE_TYPES.GET_WORKOUT_NEXT);
+  const settingsRequest = send(MESSAGE_TYPES.GET_SETTINGS);
+  // An empty account or demo mode never reads some of them.
+  for (const request of [currentRequest, nextRequest, settingsRequest]) request.catch(() => {});
+  listRequest
     .then((res) => {
       resetConnectionRetry();
       programs = res.payload?.programs || [];
@@ -760,8 +770,14 @@ function loadPrograms() {
         return;
       }
 
+      const currentIndex = suggestedProgramIndex(programs);
+      // The outline is the next slowest reply, so it is asked for as soon as the list names the program.
+      const outlineReply = currentIndex === -1
+        ? null
+        : send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: programs[currentIndex].id });
+      if (outlineReply) outlineReply.catch(() => {});
+
       if (serviceMode === 'DEMO') {
-        const currentIndex = suggestedProgramIndex(programs);
         if (currentIndex === -1) {
           isBusy = false;
           statusMessage = '';
@@ -770,16 +786,16 @@ function loadPrograms() {
           return;
         }
 
-        return send(MESSAGE_TYPES.GET_SETTINGS).then((settingsRes) => {
+        return settingsRequest.then((settingsRes) => {
           adoptAccountSettings(settingsRes.payload);
-          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+          loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME, reply: outlineReply });
         });
       }
 
-      return send(MESSAGE_TYPES.GET_SETTINGS)
+      return settingsRequest
         .then((settingsRes) => {
           adoptAccountSettings(settingsRes.payload);
-          return send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+          return currentRequest;
         })
         .then((currentRes) => {
           workoutController.markAuthoritativeResponse();
@@ -817,18 +833,18 @@ function loadPrograms() {
             return;
           }
 
-          return send(MESSAGE_TYPES.GET_WORKOUT_NEXT).then((nextRes) => {
+          return nextRequest.then((nextRes) => {
             const nextWorkout = nextRes.payload?.workout || null;
             if (nextWorkout) {
               defaultWorkoutPlan = workoutToDayPlan(nextWorkout, {
                 units: accountSettings?.units || null,
                 isCurrent: false,
               });
+              defaultWorkoutFetchedAt = Date.now();
             } else {
               defaultWorkoutPlan = null;
             }
 
-            const currentIndex = suggestedProgramIndex(programs);
             if (currentIndex === -1) {
               isBusy = false;
               statusMessage = '';
@@ -837,7 +853,7 @@ function loadPrograms() {
               return;
             }
 
-            loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME });
+            loadOutline(programs[currentIndex], { nextScreen: SCREEN.HOME, reply: outlineReply });
           });
         });
     })
@@ -859,10 +875,10 @@ function handleInitialLoadFailure(err) {
   failRequest(err);
 }
 
-function loadOutline(program, { nextScreen = SCREEN.WEEKS } = {}) {
+function loadOutline(program, { nextScreen = SCREEN.WEEKS, reply = null } = {}) {
   selectedProgram = program;
   beginRequest('Loading weeks…');
-  send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id })
+  (reply || send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id }))
     .then((res) => {
       isBusy = false;
       statusMessage = '';
@@ -885,6 +901,14 @@ function loadDayPlan(week, day) {
   // Also set when arriving from the home shortcut, so "Change" has a week to
   // go back to.
   selectedWeek = week;
+  const pick = { programId: selectedProgram.id, week: week.number, dayInWeek: day.number };
+  const launchPlan = serviceMode === 'DEMO' ? null : launchPlanFor(defaultWorkoutPlan, defaultWorkoutFetchedAt, pick);
+  if (launchPlan) {
+    // One workout per launch answer: a later pick of this day asks the phone again.
+    defaultWorkoutFetchedAt = null;
+    openDayPlan(launchPlan);
+    return;
+  }
   beginRequest('Building workout…');
 
   if (serviceMode === 'DEMO') {
@@ -910,11 +934,7 @@ function loadDayPlan(week, day) {
     return;
   }
 
-  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, {
-    programId: selectedProgram.id,
-    week: week.number,
-    dayInWeek: day.number,
-  })
+  send(MESSAGE_TYPES.GET_WORKOUT_NEXT, pick)
     .then((res) => {
       const rawWorkout = res.payload?.workout || null;
       if (!rawWorkout) {
@@ -930,29 +950,33 @@ function loadDayPlan(week, day) {
       if (!plan.exercises || plan.exercises.length === 0) {
         throw new Error('This workout has no exercises');
       }
-      isBusy = false;
-      statusMessage = '';
-      dayPlan = plan;
-      directSync = {
-        mode: 'DIRECT',
-        startConfirmed: false,
-        acknowledgedSetCount: 0,
-        finishRequestedAt: null,
-        discardRequestedAt: null,
-        conflict: false,
-        remoteMissing: false,
-        preservedIntervals: [],
-        intervalsPreservedThrough: null,
-      };
-      workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
-      finishState = null;
-      isOverviewOpen = false;
-      overviewPage = 0;
-      readyPage = 0;
-      screen = SCREEN.SESSION;
-      renderUI();
+      openDayPlan(plan);
     })
     .catch(failRequest);
+}
+
+function openDayPlan(plan) {
+  isBusy = false;
+  statusMessage = '';
+  dayPlan = plan;
+  directSync = {
+    mode: 'DIRECT',
+    startConfirmed: false,
+    acknowledgedSetCount: 0,
+    finishRequestedAt: null,
+    discardRequestedAt: null,
+    conflict: false,
+    remoteMissing: false,
+    preservedIntervals: [],
+    intervalsPreservedThrough: null,
+  };
+  workoutController.loadPlan(dayPlan, { sync: directSync, clearStore: true });
+  finishState = null;
+  isOverviewOpen = false;
+  overviewPage = 0;
+  readyPage = 0;
+  screen = SCREEN.SESSION;
+  renderUI();
 }
 
 function updateControllerStatus() {
@@ -4107,6 +4131,9 @@ function renderScreen() {
   if (screen === SCREEN.LOADING) return renderLoadingScreen();
   if (screen === SCREEN.HOME) {
     if (isBusy) return renderLoadingScreen();
+    // The day Home offers is the likeliest pick: its images reach the flash cache while the lifter
+    // decides, instead of 2 to 3 s after the day opens. The image client keeps one transfer at a time.
+    if (defaultWorkoutPlan?.exercises) exerciseImages?.preload(defaultWorkoutPlan.exercises.map((exercise) => exercise?.imageUrl));
     return renderHomeScreen();
   }
   if (screen === SCREEN.PROGRAMS) return renderProgramsScreen();
