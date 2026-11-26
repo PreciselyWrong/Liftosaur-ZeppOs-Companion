@@ -135,6 +135,31 @@ for (const code of ['workout_start_time_taken', 'workout_already_active']) {
   });
 }
 
+test('a lost reply while checking the running workout after a refused start stays retryable', async () => {
+  const { cloud, link, controller } = await startDirectWorkout([[0, 2]], {
+    auto: false,
+    cloudOptions: { strictStart: true },
+  });
+  await link.deliver(0, 'noReply');
+  await flush();
+  controller.completeSet();
+  await flush();
+  await link.deliver(0, 'ok');
+  await flush();
+  assert.equal(link.queue[0].type, MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+  await link.deliver(0, 'lost');
+  await flush();
+
+  assert.equal(controller.sync().conflict, false);
+  assert.equal(controller.status().code, 'pending');
+
+  link.setAuto(true);
+  await controller.retryPendingWrites().catch(() => {});
+  await flush();
+  assert.equal(controller.sync().startConfirmed, true);
+  assert.deepEqual(cloud.completedSets().map((set) => set.setId), ['live1-entry-1-work-1']);
+});
+
 test('a start refused for a different running phone workout still raises the conflict', async () => {
   const { cloud, link, controller } = await startDirectWorkout([[0, 2]], { auto: false });
   cloud.setCurrent({ ...buildApiWorkout([[0, 2]]), startTime: 5 });

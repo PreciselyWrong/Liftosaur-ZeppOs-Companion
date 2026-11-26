@@ -671,23 +671,30 @@ export function createWorkoutController({
 
   // A start whose reply was lost leaves the phone running this very workout, so a retry is
   // refused; binding it keeps the sets logged meanwhile instead of forcing a conflict.
+  // Resolves 'BOUND', 'OTHER' for a different or unusable workout, or 'UNREACHABLE'.
   async function bindOwnRunningWorkout(startedAt, startingSession) {
+    let res;
     try {
-      const res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
-      if (disposed || session !== startingSession) return false;
-      const workout = res?.payload?.workout;
-      if (!workout || workout.startTime !== startedAt || workout.programId !== dayPlan?.programId) return false;
+      res = await request(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+    } catch (err) {
+      logError('running workout check failed', err);
+      return 'UNREACHABLE';
+    }
+    if (disposed || session !== startingSession) return 'OTHER';
+    const workout = res?.payload?.workout;
+    if (!workout || workout.startTime !== startedAt || workout.programId !== dayPlan?.programId) return 'OTHER';
+    try {
       bindStartedWorkout(workout);
     } catch (err) {
       logError('running workout bind failed', err);
-      return false;
+      return 'OTHER';
     }
     policy.markAuthoritativeResponse();
     directSync.startConfirmed = true;
     persist();
     setStatus({ code: SYNC_STATUS_CODES.IDLE });
     notifyChange();
-    return true;
+    return 'BOUND';
   }
 
   function ensureDirectWorkoutStarted() {
@@ -744,8 +751,15 @@ export function createWorkoutController({
       } catch (err) {
         if (disposed || session !== startingSession) return false;
         if (err?.code === 'workout_already_active' || err?.code === 'workout_start_time_taken') {
-          if (await bindOwnRunningWorkout(view.startedAt, startingSession)) return true;
+          const bound = await bindOwnRunningWorkout(view.startedAt, startingSession);
+          if (bound === 'BOUND') return true;
           if (disposed || session !== startingSession) return false;
+          if (bound === 'UNREACHABLE') {
+            setStatus({ code: SYNC_STATUS_CODES.PENDING, detail: 'START_PENDING', error: err });
+            const unreachable = new Error('Running workout check failed');
+            unreachable.code = 'NETWORK';
+            throw unreachable;
+          }
           directSync.conflict = true;
           persist();
           setStatus({ code: SYNC_STATUS_CODES.CONFLICT, detail: err.code, error: err });
