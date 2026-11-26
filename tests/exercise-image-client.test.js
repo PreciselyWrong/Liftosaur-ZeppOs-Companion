@@ -551,3 +551,190 @@ test('Images still loading when images are switched off are asked for again once
   assert.equal(client.get(bench).status, 'loading');
   client.dispose();
 });
+
+function dayHarness({ maxCachedImages = 12, response = () => ({ payload: { status: 'queued' } }), headroom = () => true, storage } = {}) {
+  const requests = [];
+  const changes = [];
+  const removed = [];
+  const client = createExerciseImageClient({
+    request: async (_, payload) => { requests.push(payload); return response(payload); },
+    removeFile: (path) => removed.push(path),
+    fileSize: () => 100,
+    maxCachedImages,
+    hasMemoryHeadroom: headroom,
+    storage,
+    onChange: (changedUrl, status, failure, origin) => changes.push({ changedUrl, status, failure, origin }),
+  });
+  client.setEnabled(true);
+  const deliver = (index, path = `data://download/day-${index}.png`) => client.receive(fileFor(requests[index], path));
+  return { client, requests, changes, removed, deliver, asked: () => requests.map(request => request.imageUrl) };
+}
+
+const day = ['squat', 'bench', 'row', 'curl'].map(name => `https://www.liftosaur.com/externalimages/exercises/single/small/${name}.png`);
+
+test('Preloading a day fetches each exercise image once, one at a time, in workout order', async () => {
+  const h = dayHarness();
+  h.client.preload([day[0], null, day[1], undefined, day[0], 'not a link', day[2]]);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0]], 'strictly one transfer at a time');
+  h.deliver(0);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1]]);
+  h.deliver(1);
+  await flush();
+  h.deliver(2);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1], day[2]], 'exercises without an image are skipped');
+  assert.deepEqual([day[0], day[1], day[2]].map(item => h.client.get(item).status), ['ready', 'ready', 'ready']);
+  h.client.preload(day.slice(0, 3));
+  await flush();
+  assert.equal(h.requests.length, 3, 'cached images are drawn from flash without asking again');
+  h.client.dispose();
+});
+
+test('Images a screen asks for go before the day preload', async () => {
+  const h = dayHarness();
+  h.client.preload([day[0], day[1]]);
+  h.client.load(day[3]);
+  await flush();
+  assert.deepEqual(h.asked(), [day[3]]);
+  h.deliver(0);
+  await flush();
+  assert.deepEqual(h.asked(), [day[3], day[0]]);
+  h.client.dispose();
+});
+
+test('Preloading waits for a set sync reply and the quiet moment after it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = dayHarness();
+  const release = h.client.hold();
+  h.client.preload(day);
+  await flush();
+  assert.equal(h.requests.length, 0);
+  release();
+  await flush();
+  assert.equal(h.requests.length, 0);
+  t.mock.timers.tick(3000);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0]]);
+  h.client.dispose();
+});
+
+test('Preloading asks nothing while memory is short and leaves the image to the screens', async () => {
+  let headroom = false;
+  const h = dayHarness({ headroom: () => headroom });
+  h.client.preload([day[0]]);
+  await flush();
+  assert.equal(h.requests.length, 0);
+  assert.deepEqual(h.changes, [], 'no screen redraws for an image nobody showed');
+  headroom = true;
+  h.client.load(day[0]);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0]], 'a screen asks at once instead of waiting out a retry delay');
+  h.client.dispose();
+});
+
+test('A failed preload does not mark the image unavailable for the screens', async () => {
+  let reason = 'DOWNLOAD_HTTP_STATUS';
+  const h = dayHarness({ response: () => (reason ? { payload: { status: 'unavailable', reason } } : { payload: { status: 'queued' } }) });
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1]], 'a failure moves on to the next exercise');
+  await flush();
+  assert.deepEqual(h.changes, [], 'no screen is told the image is unavailable');
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  assert.equal(h.requests.length, 2, 'a failed preload is not repeated in a loop');
+  reason = null;
+  h.client.load(day[0]);
+  await flush();
+  assert.equal(h.requests.length, 3);
+  assert.equal(h.client.get(day[0]).status, 'loading');
+  h.client.dispose();
+});
+
+test('Starting a set pauses preloading until an idle screen preloads again', async () => {
+  const h = dayHarness();
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  h.client.pausePreload();
+  h.deliver(0);
+  await flush();
+  assert.equal(h.requests.length, 1, 'the transfer under way finishes, no new one starts');
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1]]);
+  h.client.dispose();
+});
+
+test('A tap pauses preloading for a quiet moment that one timer ends', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = dayHarness();
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  h.client.pausePreload(5000);
+  h.deliver(0);
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  assert.equal(h.requests.length, 1, 'the redraw after a tap does not end the quiet moment');
+  t.mock.timers.tick(4999);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  t.mock.timers.tick(1);
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1]]);
+  h.client.dispose();
+});
+
+test('Only images a screen showed ask for a redraw when they land', async () => {
+  const h = dayHarness();
+  h.client.preload([day[0], day[1]]);
+  await flush();
+  h.deliver(0);
+  await flush();
+  h.client.load(day[1]);
+  h.deliver(1);
+  await flush();
+  assert.deepEqual(h.changes.map(({ status, origin }) => ({ status, preload: Boolean(origin?.preload) })), [
+    { status: 'ready', preload: true },
+    { status: 'ready', preload: false },
+  ]);
+  h.client.dispose();
+});
+
+test('Preloading never fetches more images than the flash cache keeps', async () => {
+  const h = dayHarness({ maxCachedImages: 2 });
+  h.client.preload(day);
+  for (let index = 0; index < 4; index++) {
+    await flush();
+    if (h.requests[index]) h.deliver(index);
+  }
+  await flush();
+  assert.deepEqual(h.asked(), [day[0], day[1]], 'a day larger than the cache would evict its own first images');
+  assert.deepEqual(h.removed, []);
+  h.client.dispose();
+});
+
+test('Preloading keeps the day images already in flash ahead of newer arrivals, across a relaunch', async () => {
+  const map = new Map();
+  const storage = { getItem: (key) => map.get(key) || null, setItem: (key, value) => map.set(key, value) };
+  const older = 'https://www.liftosaur.com/externalimages/exercises/single/small/older.png';
+  const first = dayHarness({ maxCachedImages: 2, storage });
+  first.client.load(day[0]);
+  await flush();
+  first.deliver(0, 'data://download/squat.png');
+  first.client.load(older);
+  await flush();
+  first.deliver(1, 'data://download/older.png');
+  first.client.dispose();
+
+  const relaunched = dayHarness({ maxCachedImages: 2, storage });
+  relaunched.client.preload([day[0], day[1]]);
+  await flush();
+  assert.deepEqual(relaunched.asked(), [day[1]], 'the cached image of the same exercise is a hit after a relaunch');
+  relaunched.deliver(0, 'data://download/bench.png');
+  assert.deepEqual(relaunched.removed, ['data://download/older.png']);
+  assert.equal(relaunched.client.get(day[0]).status, 'ready');
+  relaunched.client.dispose();
+});

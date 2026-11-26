@@ -40,9 +40,9 @@ export function createWatchExerciseImages({ request, onChange, storage = null, m
         + ' used=' + (memory ? memory.systemUsed : 'unknown') + ' app=' + (memory ? memory.appUsed : 'unknown'));
       return hasImageMemoryHeadroom(memory);
     },
-    onChange: (url, status, failure) => {
-      console.log('[lifto] exercise image state ' + status);
-      onChange(url, status, failure);
+    onChange: (...change) => {
+      console.log('[lifto] exercise image state ' + change[1] + (change[3]?.preload ? ' preload' : ''));
+      onChange(...change);
     },
     fileSize: (path) => {
       const resolved = dataPath(path);

@@ -18,6 +18,8 @@ const TEMPORARY_FAILURES = new Set([
 ]);
 const AUTO_RETRY_AFTER_MS = 60000;
 const MAX_AUTO_RETRIES = 2;
+// The quiet moment a tap buys before the day preload asks for its next image.
+export const PRELOAD_TAP_QUIET_MS = 5000;
 
 // A critical workout request never waits on an image: the image work waits on it instead.
 export function holdExerciseImagesDuring(images, type, start) {
@@ -53,6 +55,11 @@ export function createExerciseImageClient({
   let quietUntil = 0;
   let resumeTimer = null;
   let arrival = null;
+  let preloadUrls = [];
+  let preloadStopped = false;
+  let preloadQuietUntil = 0;
+  let preloadTimer = null;
+  const preloadTried = new Set();
   const entries = new Map();
   const queue = [];
   const refusedUrls = new Set();
@@ -121,6 +128,17 @@ export function createExerciseImageClient({
     resumeTimer = null;
   }
 
+  function clearPreloadTimer() {
+    if (preloadTimer !== null) clearTimeout(preloadTimer);
+    preloadTimer = null;
+  }
+
+  function forgetPreload() {
+    clearPreloadTimer();
+    preloadUrls = [];
+    preloadTried.clear();
+  }
+
   function cleanup() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
@@ -131,6 +149,7 @@ export function createExerciseImageClient({
     transfer = null;
     active = null;
     queue.length = 0;
+    forgetPreload();
     // A kept entry still loading would never be asked for again: load() skips loading entries.
     for (const [url, entry] of entries) {
       if (entry.status === 'loading') entries.delete(url);
@@ -156,6 +175,7 @@ export function createExerciseImageClient({
     transfer = null;
     active = null;
     queue.length = 0;
+    forgetPreload();
     entries.clear();
   }
 
@@ -225,7 +245,7 @@ export function createExerciseImageClient({
   }
 
   function scheduleNext() {
-    if (scheduled || active || disposed || !enabled || queue.length === 0) return;
+    if (scheduled || active || disposed || !enabled || (queue.length === 0 && preloadUrls.length === 0)) return;
     scheduled = true;
     Promise.resolve().then(() => {
       scheduled = false;
@@ -237,6 +257,17 @@ export function createExerciseImageClient({
   function finish(entry, status, src = null, failure = null) {
     if (active !== entry) return;
     clearTransfer();
+    if (entry.preload && status !== 'ready') {
+      // No screen showed this image, so its failure stays out of their way: a screen asks afresh.
+      entries.delete(entry.url);
+      if (failure?.reason === 'LOW_MEMORY') {
+        // Short memory ends this pass; the next idle screen preloads again and memory is read anew.
+        preloadTried.delete(entry.url);
+        preloadUrls = [];
+      }
+      scheduleNext();
+      return;
+    }
     entry.status = status;
     entry.src = src;
     entry.failure = failure ? failure.reason : null;
@@ -245,7 +276,7 @@ export function createExerciseImageClient({
       touch(entry);
       evictOldImages();
     }
-    onChange(entry.url, status, failure);
+    onChange(entry.url, status, failure, entry.preload ? { preload: true } : null);
     scheduleNext();
   }
 
@@ -311,13 +342,37 @@ export function createExerciseImageClient({
       .catch(() => fail('REQUEST_FAILED'));
   }
 
+  // A preload goes only when no screen waits on an image; a tap's quiet moment ends with one timer.
+  function nextPreload() {
+    if (preloadStopped) return null;
+    const wait = preloadQuietUntil - Date.now();
+    if (wait > 0) {
+      if (preloadTimer === null) {
+        preloadTimer = setTimeout(() => {
+          preloadTimer = null;
+          scheduleNext();
+        }, wait);
+        if (preloadTimer && typeof preloadTimer.unref === 'function') preloadTimer.unref();
+      }
+      return null;
+    }
+    for (const url of preloadUrls) {
+      if (entries.has(url) || preloadTried.has(url)) continue;
+      preloadTried.add(url);
+      const entry = { url, requestId: null, status: 'loading', src: null, autoRetries: 0, preload: true };
+      entries.set(url, entry);
+      return entry;
+    }
+    return null;
+  }
+
   function processNext() {
     if (active || disposed || !enabled) return;
     if (deferred()) {
       armResume();
       return;
     }
-    const entry = queue.shift();
+    const entry = queue.shift() || nextPreload();
     if (!entry) return;
     if (entries.get(entry.url) !== entry || entry.status !== 'loading') {
       scheduleNext();
@@ -408,6 +463,7 @@ export function createExerciseImageClient({
       return;
     }
     const existing = entries.get(url);
+    if (existing) existing.preload = false;
     const autoRetry = !retry && existing && existing.status === 'unavailable'
       && TEMPORARY_FAILURES.has(existing.failure)
       && existing.autoRetries < MAX_AUTO_RETRIES
@@ -453,6 +509,35 @@ export function createExerciseImageClient({
     },
     load,
     prefetch(imageUrl) { load(imageUrl, { priority: true }); },
+    // The day's images, in workout order, fetched in the background into the flash cache. Only as many
+    // as the cache keeps: a longer day would evict its own first images and fetch them again later.
+    preload(imageUrls) {
+      if (!enabled || disposed || !Array.isArray(imageUrls)) return;
+      const urls = [];
+      for (const imageUrl of imageUrls) {
+        const url = normalizeExerciseImageUrl(imageUrl);
+        if (url && !urls.includes(url)) urls.push(url);
+        if (urls.length >= maxCachedImages) break;
+      }
+      // The day's cached images become the most recent, so the day's new arrivals evict other days.
+      const before = [...entries.keys()].join('\n');
+      for (const url of urls) {
+        const entry = entries.get(url);
+        if (entry?.status === 'ready') touch(entry);
+      }
+      if ([...entries.keys()].join('\n') !== before) saveStorage();
+      preloadUrls = urls;
+      preloadStopped = false;
+      scheduleNext();
+    },
+    // A set under way stops preloading until an idle screen preloads again; a tap only pauses it for `quietMs`.
+    pausePreload(quietMs) {
+      if (Number.isFinite(quietMs) && quietMs > 0) {
+        preloadQuietUntil = Math.max(preloadQuietUntil, Date.now() + quietMs);
+        clearPreloadTimer();
+        scheduleNext();
+      } else preloadStopped = true;
+    },
     hold,
     defer,
     dispose() {
