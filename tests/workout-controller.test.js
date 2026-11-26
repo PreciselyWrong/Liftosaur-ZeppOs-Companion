@@ -2178,3 +2178,18 @@ test('coalesceIntervals merges overlapping and adjacent activity spans', () => {
   // Degenerate/invalid entries are dropped.
   assert.deepEqual(coalesceIntervals([[5, 5], [10, 8], 'x', [1, 4]]), [[1, 4]]);
 });
+
+test('a legacy session cleared after its save stays cleared through later taps', () => {
+  const store = createSessionStore(createMemoryStorageAdapter());
+  const controller = createWorkoutController({ store, now: () => 1000 });
+  controller.loadPlan(SAMPLE_PLAN, { persist: true });
+  controller.startWorkout();
+  controller.completeSet();
+  controller.finishWorkout();
+
+  controller.clearPersisted();
+  controller.pauseWorkout({ source: 'native' });
+  controller.adjustWeight(1);
+
+  assert.equal(store.load(), null);
+});

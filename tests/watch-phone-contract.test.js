@@ -170,3 +170,19 @@ test('a start refused for a different running phone workout still raises the con
   assert.equal(controller.sync().conflict, true);
   assert.equal(controller.status().detail, 'workout_already_active');
 });
+
+test('a native pause after the workout is saved does not bring it back on the next launch', async () => {
+  const { link, store, controller } = await startDirectWorkout([[0, 1]]);
+  controller.completeSet();
+  await flush();
+  assert.equal((await controller.finishWorkoutRemote()).success, true);
+  assert.equal(store.load(), null);
+
+  controller.pauseWorkout({ source: 'native' });
+  controller.resumeWorkout({ source: 'native' });
+  controller.adjustWeight(1);
+
+  assert.equal(store.load(), null);
+  const relaunched = createWorkoutController({ store, request: link.request, now: () => 2_000_000 });
+  assert.equal(relaunched.restore().success, false);
+});
