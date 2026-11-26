@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { holdExerciseImagesDuring } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, PRELOAD_TAP_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -428,6 +428,7 @@ function wrapNativeAction(handler, diagnosticAction = 'BUTTON') {
   return (button) => {
     if (isTearingDown || isDispatchingClick) return;
     workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
+    exerciseImages?.pausePreload(PRELOAD_TAP_QUIET_MS);
     isDispatchingClick = true;
     try {
       workoutDiagnostics.trace('ACTION', () => handler(button));
@@ -4022,12 +4023,14 @@ function renderLoadingScreen() {
 
 // ── Root render ──────────────────────────────────────────────────────────────
 
-function handleExerciseImageChange(_imageUrl, status, failure) {
+function handleExerciseImageChange(_imageUrl, status, failure, origin) {
   if (isTearingDown) return;
   if (status === 'ready' || status === 'unavailable') {
     if (status === 'ready') workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY);
     else workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE, { image: failure?.reason, httpStatus: failure?.httpStatus });
   }
+  // A preloaded image no screen asked for waits in flash for the screen that draws it: no redraw now.
+  if (origin?.preload) return;
   if (isNotesModalOpen) {
     if (!_imageUrl || _imageUrl === activeNotesImageUrl) {
       const hasImageNow = Boolean(currentNotesPages()[0]?.image);
@@ -4124,6 +4127,10 @@ function renderScreen() {
   // rather than rebuilding what was just drawn.
   lastRenderedState = view.state;
   lastRenderedSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
+  // The day's images fill the flash cache while the lifter is idle; a set under way stops it.
+  const imagePreload = exerciseImagePreloadFor(view);
+  if (imagePreload?.pause) exerciseImages?.pausePreload();
+  else if (imagePreload) exerciseImages?.preload(imagePreload.urls);
 
   if (view.state === SESSION_STATES.NO_PLAN) {
     screen = SCREEN.PROGRAMS;
@@ -4299,7 +4306,9 @@ Page(
         onChange: handleExerciseImageChange,
         storage: deviceStorage,
         readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
-        maxCachedImages: 4,
+        // Cached images are files in watch flash and only drawn ones are decoded; 12 converted 140 px
+        // images is about 480 KB of flash, enough for a long day's preload.
+        maxCachedImages: 12,
       });
       pageInstance = this;
       console.log('[liftosaur] page init');

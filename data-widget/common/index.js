@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exe
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { holdExerciseImagesDuring } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, PRELOAD_TAP_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -622,6 +622,7 @@ function addActionWidget(props) {
     click_func: typeof handler === 'function' ? (w) => {
       if (isTearingDown || isPaused || !hasBuilt || isDispatchingClick || !activeWidgets.includes(actionWidget)) return;
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: diagnosticAction });
+      exerciseImages?.pausePreload(PRELOAD_TAP_QUIET_MS);
       isDispatchingClick = true;
       try {
         workoutDiagnostics.trace('ACTION', () => handler(w));
@@ -3382,12 +3383,14 @@ function renderConflictScreen() {
   });
 }
 
-function handleExerciseImageChange(_imageUrl, status, failure) {
+function handleExerciseImageChange(_imageUrl, status, failure, origin) {
   if (isTearingDown) return;
   if (status === 'ready' || status === 'unavailable') {
     if (status === 'ready') workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_READY);
     else workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.IMAGE_UNAVAILABLE, { image: failure?.reason, httpStatus: failure?.httpStatus });
   }
+  // A preloaded image no screen asked for waits in flash for the screen that draws it: no redraw now.
+  if (origin?.preload) return;
   if (isPaused || !hasBuilt) {
     controllerUiDirty = true;
     return;
@@ -3492,6 +3495,10 @@ function renderScreen() {
 
   lastRenderedState = view.state;
   lastRenderedSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
+  // The day's images fill the flash cache while the lifter is idle; a set under way stops it.
+  const imagePreload = exerciseImagePreloadFor(view);
+  if (imagePreload?.pause) exerciseImages?.pausePreload();
+  else if (imagePreload) exerciseImages?.preload(imagePreload.urls);
 
   if (view.state === SESSION_STATES.NO_PLAN) {
     screen = EXTENSION_SCREENS.PROGRAMS;
@@ -3937,7 +3944,8 @@ DataWidget(
         readMemory: () => readWorkoutMemory(appApi.getPackageInfo, appApi.getPerformance),
         // Cached images are files in watch flash and only drawn ones are decoded, so a whole day fits
         // without more RAM; each eviction cost a 40 KB BLE transfer again, the riskiest image step.
-        maxCachedImages: 8,
+        // 12 converted 140 px images is about 480 KB of flash, enough for a long day's preload.
+        maxCachedImages: 12,
       });
       widgetInstance = this;
       console.log('[lifto-ext] data-widget onInit');

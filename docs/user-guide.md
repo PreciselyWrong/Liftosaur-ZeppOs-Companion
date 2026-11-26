@@ -54,7 +54,7 @@ Preferences are configured separately for Companion and Workout. Reopen the watc
 | Sets remain pending | Keep the local workout, reconnect the phone and reopen Lifto. Check the recording status before finishing. |
 | Conflict or Recovery appears | Read the explanation and check the active workout on the phone. Do not discard unsynchronized watch work. |
 | The watch or Lifto restarts | Reopen the same app and inspect its restored session. Check pending writes before starting a replacement workout. |
-| An exercise image is missing | Keep training using the text. Check the image preference and phone connection; reopen Info to retry. |
+| An exercise image is missing | Keep training using the text. Check the image preference and phone connection; reopen Info to retry. The set screen shows only images already saved on the watch: the day's images load one by one on the ready, rest and Prepare screens, never during a set. |
 | Workout does not alert while hidden | Return to Lifto. An expired rest has a catch-up alert; background alert delivery is not confirmed on every device. |
 | The Workout page is missing | Follow the model-specific installation path. Installation package coverage does not prove native Workout support. |
 

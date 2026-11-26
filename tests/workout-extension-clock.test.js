@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
 
 const source = fs.readFileSync(new URL('../data-widget/common/index.js', import.meta.url), 'utf8');
 
@@ -22,6 +23,7 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
   const view = { state: initialState, rest: null, elapsedSeconds: 1 };
   const env = {
     isTearingDown: false, isPaused: false, hasBuilt: false, isDispatchingClick: false,
+    exerciseImages: null, exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS,
     isEditLastSetOpen: false, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false,
     discardConfirmationRequested: false, phoneRequiredReason: null, isNotesModalOpen: false,
     isOverviewOpen: false, isRestMinimized: false, liveWidgets: {}, renderTimer: null,
