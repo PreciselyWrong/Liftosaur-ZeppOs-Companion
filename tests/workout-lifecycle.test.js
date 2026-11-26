@@ -45,7 +45,7 @@ function fixture() {
   const env = {
     stopRestPulseAnimation, restHaloWidgets: [], restPulseAnimHandles: [], restPulseAttempted: false,
     prop: { ANIM_STATUS: 1, ALPHA: 2 }, anim_status: { STOP: 3 },
-    hasBuilt: true, isTearingDown: false, isPaused: false, lifecycleGeneration: 0,
+    hasBuilt: true, isTearingDown: false, isPaused: false, lifecycleGeneration: 0, displaySettingsLoad: null,
     controllerUiDirty: false, renderScheduled: false, renderTimer: null,
     connectionRetryTimer: null, connectionRetryAttempt: 0,
     clockTimer: null, vibrationTimer: null, vibrator: null,

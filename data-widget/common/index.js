@@ -310,8 +310,10 @@ let selectedProgram = null;
 let outline = null;
 let selectedWeek = null;
 let defaultWorkoutPlan = null;
+let defaultWorkoutFetchedAt = null;
 let dayPlan = null;
 let accountSettings = { autoPrepare: readAutoPreparePreference(deviceStorage) };
+let displaySettingsLoad = null;
 
 let listPage = 0;
 let readyPage = 0;
@@ -3518,9 +3520,28 @@ function renderScreen() {
 function startInitialNetworkLoad() {
   beginRequest(PHONE_CONNECTING_MESSAGE);
 
-  loadDisplaySettings()
-    .then(() => send(MESSAGE_TYPES.GET_WORKOUT_CURRENT))
-    .then((currentRes) => {
+  // The phone answers these in parallel: chained, they cost about 2.5 s of round trips on an Active 2.
+  // Settings go last because they carry the diagnostics upload, the largest message of the launch.
+  const currentRequest = send(MESSAGE_TYPES.GET_WORKOUT_CURRENT);
+  const nextRequest = send(MESSAGE_TYPES.GET_WORKOUT_NEXT).catch((err) => {
+    logRecoverableError('[lifto-ext] next workout unavailable', err);
+    return null;
+  });
+  // The outline is the next slowest reply, so it is asked for as soon as the list names the program.
+  let outlineReply = null;
+  const listRequest = send(MESSAGE_TYPES.LIST_PROGRAMS).then((listRes) => {
+    const listed = listRes?.payload?.programs || [];
+    const program = listed[suggestedProgramIndex(listed)];
+    if (program) {
+      outlineReply = send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id });
+      // Unused when a running workout is found instead.
+      outlineReply.catch(() => {});
+    }
+    return listRes;
+  }, (listError) => ({ listError }));
+
+  Promise.all([loadDisplaySettings(), currentRequest])
+    .then(([, currentRes]) => {
       resetConnectionRetry();
       workoutController.markAuthoritativeResponse();
       const currentWorkout = currentRes.payload?.workout || null;
@@ -3554,19 +3575,14 @@ function startInitialNetworkLoad() {
         return;
       }
 
-      return Promise.all([
-        send(MESSAGE_TYPES.GET_WORKOUT_NEXT).catch((err) => {
-          logRecoverableError('[lifto-ext] next workout unavailable', err);
-          return null;
-        }),
-        send(MESSAGE_TYPES.LIST_PROGRAMS).catch((listError) => ({ listError })),
-      ]).then(([nextRes, listRes]) => {
+      return Promise.all([nextRequest, listRequest]).then(([nextRes, listRes]) => {
         const nextWorkout = nextRes?.payload?.workout || null;
         if (nextWorkout) {
           defaultWorkoutPlan = workoutToDayPlan(nextWorkout, {
             units: accountSettings?.units || null,
             isCurrent: false,
           });
+          defaultWorkoutFetchedAt = Date.now();
         } else {
           defaultWorkoutPlan = null;
         }
@@ -3601,7 +3617,7 @@ function startInitialNetworkLoad() {
           return;
         }
 
-        loadOutline(programs[currentIndex], { nextScreen: EXTENSION_SCREENS.HOME });
+        loadOutline(programs[currentIndex], { nextScreen: EXTENSION_SCREENS.HOME, reply: outlineReply });
       });
     })
     .catch(handleInitialLoadFailure);
@@ -3651,8 +3667,10 @@ function retryConnection() {
 
 function loadDisplaySettings() {
   const generation = lifecycleGeneration;
+  // build() starts the launch load and the onResume right after it asks again: one reply serves both.
+  if (displaySettingsLoad && displaySettingsLoad.generation === generation) return displaySettingsLoad.promise;
   const diagnosticsPayload = workoutDiagnostics.isEnabled() ? { diagnostics: workoutDiagnostics.read() } : {};
-  return send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsPayload).then((settingsRes) => {
+  const promise = send(MESSAGE_TYPES.GET_SETTINGS, diagnosticsPayload).then((settingsRes) => {
     if (isTearingDown || generation !== lifecycleGeneration) return accountSettings;
     const diagnosticsWereEnabled = workoutDiagnostics.isEnabled();
     workoutDiagnostics.setEnabled(normalizeWorkoutDiagnosticsEnabled(settingsRes.payload?.workoutDiagnosticsEnabled));
@@ -3681,12 +3699,19 @@ function loadDisplaySettings() {
     }
     return accountSettings;
   });
+  const load = { generation, promise };
+  displaySettingsLoad = load;
+  const release = () => {
+    if (displaySettingsLoad === load) displaySettingsLoad = null;
+  };
+  promise.then(release, release);
+  return promise;
 }
 
-function loadOutline(program, { nextScreen = EXTENSION_SCREENS.WEEKS } = {}) {
+function loadOutline(program, { nextScreen = EXTENSION_SCREENS.WEEKS, reply = null } = {}) {
   selectedProgram = program;
   beginRequest('Loading outline...');
-  send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id })
+  (reply || send(MESSAGE_TYPES.GET_PROGRAM_OUTLINE, { programId: program.id }))
     .then((res) => {
       isBusy = false;
       statusMessage = '';

@@ -101,7 +101,7 @@ for (const product of ['page', 'data-widget']) {
       accountSettings: {}, restPresentation: createRestPresentationState(),
       normalizeExerciseImages: Boolean, normalizeGetReadySeconds: value => value,
       normalizeWorkoutDiagnosticsEnabled: Boolean, exerciseImages: null,
-      isNotesModalOpen: false, isTearingDown: false, lifecycleGeneration: 1,
+      isNotesModalOpen: false, isTearingDown: false, lifecycleGeneration: 1, displaySettingsLoad: null,
       controllerUiDirty: false, screen: 'SESSION', SCREEN: { SESSION: 'SESSION' },
       EXTENSION_SCREENS: { SESSION: 'SESSION' }, MESSAGE_TYPES: { GET_SETTINGS: 'GET_SETTINGS' },
       workoutDiagnostics: { isEnabled: () => false, setEnabled() {} },
