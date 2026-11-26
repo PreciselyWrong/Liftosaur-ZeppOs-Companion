@@ -10,6 +10,22 @@ function extractFunction(name) {
   return source.slice(start, source.indexOf('\n}', start) + 2);
 }
 
+test('a second Companion Retry tap during a launch load starts no second load', () => {
+  let loads = 0;
+  const state = {
+    isBusy: false, errorMessage: '', statusMessage: '', connectionRetryTimer: null, connectionRetryAttempt: 0,
+    PHONE_CONNECTING_MESSAGE: '', MESSAGE_TYPES: { LIST_PROGRAMS: 'LIST_PROGRAMS' },
+    renderUI() {}, clearTimeout() {},
+    send() { loads += 1; return new Promise(() => {}); },
+  };
+  const names = ['retryConnection', 'resetConnectionRetry', 'loadPrograms', 'beginRequest', 'handleInitialLoadFailure'];
+  const scope = new Proxy(state, { has: (target, key) => key in target });
+  const retry = new Function('scope', `with (scope) { ${names.map(extractFunction).join('\n')}; return retryConnection; }`)(scope);
+  retry();
+  retry();
+  assert.equal(loads, 1);
+});
+
 test('a Companion outline failure on the loading screen moves to a screen with Retry', async () => {
   for (const temporary of [true, false]) {
     const state = {

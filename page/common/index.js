@@ -729,6 +729,8 @@ function scheduleConnectionRetry() {
 }
 
 function retryConnection() {
+  // A second launch load in flight could land on Home after the lifter has already started a workout.
+  if (isBusy) return;
   resetConnectionRetry();
   loadPrograms();
 }
