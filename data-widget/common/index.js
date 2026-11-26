@@ -3583,19 +3583,21 @@ function startInitialNetworkLoad() {
         loadOutline(programs[currentIndex], { nextScreen: EXTENSION_SCREENS.HOME });
       });
     })
-    .catch((err) => {
-      if (isTemporaryPhoneError(err)) {
-        isBusy = false;
-        statusMessage = '';
-        errorMessage = '';
-        screen = EXTENSION_SCREENS.CONNECTION;
-        renderUI();
-        scheduleConnectionRetry();
-        return;
-      }
-      screen = EXTENSION_SCREENS.SETUP;
-      failRequest(err);
-    });
+    .catch(handleInitialLoadFailure);
+}
+
+function handleInitialLoadFailure(err) {
+  if (isTemporaryPhoneError(err)) {
+    isBusy = false;
+    statusMessage = '';
+    errorMessage = '';
+    screen = EXTENSION_SCREENS.CONNECTION;
+    renderUI();
+    scheduleConnectionRetry();
+    return;
+  }
+  screen = EXTENSION_SCREENS.SETUP;
+  failRequest(err);
 }
 
 function resetConnectionRetry() {
@@ -3673,7 +3675,11 @@ function loadOutline(program, { nextScreen = EXTENSION_SCREENS.WEEKS } = {}) {
       }
       renderUI();
     })
-    .catch(failRequest);
+    .catch((err) => {
+      // The loading screen has no Retry, so a first-load failure needs a screen that does.
+      if (screen === EXTENSION_SCREENS.LOADING) handleInitialLoadFailure(err);
+      else failRequest(err);
+    });
 }
 
 function loadDayPlan(week, day) {
