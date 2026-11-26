@@ -67,7 +67,10 @@ function serviceHarness(enabled = true) {
     isEnabled: () => enabled,
     download: (...args) => downloadImpl(...args),
     convert: (value) => { convertOptions = value; return convertImpl(value); },
-    sendFile(path, params) { transfers.push({ path, params }); return { on() {} }; },
+    sendFile(path, params) {
+      transfers.push({ path, params });
+      return { on(_, fn) { setImmediate(() => fn({ data: { readyState: 'transferring' } })); } };
+    },
     onFailure(details) { failures.push(details); },
   };
   const service = createExerciseImageService(dependencies);
@@ -242,6 +245,44 @@ test('a missing cached file is rebuilt at a new path after enqueue rejects it', 
   assert.equal((await retry).status, 'queued');
   assert.notEqual(h.transfers[1].path, oldPath);
   assert.equal(h.transfers[1].params.cached, false);
+});
+test('a cached file that the transfer later reports missing is downloaded again before replying', async () => {
+  const h = serviceHarness();
+  const first = h.service.load({ imageUrl });
+  completeDownload(h);
+  await first;
+  const oldPath = h.transfers[0].path;
+  // An Active 2 log: the converted file of an earlier phone session was gone, enqueue returned
+  // normally and the transfer then failed with -32502 "does not exist".
+  h.dependencies.sendFile = (path, params) => {
+    h.transfers.push({ path, params });
+    const listeners = [];
+    if (params.cached) setTimeout(() => listeners.forEach((fn) => fn({ data: { readyState: 'error' } })), 50);
+    return { on(_, fn) { listeners.push(fn); } };
+  };
+  const restarted = createExerciseImageService({ ...h.dependencies, generation: 'later' });
+  const retry = restarted.load({ imageUrl, requestId: 'later' });
+  await new Promise((resolve) => setTimeout(resolve, 80));
+  completeDownload(h);
+  assert.equal((await retry).status, 'queued');
+  assert.equal(h.transfers.length, 3);
+  assert.notEqual(h.transfers[2].path, oldPath);
+  assert.equal(h.transfers[2].params.cached, false);
+  assert.equal(h.transfers[2].params.requestId, 'later');
+});
+test('a cached transfer that starts normally replies queued without a new download', async () => {
+  const h = serviceHarness();
+  const first = h.service.load({ imageUrl });
+  completeDownload(h);
+  await first;
+  h.dependencies.sendFile = (path, params) => {
+    h.transfers.push({ path, params });
+    return { on(_, fn) { setTimeout(() => fn({ data: { readyState: 'transferring' } }), 10); } };
+  };
+  h.setDownload(() => { throw new Error('cached image should not be downloaded'); });
+  const restarted = createExerciseImageService({ ...h.dependencies, generation: 'later' });
+  assert.equal((await restarted.load({ imageUrl })).status, 'queued');
+  assert.equal(h.transfers.length, 2);
 });
 test('failed downloads retry their reserved slot and oversize downloads never transfer', async () => {
   const h = serviceHarness();
