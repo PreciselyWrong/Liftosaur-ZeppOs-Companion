@@ -2116,6 +2116,9 @@ function renderActiveSetScreen(view) {
     text_size: font('button'),
     diagnosticAction: isResting || view.timedSet ? 'START_SET' : 'COMPLETE_SET',
     click_func: () => {
+      // The steppers change the set without a redraw: complete it with the values on screen now.
+      const shown = workoutController.view();
+      const set = (isResting && shown.pending ? shown.pending.set : null) || shown.currentSet;
       if (!isResting && view.timedSet) {
         const reason = checkRequiredPhoneInput(set);
         if (reason) { phoneRequiredReason = reason; controllerUiDirty = true; return; }
