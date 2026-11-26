@@ -3,6 +3,7 @@ import { exerciseDownloadUrl, exerciseImageFileExtension, MAX_EXERCISE_IMAGE_BYT
 export const EXERCISE_IMAGE_STORAGE_KEY = 'exerciseImageFilesV7';
 export const MAX_EXERCISE_IMAGE_FILES = 32;
 let serviceSequence = 0;
+const CACHED_TRANSFER_CHECK_MS = 1500;
 const unavailable = (reason) => ({ status: 'unavailable', reason });
 const safeDetail = (value) => typeof value === 'string'
   ? value.replace(/(?:https?:\/\/|data:\/\/|[a-zA-Z]:[\\/])\S+/g, '[path]').slice(0, 120)
@@ -28,6 +29,31 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
     operation.canceled = true;
     try { operation.task?.cancel(); } catch {}
     if (operation.reject) operation.reject(new Error('Image download stopped'));
+  }
+
+  // On an Active 2 a cached path from an earlier phone session was gone: enqueue returned normally and
+  // the transfer failed afterwards with -32502 "does not exist", so a plain `queued` left the watch
+  // waiting for a file that never came. A transfer reporting an error first is downloaded again.
+  function cachedTransferStarts(file) {
+    if (!file || typeof file.on !== 'function') return Promise.resolve(true);
+    return new Promise((resolve) => {
+      let timeout = null;
+      const settle = (started) => {
+        if (timeout === null) return;
+        clearTimeout(timeout);
+        timeout = null;
+        resolve(started);
+      };
+      timeout = setTimeout(() => settle(true), CACHED_TRANSFER_CHECK_MS);
+      if (timeout && typeof timeout.unref === 'function') timeout.unref();
+      const check = (event) => {
+        const state = (event && event.data && event.data.readyState) || file.readyState;
+        if (state === 'error') settle(false);
+        else if (state === 'transferring' || state === 'transferred') settle(true);
+      };
+      try { file.on('change', check); } catch { settle(true); return; }
+      check();
+    });
   }
 
   async function performLoad({ imageUrl, requestId, forceRefresh = false } = {}) {
@@ -66,13 +92,16 @@ export function createExerciseImageService({ download, convert, sendFile, isEnab
           && !forceRefresh;
         if (cached) {
           stage = 'transfer';
+          let file = null;
           let queued = false;
           try {
-            sendFile(files[index].targetPath, { type: 'exercise-image', imageUrl: url, requestId, cached: true });
+            file = sendFile(files[index].targetPath, { type: 'exercise-image', imageUrl: url, requestId, cached: true });
             queued = true;
           } catch {
             // The phone may have removed the converted file since settingsStorage saved its path.
           }
+          if (queued) queued = await cachedTransferStarts(file);
+          if (!allowed()) return { status: 'disabled' };
           if (queued) {
             files.push(files.splice(index, 1)[0]);
             try { save(files); } catch {}

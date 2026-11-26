@@ -125,6 +125,7 @@ export const WORKOUT_DIAGNOSTIC_CODES = Object.freeze({
   IMAGE_UNAVAILABLE: 'IMAGE_UNAVAILABLE',
   PHONE_REQUEST: 'PHONE_REQUEST',
   PHONE_REPLY: 'PHONE_REPLY',
+  EXIT: 'EXIT',
 });
 
 const VERSION = 1;
@@ -186,6 +187,7 @@ const SYNCHRONOUS_WRITE_CODES = new Set([
   WORKOUT_DIAGNOSTIC_CODES.JS_ERROR,
   WORKOUT_DIAGNOSTIC_CODES.BOOT,
   WORKOUT_DIAGNOSTIC_CODES.PAUSE,
+  WORKOUT_DIAGNOSTIC_CODES.EXIT,
 ]);
 
 function safeEnum(value, allowed) {
@@ -363,7 +365,10 @@ function applyStep(report, step) {
   const previousHasAction = Boolean(report.details?.lastAction || report.details?.lastError);
   const hasUserEvidence = report.events.some((entry) => [WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, WORKOUT_DIAGNOSTIC_CODES.SET_TAP, WORKOUT_DIAGNOSTIC_CODES.FINISH_TAP].includes(entry.code));
   const hasStartupFailureEvidence = !report.previousRuns?.length && report.events.length > 1;
-  const hasMeaningfulEvidence = previousHasAction || hasUserEvidence || hasStartupFailureEvidence;
+  // A run that stayed on screen for a heartbeat and never reached EXIT was killed, even without a tap.
+  const closedNormally = report.events.at(-1)?.code === WORKOUT_DIAGNOSTIC_CODES.EXIT;
+  const hasUnexpectedEndEvidence = !closedNormally && report.events.some((entry) => entry.code === WORKOUT_DIAGNOSTIC_CODES.HEARTBEAT);
+  const hasMeaningfulEvidence = previousHasAction || hasUserEvidence || hasStartupFailureEvidence || hasUnexpectedEndEvidence;
   const finishedRun = { events: report.events.slice(-MAX_EVENTS), ...(report.details ? { details: report.details } : {}) };
   const previousRuns = isBoot && hasMeaningfulEvidence
     ? [finishedRun, ...(report.previousRuns || [])].slice(0, MAX_PREVIOUS_RUNS)

@@ -108,6 +108,96 @@ function mapWorkoutSet(set, setIndex, isWarmupDefault, planUnit) {
 }
 
 /**
+ * Rebuilds the part of the gym equipment an entry has proven, from the plates
+ * the server proposed for its sets, so an edited weight can be re-broken down
+ * on the watch without a request.
+ *
+ * Each set's `loading.instruction` gives the plates on one horn and the number
+ * of sides; the bar is what `loading.total` holds beyond them. Every exact plate
+ * loading must agree on the bar and the sides, or nothing is returned. Counts
+ * are the most of each plate any one set used, a floor of what is on hand, so a
+ * breakdown built from them can always be loaded. One-sided stacks match the
+ * real payloads; any other side count needs two different loadings agreeing
+ * before the formula is trusted.
+ *
+ * @returns {object|null} equipment in the `GET /gyms/:id/equipment` shape,
+ *          marked `inferred` because it is only the part of the gym seen
+ */
+function inferLoadingEquipment(rawSets) {
+  let unit = null;
+  let sides = null;
+  let bar = null;
+  const sums = new Set();
+  const perSide = new Map();
+
+  for (const set of rawSets) {
+    const loading = set?.loading;
+    const instruction = loading?.instruction;
+    if (instruction?.type !== 'plates' || loading.exact !== true) continue;
+    const total = parseWeightString(loading.total, null);
+    const horns = instruction.horns;
+    if (!total || total.unit !== normalizeUnit(loading.unit) || !Array.isArray(horns) || horns.length !== 1
+      || !Array.isArray(horns[0]?.plates) || (instruction.addOn && instruction.addOn.length > 0)
+      || !Number.isInteger(instruction.sides) || instruction.sides < 1) return null;
+
+    let sum = 0;
+    for (const plate of horns[0].plates) {
+      if (!Number.isFinite(plate?.weight) || plate.weight <= 0 || !Number.isInteger(plate.num) || plate.num < 0) return null;
+      sum += plate.weight * plate.num;
+      perSide.set(plate.weight, Math.max(perSide.get(plate.weight) || 0, plate.num));
+    }
+    const setBar = Math.round((total.value - instruction.sides * sum) * 100000) / 100000;
+    if (setBar < 0) return null;
+    if (unit === null) {
+      unit = total.unit;
+      sides = instruction.sides;
+      bar = setBar;
+    } else if (total.unit !== unit || instruction.sides !== sides || setBar !== bar) {
+      return null;
+    }
+    sums.add(Math.round(sum * 100000));
+  }
+
+  if (unit === null || (sides !== 1 && sums.size < 2)) return null;
+  return {
+    inferred: true,
+    bar: { [unit]: `${bar}${unit}` },
+    multiplier: sides,
+    isFixed: false,
+    plates: [...perSide].map(([weight, num]) => ({ weight: `${weight}${unit}`, num: num * sides })),
+  };
+}
+
+/**
+ * Expands the compact equipment the phone attached (`workout.gymEquipment`,
+ * indexed by `entry.gymEquipment`) into the `GET /gyms/:id/equipment` shape.
+ * Anything malformed yields null so the inferred equipment is used instead.
+ */
+function attachedEquipment(workout, entry) {
+  const compact = Array.isArray(workout.gymEquipment) && Number.isInteger(entry.gymEquipment)
+    ? workout.gymEquipment[entry.gymEquipment]
+    : null;
+  const unit = normalizeUnit(compact?.unit);
+  if (!unit) return null;
+  const isWeight = (value) => Number.isFinite(value) && value >= 0;
+
+  if (Array.isArray(compact.fixed)) {
+    if (!compact.fixed.length || !compact.fixed.every(isWeight)) return null;
+    return { bar: {}, multiplier: 1, isFixed: true, plates: [], fixed: compact.fixed.map((weight) => `${weight}${unit}`) };
+  }
+
+  if (!isWeight(compact.bar) || !Number.isInteger(compact.sides) || compact.sides < 1 || !Array.isArray(compact.plates)
+    || !compact.plates.every((plate) => Array.isArray(plate) && isWeight(plate[0]) && Number.isInteger(plate[1]))) return null;
+  return {
+    bar: { [unit]: `${compact.bar}${unit}` },
+    multiplier: compact.sides,
+    isFixed: false,
+    plates: compact.plates.map(([weight, num]) => ({ weight: `${weight}${unit}`, num })),
+    fixed: [],
+  };
+}
+
+/**
  * Translates a Liftosaur Running Workout object into a Day Plan.
  *
  * @param {object} workout Unmodified `data.workout` from GET /workout/next or /current
@@ -134,6 +224,7 @@ export function workoutToDayPlan(workout, { units = null, isCurrent = false } = 
       exerciseId: entry.exerciseId ?? null,
       name: entry.name || `Exercise ${index + 1}`,
       equipment: entry.equipment ?? null,
+      loadingEquipment: attachedEquipment(workout, entry) || inferLoadingEquipment([...rawWarmupSets, ...rawSets]),
       supersetGroup: entry.superset ?? null,
       supersetTag: entry.superset ?? null,
       notes: entry.notes ?? null,

@@ -15,7 +15,10 @@ export function createSideRouter({ programService = null, workoutService = null,
   }
 
   function apiFailure(message, err) {
-    const code = err?.code || ERROR_CODES.API_FAILED;
+    // The watch gives up on any code but API_FAILED or NETWORK, so a server hiccup or a
+    // response cut short must not carry a code that reads as a permanent rejection.
+    const transient = err?.status === 429 || err?.status >= 500 || err?.code === 'BAD_JSON';
+    const code = (!transient && err?.code) || ERROR_CODES.API_FAILED;
     const text = err?.apiMessage || err?.message || 'Liftosaur API error';
     return createError(message, code, text);
   }
@@ -163,7 +166,9 @@ export function createSideRouter({ programService = null, workoutService = null,
               return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, 'sets must be a non-empty array');
             }
             const result = await workoutService.syncWorkoutSets(sets);
-            return createReply(rawMessage, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT, result);
+            // The watch only compares startTime, and a full workout per set fills its memory pool.
+            const startTime = result?.workout?.startTime;
+            return createReply(rawMessage, MESSAGE_TYPES.SYNC_WORKOUT_SETS_RESULT, startTime ? { workout: { startTime } } : {});
           } catch (err) {
             return apiFailure(rawMessage, err);
           }

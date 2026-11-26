@@ -8,7 +8,7 @@ Use this checklist after installing the new Lifto Workout preview.
 - Firmware: 7.23.0.1
 - API level: 400
 - Zepp workouts: Strength Training and Free Training
-- Lifto Workout version: 0.5.14 beta
+- Lifto Workout version: 0.5.15 beta
 
 Record the tested commit and date before starting:
 
@@ -35,6 +35,7 @@ Repeat the test for `60 seconds`, `120 seconds`, `240 seconds`, and `Always` in 
 - [ ] Pause the native Zepp workout for at least 30 seconds.
 - [ ] Return to Lifto and confirm its elapsed time excluded the pause.
 - [ ] Resume the native workout and confirm the Lifto timer advances again.
+- [ ] Pause Zepp again, open the purple elapsed timer, tap `Resume`, and confirm Lifto runs even while Zepp stays paused.
 - [ ] Finish the workout and confirm Liftosaur history excludes the paused interval.
 
 ## 3. Native pause during rest

@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import vm from 'node:vm';
 import test from 'node:test';
+import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
 import * as autoPrepareHelpers from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { createWorkoutSession, SESSION_STATES } from '../shared/workout-session.js';
@@ -14,6 +15,7 @@ function renderer(product, session, autoPrepare, storedPreferences = new Map()) 
   const rendered = [];
   const env = {
     ...autoPrepareHelpers, deviceStorage: { getItem: key => storedPreferences.get(key) },
+    exerciseImages: null, exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS,
     session, workoutController: { view: () => session.view(), sync: () => ({}) },
     SESSION_STATES, SCREEN: screens, EXTENSION_SCREENS: screens, screen: screens.SESSION,
     accountSettings: { autoPrepare }, restPresentation: createRestPresentationState(),
@@ -99,7 +101,7 @@ for (const product of ['page', 'data-widget']) {
       accountSettings: {}, restPresentation: createRestPresentationState(),
       normalizeExerciseImages: Boolean, normalizeGetReadySeconds: value => value,
       normalizeWorkoutDiagnosticsEnabled: Boolean, exerciseImages: null,
-      isNotesModalOpen: false, isTearingDown: false, lifecycleGeneration: 1,
+      isNotesModalOpen: false, isTearingDown: false, lifecycleGeneration: 1, displaySettingsLoad: null,
       controllerUiDirty: false, screen: 'SESSION', SCREEN: { SESSION: 'SESSION' },
       EXTENSION_SCREENS: { SESSION: 'SESSION' }, MESSAGE_TYPES: { GET_SETTINGS: 'GET_SETTINGS' },
       workoutDiagnostics: { isEnabled: () => false, setEnabled() {} },

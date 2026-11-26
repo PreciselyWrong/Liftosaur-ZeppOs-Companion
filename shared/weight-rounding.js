@@ -61,13 +61,13 @@ function usablePlateGroups(equipment, unit) {
 }
 
 /**
- * Largest subset sum of `plates` that does not exceed `capacity`.
+ * Every plate total reachable up to `limit`, each with its preferred loading:
+ * fewest plates, then the heaviest first.
  *
  * Exhaustive over distinct values with their available counts, so it does not
  * miss a combination the way a plain greedy fill would.
  */
-function bestFill(groups, capacity) {
-  let best = { total: 0, plates: [] };
+function reachableLoads(groups, limit) {
   const reachable = new Map([[0, []]]);
 
   function isPreferred(candidate, current) {
@@ -83,19 +83,61 @@ function bestFill(groups, capacity) {
     const additions = new Map();
     for (const [total, plates] of reachable) {
       const next = round5(total + group.totalWeight);
-      if (next <= capacity + 1e-9) {
+      if (next <= limit + 1e-9) {
         const selected = [...plates, group.plateWeight];
-        const existing = additions.get(next) || reachable.get(next);
-        if (isPreferred(selected, existing)) additions.set(next, selected);
-        if (next > best.total || (next === best.total && isPreferred(selected, best.plates))) {
-          best = { total: next, plates: selected };
-        }
+        if (isPreferred(selected, additions.get(next) || reachable.get(next))) additions.set(next, selected);
       }
     }
     for (const [total, plates] of additions) reachable.set(total, plates);
   }
 
+  return reachable;
+}
+
+/** Largest subset sum of `plates` that does not exceed `capacity`. */
+function bestFill(groups, capacity) {
+  let best = { total: 0, plates: [] };
+  for (const [total, plates] of reachableLoads(groups, capacity)) {
+    if (total > best.total) best = { total, plates };
+  }
   return best;
+}
+
+/**
+ * The loadable totals closest to `target` on each side, `null` where the
+ * equipment has nothing lighter or heavier. Only for equipment the account
+ * listed: an inferred subset would hide loads the lifter can make.
+ */
+export function nearestLoadable(target, equipment, unit = 'kg') {
+  if (!Number.isFinite(target) || !equipment) return null;
+  let totals;
+  if (equipment.isFixed) {
+    totals = fixedWeights(equipment, unit);
+  } else {
+    const bar = parseWeightString(equipment.bar?.[unit], unit);
+    const barWeight = bar ? bar.value : 0;
+    const groups = usablePlateGroups(equipment, unit);
+    // The lightest total at or above the target overshoots it by less than one group.
+    const limit = target - barWeight + (groups.length ? groups[0].totalWeight : 0);
+    totals = [...reachableLoads(groups, Math.max(0, limit)).keys()].map((total) => round5(barWeight + total));
+  }
+  if (totals.length === 0) return null;
+
+  let below = null;
+  let above = null;
+  for (const total of totals) {
+    if (total <= target + 1e-9 && (below === null || total > below)) below = total;
+    if (total >= target - 1e-9 && (above === null || total < above)) above = total;
+  }
+  return { below, above };
+}
+
+function fixedWeights(equipment, unit) {
+  return (equipment.fixed || [])
+    .map((entry) => parseWeightString(entry, unit))
+    .filter((parsed) => parsed && parsed.unit === unit)
+    .map((parsed) => parsed.value)
+    .sort((a, b) => a - b);
 }
 
 /** Resolves both the achievable total and the exact physical loading. */
@@ -105,11 +147,7 @@ export function resolveLoadout(target, equipment, unit = 'kg') {
   }
 
   if (equipment.isFixed) {
-    const fixed = (equipment.fixed || [])
-      .map((entry) => parseWeightString(entry, unit))
-      .filter((parsed) => parsed && parsed.unit === unit)
-      .map((parsed) => parsed.value)
-      .sort((a, b) => a - b);
+    const fixed = fixedWeights(equipment, unit);
 
     if (fixed.length === 0) return { value: target, exact: false, resolved: false };
 
@@ -179,11 +217,30 @@ export function formatPlatesObject(plates, unit = 'kg') {
   return `${formattedPlates} ${suffix}`;
 }
 
-/** A compact watch label, returned only when the requested weight is exact. */
+/**
+ * A compact watch label for the weight on screen. The server's own breakdown
+ * wins while the weight is the one it was made for; an edited weight is broken
+ * down from the equipment. A weight the account's equipment cannot make
+ * exactly names the nearest loadable weights instead, never another weight's
+ * breakdown. Equipment inferred from the workout (`inferred: true`) only knows
+ * part of the gym, so it answers exact weights only.
+ */
 export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null, targetWeight = null) {
+  const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
+  const edited = Number.isFinite(target) && Number.isFinite(targetWeight) && Math.abs(target - targetWeight) > 1e-9;
+  if (Array.isArray(directPlates) && !edited) {
+    const direct = formatPlatesObject(directPlates, unit);
+    if (direct) return direct;
+  }
+
   if (equipment && typeof equipment === 'object') {
     if (Array.isArray(equipment.plates) || equipment.bar || equipment.isFixed) {
       const loadout = resolveLoadout(target, equipment, unit);
+      if (loadout.resolved && !loadout.exact && !equipment.inferred) {
+        const nearest = nearestLoadable(target, equipment, unit);
+        const sides = [nearest?.below, nearest?.above].filter((value) => value !== null && value !== undefined);
+        if (sides.length) return `NEAR ${sides.map(formatNumber).join('/')} ${unit.toUpperCase()}`;
+      }
       if (loadout.resolved && loadout.exact) {
         const suffix = unit.toUpperCase();
         if (loadout.kind === 'fixed') return `USE ${formatNumber(loadout.value)} ${suffix}`;
@@ -201,18 +258,6 @@ export function formatLoadoutLabel(target, equipment, unit = 'kg', plates = null
         return `${formattedPlates} ${suffix}`;
       }
     }
-  }
-
-  const directPlates = plates || (target && typeof target === 'object' ? target.plates : null);
-  if (Array.isArray(directPlates)) {
-    if (
-      Number.isFinite(target) &&
-      Number.isFinite(targetWeight) &&
-      Math.abs(target - targetWeight) > 1e-9
-    ) {
-      return null;
-    }
-    return formatPlatesObject(directPlates, unit);
   }
 
   return null;

@@ -14,6 +14,7 @@ import {
   WORKOUT_PROGRESS_LAYOUT,
   activeSetLayout,
   extensionActiveSetLayout,
+  activeSetHeaderLayout,
   stepperRowLayout,
   shouldShowRpe,
   LIST_PAGE_SIZE,
@@ -127,6 +128,44 @@ test('active set action button fits within circular screen chord and keeps clock
   assert.ok(ACTIVE_SET_ACTION_LAYOUT.x >= leftEdge, 'Action button left must fit within round chord');
   assert.ok(ACTIVE_SET_ACTION_LAYOUT.x + ACTIVE_SET_ACTION_LAYOUT.width <= rightEdge, 'Action button right must fit within round chord');
   assert.ok(EXTENSION_CLOCK_LAYOUT.y - bottomY >= EXTENSION_CLOCK_LAYOUT.minimumActionGap, 'Must keep minimum clock gap');
+});
+
+test('the set screen header shows the image, Info and Skip together, apart and above the first row', () => {
+  const radius = 240;
+  const inside = (x, y) => (x - radius) ** 2 + (y - radius) ** 2 <= radius ** 2;
+  const corners = (r) => [[r.x, r.y], [r.x + r.w, r.y], [r.x, r.y + r.h], [r.x + r.w, r.y + r.h]];
+  const overlaps = (a, b) => a.x < b.x + b.w && b.x < a.x + a.w && a.y < b.y + b.h && b.y < a.y + a.h;
+  // Workout and Companion draw Info at these rects; title, progress and superset lines span y 92 to 170.
+  for (const info of [{ x: 356, y: 88, w: 62, h: 38 }, { x: 354, y: 88, w: 64, h: 38 }]) {
+    for (const showsImage of [false, true]) {
+      for (const canSkipWarmup of [false, true]) {
+        for (const set of [{ targetRpe: 8 }, {}]) {
+          const header = activeSetHeaderLayout({ showsImage, canSkipWarmup, info });
+          const firstRowY = activeSetLayout(set).rows[0].y;
+          const text = { x: header.textX, y: 92, w: header.textWidth, h: 78 };
+          const parts = { info, text, image: header.image, skip: header.skip };
+          const label = JSON.stringify({ info: info.x, showsImage, canSkipWarmup, rpe: Boolean(set.targetRpe) });
+          assert.equal(Boolean(header.image), showsImage, label);
+          assert.equal(Boolean(header.skip), canSkipWarmup, label);
+          const drawn = Object.entries(parts).filter(([, rect]) => rect);
+          for (const [name, rect] of drawn) {
+            assert.ok(rect.y + rect.h <= firstRowY, `${name} stays above the first row ${label}`);
+            for (const [x, y] of corners(rect)) assert.ok(inside(x, y), `${name} fits the round screen ${label}`);
+          }
+          for (let i = 0; i < drawn.length; i++) {
+            for (let j = i + 1; j < drawn.length; j++) {
+              assert.ok(!overlaps(drawn[i][1], drawn[j][1]), `${drawn[i][0]} and ${drawn[j][0]} overlap ${label}`);
+            }
+          }
+          if (header.skip) assert.ok(header.skip.w >= 60 && header.skip.h >= 36, `Skip stays a full touch target ${label}`);
+          if (header.image) assert.ok(header.image.inner.w >= 56 && header.image.inner.h >= 56, label);
+          if (canSkipWarmup && !showsImage) {
+            assert.deepEqual(header.skip, { x: 62, y: 88, w: 64, h: 38 }, 'without an image Skip keeps its corner');
+          }
+        }
+      }
+    }
+  }
 });
 
 test('ready exercise pages preserve order and wrap in both directions', () => {

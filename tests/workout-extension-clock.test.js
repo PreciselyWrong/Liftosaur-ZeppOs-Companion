@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import test from 'node:test';
+import { exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS } from '../shared/exercise-image-client.js';
 
 const source = fs.readFileSync(new URL('../data-widget/common/index.js', import.meta.url), 'utf8');
 
@@ -22,13 +23,14 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
   const view = { state: initialState, rest: null, elapsedSeconds: 1 };
   const env = {
     isTearingDown: false, isPaused: false, hasBuilt: false, isDispatchingClick: false,
+    exerciseImages: null, exerciseImagePreloadFor, PRELOAD_TAP_QUIET_MS,
     isEditLastSetOpen: false, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false,
     discardConfirmationRequested: false, phoneRequiredReason: null, isNotesModalOpen: false,
     isOverviewOpen: false, isRestMinimized: false, liveWidgets: {}, renderTimer: null,
     screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION', HOME: 'HOME' },
     SESSION_STATES: { ACTIVE_SET: 'ACTIVE_SET', REST: 'REST', READY: 'READY', NO_PLAN: 'NO_PLAN', FINISHED: 'FINISHED' },
     controllerUiDirty: false, lastRenderedState: null, lastRenderedSecond: null,
-    syncWarning: null, dayPlan: null, preparationImageUrl: null, isBusy: false,
+    syncWarning: null, dayPlan: null, defaultWorkoutPlan: null, preparationImageUrl: null, isBusy: false,
     restoredDisplaySettingsPending: false, terminalActionPending: null, initialLoadPending: false,
     lifecycleGeneration: 0, lastPendingSyncRetryAt: 0,
     W: 480, H: 480, THEME: { bg: 0 }, widget: { FILL_RECT: 1 },

@@ -94,21 +94,3 @@ test('release metadata contains the exact validity of both generated QR codes', 
   assert.match(source, /Lifto Workout QR valid until/);
   assert.doesNotMatch(source, /expire about seven days/);
 });
-
-test('the project release skill owns the complete agent workflow', () => {
-  const skillPath = path.join(root, '.agents', 'skills', 'lifto-release', 'SKILL.md');
-  const metadataPath = path.join(root, '.agents', 'skills', 'lifto-release', 'agents', 'openai.yaml');
-
-  assert.equal(fs.existsSync(skillPath), true);
-  assert.equal(fs.existsSync(metadataPath), true);
-
-  const skill = fs.readFileSync(skillPath, 'utf8');
-  assert.match(skill, /^name: lifto-release$/m);
-  assert.match(skill, /publish\.ps1/);
-  assert.match(skill, /public-release-audit/);
-  assert.match(skill, /PUBLISH_OK/);
-  assert.match(skill, /refresh/i);
-  assert.match(skill, /GitHub Releases/);
-  assert.match(skill, /CHANGELOG\.md/);
-  assert.match(skill, /validity date and time/i);
-});

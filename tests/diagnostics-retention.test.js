@@ -209,3 +209,19 @@ for (const [name, file, instanceKey] of [
     assert.match(formatWorkoutDiagnostics(diagnostics.read()), /PHONE_FAILED .*request SYNC_WORKOUT_SETS failure TIMEOUT/);
   });
 }
+
+test('a run that lived on screen without a tap survives the restart that ended it', () => {
+  const f = fixture();
+  launch(f, [[CODES.ACTION_TAP, { action: 'START_SET' }], [CODES.EXIT]]);
+  launch(f, [[CODES.BUILD], [CODES.RENDER_END], [CODES.HEARTBEAT]]);
+  const report = launch(f).read();
+  assert.equal(report.previousRuns.length, 2);
+  assert.equal(report.previousRuns[0].events.at(-1).code, CODES.HEARTBEAT);
+});
+
+test('a tapless run that closed normally does not push the crashed run out', () => {
+  const f = fixture();
+  launch(f, [[CODES.ACTION_TAP, { action: 'START_SET' }]]);
+  launch(f, [[CODES.BUILD], [CODES.HEARTBEAT], [CODES.EXIT]]);
+  assert.deepEqual(actions(launch(f).read()), ['START_SET']);
+});

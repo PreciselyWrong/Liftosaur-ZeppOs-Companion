@@ -109,7 +109,8 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', workou
     assert.doesNotMatch(source, /restBannerText/);
     assert.doesNotMatch(active, /renderChangeUnderline/);
     assert.match(active, /changes\.exercise\)?\s*\?\s*THEME\.primaryLight\s*:\s*THEME\.textPrimary/);
-    assert.match(active, /text:\s*'Skip'[\s\S]*?x:\s*px\(62\)|x:\s*px\(62\)[\s\S]*?text:\s*'Skip'/);
+    // Skip's corner (x 62 without an image) is pinned by activeSetHeaderLayout and tests/active-set-image.test.js.
+    assert.match(active, /x:\s*px\(header\.skip\.x\)[\s\S]*?text:\s*'Skip'/);
   });
 }
 

@@ -452,6 +452,7 @@ test('Companion sync-details footer stays tappable while its label updates', () 
       getPendingSetCount: () => 1,
     },
     lastRenderedClock: '',
+    isSyncDetailsOpen: false,
     renderCount: 0,
     renderUI: () => { env.renderCount++; },
     THEME: env.THEME,
