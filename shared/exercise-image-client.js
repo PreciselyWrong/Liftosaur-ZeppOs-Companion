@@ -20,6 +20,9 @@ const AUTO_RETRY_AFTER_MS = 60000;
 const MAX_AUTO_RETRIES = 2;
 // The quiet moment a tap buys before the day preload asks for its next image.
 export const PRELOAD_TAP_QUIET_MS = 5000;
+// The quiet moment after a full screen rebuild or a session save, the other heavy steps an image must
+// not overlap: the native redraw and the flash write finish after the JavaScript call returns.
+export const UI_WORK_QUIET_MS = 1000;
 
 // What a workout screen does to the day preload: a set under way stops it; the ready, rest and Prepare
 // screens feed it the day's images, the upcoming exercise first, then the rest in workout order.
@@ -46,6 +49,16 @@ export function holdExerciseImagesDuring(images, type, start) {
     throw error;
   }
   return pending.then((value) => { release(); return value; }, (error) => { release(); throw error; });
+}
+
+// Image work waits for `work` and `quietMs` after it; the work itself never waits on images.
+export function holdExerciseImagesWhile(images, work, quietMs = UI_WORK_QUIET_MS) {
+  const release = images && typeof images.hold === 'function' ? images.hold() : null;
+  try {
+    return work();
+  } finally {
+    if (release) release(quietMs);
+  }
 }
 
 export function createExerciseImageClient({
@@ -224,14 +237,16 @@ export function createExerciseImageClient({
     armResume();
   }
 
+  // The release starts the quiet moment, `quietMs` long, once no other hold remains.
   function hold() {
     holds++;
     let released = false;
-    return () => {
+    return (quietMs = WORKOUT_QUIET_MS) => {
       if (released) return;
       released = true;
       holds--;
-      if (holds === 0) defer();
+      quietUntil = Math.max(quietUntil, Date.now() + quietMs);
+      if (holds === 0) defer(0);
     };
   }
 
