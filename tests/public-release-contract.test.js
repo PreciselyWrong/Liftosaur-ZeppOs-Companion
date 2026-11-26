@@ -73,6 +73,7 @@ test('gitleaks exemptions cover only reviewed historical test fixtures', () => {
     'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:252',
     'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:258',
     'c9aff143a955a418b8c294e24f28bc82d62c07f9:tests/liftosaur-workout-api-client.test.js:generic-api-key:286',
+    '403f77a43c3fbaa7dbec2f36b5ded381eb2c851b:tests/side-abuse.test.js:generic-api-key:11',
   ]);
 });
 
