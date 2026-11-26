@@ -183,8 +183,23 @@ export function createWorkoutController({
     }
   }
 
+  // What the last confirmed save wrote. The plan is replaced, never edited, and the session
+  // counts its journal changes, so identity and a small sync string prove an unchanged snapshot.
+  let savedSnapshot = null;
+
+  function clearStoredSession() {
+    savedSnapshot = null;
+    store.clear();
+  }
+
   function persist() {
     if (disposed || savedToCloud || !dayPlan || !store) return false;
+    const sync = JSON.stringify(directSync);
+    const revision = session.getJournalRevision();
+    if (!saveFailing && savedSnapshot && savedSnapshot.plan === dayPlan && savedSnapshot.session === session
+      && savedSnapshot.revision === revision && savedSnapshot.sync === sync) {
+      return true;
+    }
     const saved = store.save({
       plan: dayPlan,
       journal: session.getJournal(),
@@ -192,6 +207,7 @@ export function createWorkoutController({
       sync: directSync,
     });
     saveFailing = saved !== true;
+    savedSnapshot = saveFailing ? null : { plan: dayPlan, session, revision, sync };
     return saved;
   }
 
@@ -485,7 +501,7 @@ export function createWorkoutController({
     currentStatus = { code: SYNC_STATUS_CODES.IDLE, detail: null, error: null };
 
     if (clearStore && store) {
-      store.clear();
+      clearStoredSession();
     } else if (shouldPersist) {
       persist();
     }
@@ -599,7 +615,7 @@ export function createWorkoutController({
   function clear() {
     if (disposed) return;
     if (store) {
-      store.clear();
+      clearStoredSession();
     }
     saveFailing = false;
     session.cancelWorkout({ timestamp: now() });
@@ -1086,7 +1102,7 @@ export function createWorkoutController({
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       savedToCloud = true;
       if (store) {
-        store.clear();
+        clearStoredSession();
       }
       setStatus({ code: SYNC_STATUS_CODES.SAVED, detail: 'FINISH_CONFIRMED' });
       return { success: true, response: res };
