@@ -67,9 +67,9 @@ Desktop.ini
 ehthumbs.db
 .DS_Store
 
-# Local provider settings
-.claude/settings.local.json
-
-# Local agent instructions
+# Local agent files: instructions, skills, worktrees and the live tracker
 AGENTS.md
 CLAUDE.md
+TODO.md
+.claude/
+.agents/

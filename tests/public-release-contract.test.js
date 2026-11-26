@@ -12,11 +12,14 @@ function read(relativePath) {
 
 test('local agent instructions cannot enter a published Git tree', () => {
   const tracked = execFileSync('git', ['ls-files', '-z'], { cwd: root, encoding: 'utf8' }).split('\0');
-  assert.equal(tracked.some((file) => /(^|\/)(AGENTS|CLAUDE)\.md$/i.test(file)), false);
+  // `zeus dev` rewrites .gitignore, so the tracked files are the gate and the ignore rules only a convenience.
+  const local = /(^|\/)(\.claude|\.agents)\/|(^|\/)(TODO|AGENTS|CLAUDE)\.md$/i;
+  assert.deepEqual(tracked.filter((file) => local.test(file)), []);
 
   const gitignore = read('.gitignore');
-  assert.match(gitignore, /^AGENTS\.md$/m);
-  assert.match(gitignore, /^CLAUDE\.md$/m);
+  for (const rule of ['AGENTS.md', 'CLAUDE.md', 'TODO.md', '.claude/', '.agents/']) {
+    assert.equal(gitignore.split(/\r?\n/).includes(rule), true, `${rule} is missing from .gitignore`);
+  }
 });
 
 test('release surfaces agree on version 0.5.14 and code 50', () => {
