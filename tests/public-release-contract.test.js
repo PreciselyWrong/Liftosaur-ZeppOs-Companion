@@ -22,7 +22,7 @@ test('local agent instructions cannot enter a published Git tree', () => {
   }
 });
 
-test('release surfaces agree on version 0.5.14 and code 50', () => {
+test('release surfaces agree on version 0.5.15 and code 51', () => {
   const manifest = JSON.parse(read('package.json'));
   const app = JSON.parse(read('app.json'));
   const publicDocs = [
@@ -33,10 +33,10 @@ test('release surfaces agree on version 0.5.14 and code 50', () => {
     read('docs/workout-extension-hardware-test-plan.md'),
   ];
 
-  assert.equal(manifest.version, '0.5.14');
+  assert.equal(manifest.version, '0.5.15');
   assert.equal(app.app.version.name, manifest.version);
-  assert.equal(app.app.version.code, 50);
-  for (const document of publicDocs) assert.match(document, /0\.5\.14/);
+  assert.equal(app.app.version.code, 51);
+  for (const document of publicDocs) assert.match(document, /0\.5\.15/);
 });
 
 test('runtime logs contain no workout names or completed-set counts', () => {
