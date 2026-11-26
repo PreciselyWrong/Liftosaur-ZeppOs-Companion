@@ -25,6 +25,67 @@ function writtenSetIds(controller) {
   return [...new Set(controller.getWorkoutSetWrites().map((write) => write.setId))];
 }
 
+test('every message the watch sends is accepted by the phone router and its reply is used', async () => {
+  let time = 1_000_000;
+  const { cloud, link, store, controller } = await startDirectWorkout([[1, 2], [0, 1]], { time: () => time });
+  assert.equal(controller.sync().startConfirmed, true);
+  assert.equal(controller.view().currentSet.setId, 'live1-entry-1-warmup-1');
+
+  controller.completeSet();
+  await flush();
+  time += 30_000;
+  controller.nextSet();
+  controller.adjustReps(2);
+  controller.completeSet();
+  await flush();
+  const draft = controller.createLastSetDraft();
+  assert.equal(draft.success, true);
+  assert.deepEqual(controller.saveLastSetCorrection({ ...draft.draft, reps: 4 }), { success: true });
+  await flush();
+  assert.deepEqual(cloud.current().entries[0].sets[0].completed, { reps: 4, weight: '60kg' });
+  assert.equal(controller.sync().acknowledgedSetCount, controller.getWorkoutSetWrites().length);
+
+  const phoneEdit = structuredClone(cloud.current());
+  phoneEdit.entries[1].sets[0].weight = '90kg';
+  cloud.setCurrent(phoneEdit);
+  time += 200_000;
+  controller.nextSet();
+  await flush();
+  controller.selectExercise(1);
+  assert.equal(controller.view().currentSet.targetWeight, 90);
+  assert.equal(writtenSetIds(controller).length, 2);
+
+  controller.finishWorkout();
+  assert.equal((await controller.finishWorkoutRemote()).success, true);
+  assert.equal(store.load(), null);
+  assert.equal(cloud.history.length, 1);
+  assert.deepEqual(cloud.completedSets(cloud.history[0].workout).map((set) => set.setId), [
+    'live1-entry-1-warmup-1',
+    'live1-entry-1-work-1',
+  ]);
+  assert.deepEqual(cloud.history[0].intervals, [[1_000_000, time]]);
+  assert.deepEqual(
+    [...new Set(link.sent.map((message) => message.type))],
+    [MESSAGE_TYPES.START_WORKOUT, MESSAGE_TYPES.SYNC_WORKOUT_SETS, MESSAGE_TYPES.GET_WORKOUT_CURRENT, MESSAGE_TYPES.FINISH_WORKOUT]
+  );
+});
+
+test('a discard reaches the phone and clears the watch only once the phone confirms', async () => {
+  const { cloud, link, store, controller } = await startDirectWorkout([[0, 1]], { auto: false });
+  await link.deliver(0, 'ok');
+  const discard = controller.discardWorkoutRemote().catch((err) => err);
+  await flush();
+  await link.deliver(0, 'noReply');
+  assert.equal((await discard).code, 'NETWORK');
+  assert.notEqual(store.load(), null);
+
+  link.setAuto(true);
+  assert.deepEqual(await controller.discardWorkoutRemote(), { success: true });
+  assert.equal(cloud.current(), null);
+  assert.equal(store.load(), null);
+  assert.equal(controller.view().state, SESSION_STATES.NO_PLAN);
+});
+
 test('a refresh after skipping a warmup keeps the work set logged after it', async () => {
   let time = 1_000_000;
   const { cloud, controller } = await startDirectWorkout([[1, 2], [0, 1]], { time: () => time });
