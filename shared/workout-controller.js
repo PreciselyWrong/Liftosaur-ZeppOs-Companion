@@ -1035,6 +1035,16 @@ export function createWorkoutController({
     } catch (err) {
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
       logError('finish workout remote failed', err);
+      if (err?.code === 'no_active_workout') {
+        // A lost finish reply or a phone-side discard both end here: retrying cannot succeed,
+        // and only the lifter can tell which, so keep the session and ask.
+        directSync.conflict = true;
+        directSync.remoteMissing = true;
+        persist();
+        setStatus({ code: SYNC_STATUS_CODES.REMOTE_MISSING, detail: 'NO_REMOTE_WORKOUT', error: err });
+        notifyChange();
+        throw err;
+      }
       setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'FINISH_FAILED', error: err });
       throw err;
     } finally {
