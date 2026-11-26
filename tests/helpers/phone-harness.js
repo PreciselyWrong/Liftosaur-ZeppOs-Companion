@@ -9,9 +9,16 @@
  * are keyed by setId, finish and discard need the matching running workout.
  */
 
+import { readFileSync } from 'node:fs';
+
 import { createSideRouter } from '../../app-side/router.js';
 import { createWorkoutService } from '../../app-side/workout-service.js';
+import { createDummyProgramService } from '../../app-side/dummy-program-service.js';
+import { createDummyWorkoutService } from '../../app-side/dummy-workout-service.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
+import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
+import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
+import { launchPlanFor, suggestedProgramIndex } from '../../shared/selection.js';
 
 export function createRandom(seed) {
   let state = seed >>> 0;
@@ -152,22 +159,32 @@ export function createFakeCloud(template, { strictStart = false, account = null 
   };
 }
 
+/** The phone services the Side Service runs without an API key (demo mode). */
+export function createDemoPhoneServices() {
+  const programService = createDummyProgramService();
+  return { programService, workoutService: createDummyWorkoutService({ catalogService: programService }) };
+}
+
 /**
  * Bluetooth link between one watch controller and the phone. Requests queue
  * until the test delivers them, so replies can arrive late, out of order, or
- * never, while the lifter keeps tapping.
+ * never, while the lifter keeps tapping. `routerOptions` replaces the phone
+ * services in front of `cloud`; `exchanges` keeps every request and its reply.
  */
-export function createPhoneLink(cloud) {
-  const router = createSideRouter({
+export function createPhoneLink(cloud, routerOptions = null) {
+  const router = createSideRouter(routerOptions || {
     workoutService: createWorkoutService({ client: cloud.client, catalogService: null }),
   });
   const queue = [];
   const sent = [];
+  const exchanges = [];
   let auto = false;
 
   async function phoneHandle(type, payload) {
     const reply = await router.handle(JSON.parse(JSON.stringify(createMessage({ type, payload }))));
-    return JSON.parse(JSON.stringify(reply));
+    const received = JSON.parse(JSON.stringify(reply));
+    exchanges.push({ type, payload: clone(payload), reply: received });
+    return received;
   }
 
   function settle(item, reply) {
@@ -201,6 +218,7 @@ export function createPhoneLink(cloud) {
   return {
     request,
     sent,
+    exchanges,
     queue,
     phoneHandle,
     /** Answers every request immediately from now on. */
@@ -229,6 +247,44 @@ export function createPhoneLink(cloud) {
       while (queue.length) queue.shift().reject(timeout());
     },
   };
+}
+
+const companionSource = readFileSync(new URL('../../page/common/index.js', import.meta.url), 'utf8');
+
+function companionFunction(name) {
+  const start = companionSource.indexOf(`\nfunction ${name}(`);
+  if (start < 0) throw new Error(`Companion function ${name} not found`);
+  return companionSource.slice(start, companionSource.indexOf('\n}', start) + 2);
+}
+
+/**
+ * The Companion page's own launch, day, finish and abandon code, run against a
+ * phone link instead of the Zepp runtime. Screen drawing is a no-op; everything
+ * the page reads from a reply lands in the returned `page` state.
+ */
+export function createCompanionPage(link, { now = () => 1_000_000 } = {}) {
+  const workoutController = createWorkoutController({ request: link.request, now });
+  const page = {
+    MESSAGE_TYPES, workoutToDayPlan, suggestedProgramIndex, launchPlanFor, defaultDirectSync,
+    workoutController, session: workoutController,
+    SCREEN: new Proxy({}, { get: (_, key) => key }),
+    PHONE_CONNECTING_MESSAGE: 'Connecting',
+    screen: 'LOADING', isBusy: false, statusMessage: '', errorMessage: '', isTearingDown: false,
+    programs: [], serviceMode: 'UNKNOWN', listPage: 0, selectedProgram: null, outline: null,
+    selectedWeek: null, dayPlan: null, accountSettings: null, defaultWorkoutPlan: null,
+    defaultWorkoutFetchedAt: null, directSync: defaultDirectSync('LEGACY'), finishState: null,
+    isOverviewOpen: false, overviewPage: 0, readyPage: 0, connectionRetryTimer: null, connectionRetryAttempt: 0,
+    console: { log() {} },
+    send: (type, payload = {}) => link.request(type, payload),
+    adoptAccountSettings(payload) { page.accountSettings = payload || {}; },
+    isTemporaryPhoneError: () => false,
+    renderUI() {}, persistSession() {}, updateControllerStatus() {}, scheduleConnectionRetry() {}, clearTimeout() {},
+  };
+  const names = ['loadPrograms', 'handleInitialLoadFailure', 'resetConnectionRetry', 'beginRequest', 'failRequest',
+    'loadOutline', 'loadDayPlan', 'submitWorkout', 'abandonWorkout'];
+  const scope = new Proxy(page, { has: (target, key) => key in target });
+  const functions = new Function('scope', `with (scope) { ${names.map(companionFunction).join('\n')}; return { ${names.join(', ')} }; }`)(scope);
+  return Object.assign(page, functions);
 }
 
 export async function flush() {
