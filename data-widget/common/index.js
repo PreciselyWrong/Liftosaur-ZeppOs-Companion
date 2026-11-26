@@ -769,7 +769,8 @@ function updateClock() {
   ].filter(Boolean).join(' | ');
   if (!label || label === lastRenderedClock) return;
   lastRenderedClock = label;
-  if (Boolean(liveWidgets.clockTarget) !== canOpenSyncDetails()) {
+  // An acknowledged set changes only this label; the open Sync status modal shows the same count.
+  if (isSyncDetailsOpen || Boolean(liveWidgets.clockTarget) !== canOpenSyncDetails()) {
     renderUI();
     return;
   }

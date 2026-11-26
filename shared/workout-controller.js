@@ -162,11 +162,15 @@ export function createWorkoutController({
 
   function setStatus(patch = {}) {
     if (disposed) return;
-    currentStatus = {
+    const next = {
       code: patch.code || SYNC_STATUS_CODES.IDLE,
       detail: patch.detail ?? null,
       error: patch.error ?? null,
     };
+    // Every acknowledged set reports idle again; an unchanged status must not cost a redraw.
+    if (currentStatus && next.code === currentStatus.code && next.detail === currentStatus.detail
+      && next.error === currentStatus.error) return;
+    currentStatus = next;
     if (typeof onStatus === 'function') {
       onStatus(currentStatus);
     }
@@ -842,9 +846,10 @@ export function createWorkoutController({
             }
           }
 
+          // The session view is unchanged: the pending count on screen is refreshed in place by the UI tick,
+          // so only the save is needed, not a full redraw.
           directSync.acknowledgedSetCount += batchLength;
           persist();
-          notifyChange();
 
           const remainingPendingCount =
             session.getWorkoutSetWrites().length - directSync.acknowledgedSetCount;
