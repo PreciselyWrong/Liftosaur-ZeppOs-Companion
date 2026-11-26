@@ -58,7 +58,9 @@ export function exerciseImageFileExtension(value) {
 export function exerciseDownloadUrl(value) {
   const url = normalizeExerciseImageUrl(value);
   if (!url) return null;
-  if (!/\.png$/i.test(url)) return url;
+  // A full-size upload converts to over 1 MiB on the phone, past what the watch accepts, so every
+  // still image is shrunk to the 140 px tile first.
+  if (!/\.(?:png|jpe?g|webp)$/i.test(url)) return url;
   return `https://wsrv.nl/exercise.png?url=${encodeURIComponent(url)}&w=140&h=140&fit=contain&cbg=white&bg=white&output=png`;
 }
 
