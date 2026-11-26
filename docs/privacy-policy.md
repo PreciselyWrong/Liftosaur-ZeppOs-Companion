@@ -1,6 +1,6 @@
 # Privacy Policy - Lifto Companion and Lifto Workout
 
-Last updated: 23 September 2026.
+Last updated: 26 November 2026.
 
 Lifto Companion and Lifto Workout are unofficial, open-source clients for the public
 Liftosaur Cloud API on Amazfit smartwatches with Zepp OS. Companion is a standalone app.
@@ -25,6 +25,7 @@ the phone also contacts the image host; PNG, JPEG and WebP images are requested 
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
 | Optional exercise images | Downloaded on the phone, then stored locally on the watch | The phone requests images from their HTTPS host; PNG, JPEG and WebP requests go through `https://wsrv.nl`, which receives the original image URL, downloads the image and resizes it. Image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info, Prepare and the set screen when enabled; the day's pictures are fetched in the background |
 | Optional watch diagnostics for Lifto Companion and Lifto Workout (up to 12 events each from the current run and the three previous runs: timestamps, product, app/firmware/OS/API versions, device source and screen geometry, screen/session state, widget count, modal/overview/preparation/image-setting flags, safe action names, phone request types and outcomes, exercise image load outcomes with the failing step and HTTP status, lifecycle/drawing phases, JavaScript error class/phase, and available memory measurements) | Each product's local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify recent app actions and memory conditions when system logs cannot be exported |
+| Lifto Workout health summary (for the current and the previous run: durations of the last and slowest redraw, set save and storage write, size of the saved session, journal length, type, shape and byte size of the last phone reply, highest app memory and lowest free system memory, counts of image requests, memory refusals, failures and overlaps with a set sync, the last lifecycle step, whether the previous run ended without a clean exit) | Two small files in Lifto Workout's watch storage, always kept; attached to the optional watch diagnostics above when they are enabled | Nowhere while diagnostics are off; with diagnostics on, to your paired phone only, inside the diagnostics report; never to Liftosaur | Shows slow saves, slow redraws and silent app closures even when diagnostics were off at the time |
 
 ## What the application never does
 
@@ -34,6 +35,7 @@ the phone also contacts the image host; PNG, JPEG and WebP images are requested 
 - No advertising, tracking, third-party analytics, or remote crash reporters are included.
 - Watch diagnostics contain no API key, workout name, exercise name, weight, repetition count, heart-rate value, or details about other applications.
 - Watch diagnostics are off by default and enabled separately in each product's phone settings; switching them off stops collection after the watch reconnects and clears that product's stored report.
+- The Lifto Workout health summary stays on the watch until you enable watch diagnostics. It holds only durations, sizes, counts and fixed step codes, and is overwritten on each launch, so it never builds a history. Uninstalling Lifto Workout removes it.
 
 ## Third party
 
