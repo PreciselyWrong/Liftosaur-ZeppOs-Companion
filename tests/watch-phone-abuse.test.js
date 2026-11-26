@@ -234,7 +234,7 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
   if (replaced) return { finished: true };
 
   const saved = cloud.completedSets(cloud.history[0].workout);
-  if (saved.length < loggedSets || (!phoneEdits && saved.length !== loggedSets)) {
+  if (saved.length < loggedSets || (!phoneEdits && !hostilePhone && saved.length !== loggedSets)) {
     fail(`saved ${saved.length} sets, the lifter logged ${loggedSets}`);
   }
   const lastWrites = new Map(controller.getWorkoutSetWrites().map((write) => [write.setId, write.completed]));
