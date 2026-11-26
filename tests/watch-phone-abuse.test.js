@@ -224,7 +224,11 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
       result = await controller.finishWorkoutRemote().catch((err) => ({ success: false, reason: err.code || err.message }));
       await flush();
     }
-    if (!result.success && !savedEarlier()) fail(`final finish failed: ${result.reason}`);
+    if (!result.success && !savedEarlier()) {
+      // The phone replaced or dropped the workout: the watch keeps it and asks the lifter.
+      if (replaced && controller.sync().conflict && store.load()) return { finished: false };
+      fail(`final finish failed: ${result.reason}`);
+    }
   }
   assert.equal(cloud.history.length, 1, `seed ${seed}: one saved workout`);
   if (replaced) return { finished: true };
