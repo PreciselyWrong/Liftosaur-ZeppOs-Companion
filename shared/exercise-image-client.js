@@ -9,6 +9,29 @@ let requestSequence = 0;
 const MAX_REFUSED_URLS = 32;
 const PHONE_REPLY_WAIT_MS = 45000;
 const FILE_WAIT_MS = 20000;
+// The Active 2 closed the app silently while an image transfer, a set sync awaiting its reply and the
+// post-set redraw overlapped. Images wait for the sync and this quiet moment after it.
+const WORKOUT_QUIET_MS = 3000;
+// Failures that say nothing about the image itself; a later visible load asks again, spaced and bounded.
+const TEMPORARY_FAILURES = new Set([
+  'PHONE_NO_REPLY', 'FILE_NOT_RECEIVED', 'LOW_MEMORY', 'REQUEST_FAILED', 'TRANSFER_ERROR', 'TRANSFER_CANCELED',
+]);
+const AUTO_RETRY_AFTER_MS = 60000;
+const MAX_AUTO_RETRIES = 2;
+
+// A critical workout request never waits on an image: the image work waits on it instead.
+export function holdExerciseImagesDuring(images, type, start) {
+  if (type !== MESSAGE_TYPES.SYNC_WORKOUT_SETS || !images || typeof images.hold !== 'function') return start();
+  const release = images.hold();
+  let pending;
+  try {
+    pending = Promise.resolve(start());
+  } catch (error) {
+    release();
+    throw error;
+  }
+  return pending.then((value) => { release(); return value; }, (error) => { release(); throw error; });
+}
 
 export function createExerciseImageClient({
   inbox,
@@ -26,6 +49,10 @@ export function createExerciseImageClient({
   let transfer = null;
   let timer = null;
   let scheduled = false;
+  let holds = 0;
+  let quietUntil = 0;
+  let resumeTimer = null;
+  let arrival = null;
   const entries = new Map();
   const queue = [];
   const refusedUrls = new Set();
@@ -89,9 +116,17 @@ export function createExerciseImageClient({
     active = null;
   }
 
+  function clearResume() {
+    if (resumeTimer !== null) clearTimeout(resumeTimer);
+    resumeTimer = null;
+  }
+
   function cleanup() {
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    clearResume();
+    if (arrival && !isCachedPath(arrival.path)) remove(arrival.path);
+    arrival = null;
     try { transfer?.cancel(); } catch {}
     transfer = null;
     active = null;
@@ -112,10 +147,55 @@ export function createExerciseImageClient({
     enabled = false;
     if (timer !== null) clearTimeout(timer);
     timer = null;
+    clearResume();
+    arrival = null;
     transfer = null;
     active = null;
     queue.length = 0;
     entries.clear();
+  }
+
+  function deferred() {
+    return holds > 0 || Date.now() < quietUntil;
+  }
+
+  // One timer per quiet moment, never a poll: it fires once the last hold has been released.
+  function armResume() {
+    if (resumeTimer !== null || holds > 0 || disposed) return;
+    const wait = quietUntil - Date.now();
+    if (wait <= 0) {
+      resume();
+      return;
+    }
+    resumeTimer = setTimeout(() => {
+      resumeTimer = null;
+      armResume();
+    }, wait);
+    if (resumeTimer && typeof resumeTimer.unref === 'function') resumeTimer.unref();
+  }
+
+  function resume() {
+    const pending = arrival;
+    arrival = null;
+    if (pending) pending.settle();
+    scheduleNext();
+  }
+
+  function defer(ms = WORKOUT_QUIET_MS) {
+    quietUntil = Math.max(quietUntil, Date.now() + ms);
+    clearResume();
+    armResume();
+  }
+
+  function hold() {
+    holds++;
+    let released = false;
+    return () => {
+      if (released) return;
+      released = true;
+      holds--;
+      if (holds === 0) defer();
+    };
   }
 
   function touch(entry) {
@@ -155,6 +235,8 @@ export function createExerciseImageClient({
     clearTransfer();
     entry.status = status;
     entry.src = src;
+    entry.failure = failure ? failure.reason : null;
+    entry.failedAt = failure ? Date.now() : 0;
     if (status === 'ready') {
       touch(entry);
       evictOldImages();
@@ -218,6 +300,10 @@ export function createExerciseImageClient({
 
   function processNext() {
     if (active || disposed || !enabled) return;
+    if (deferred()) {
+      armResume();
+      return;
+    }
     const entry = queue.shift();
     if (!entry) return;
     if (entries.get(entry.url) !== entry || entry.status !== 'loading') {
@@ -225,8 +311,8 @@ export function createExerciseImageClient({
       return;
     }
     active = entry;
-    // A refused request is not retried by timers; the next visible load asks again.
-    if (!hasMemoryHeadroom()) {
+    // A refused request is not retried by timers; a later visible load asks again.
+    if (!hasMemoryHeadroom('request')) {
       finish(entry, 'unavailable', null, { reason: 'LOW_MEMORY' });
       return;
     }
@@ -263,8 +349,26 @@ export function createExerciseImageClient({
         && typeof file.filePath === 'string'
         && file.filePath.startsWith('data://');
       if (!valid && state === 'transferred' && !isCachedPath(file.filePath)) remove(file.filePath);
-      if (valid) finish(expected, 'ready', file.filePath);
-      else finish(expected, 'unavailable', null, { reason: state === 'transferred' ? 'FILE_INVALID' : `TRANSFER_${state.toUpperCase()}` });
+      if (valid) {
+        // Showing the image decodes it: that waits for any set sync, then checks memory again.
+        const settle = () => {
+          if (active !== expected || expected.status !== 'loading') return;
+          if (hasMemoryHeadroom('file')) {
+            finish(expected, 'ready', file.filePath);
+            return;
+          }
+          if (!isCachedPath(file.filePath)) remove(file.filePath);
+          finish(expected, 'unavailable', null, { reason: 'LOW_MEMORY' });
+        };
+        if (!deferred()) {
+          settle();
+          return;
+        }
+        if (timer !== null) clearTimeout(timer);
+        timer = null;
+        arrival = { path: file.filePath, settle };
+        armResume();
+      } else finish(expected, 'unavailable', null, { reason: state === 'transferred' ? 'FILE_INVALID' : `TRANSFER_${state.toUpperCase()}` });
     }
 
     file.on('change', accept);
@@ -295,7 +399,11 @@ export function createExerciseImageClient({
       return;
     }
     const existing = entries.get(url);
-    if (existing && (existing.status !== 'unavailable' || !retry)) {
+    const autoRetry = !retry && existing && existing.status === 'unavailable'
+      && TEMPORARY_FAILURES.has(existing.failure)
+      && existing.autoRetries < MAX_AUTO_RETRIES
+      && Date.now() - existing.failedAt >= AUTO_RETRY_AFTER_MS;
+    if (existing && (existing.status !== 'unavailable' || !(retry || autoRetry))) {
       if (priority && existing.status === 'loading') {
         const idx = queue.indexOf(existing);
         if (idx > 0) {
@@ -311,7 +419,8 @@ export function createExerciseImageClient({
       if (idx >= 0) queue.splice(idx, 1);
       entries.delete(url);
     }
-    const entry = { url, requestId: null, status: 'loading', src: null };
+    const autoRetries = existing ? existing.autoRetries + (autoRetry ? 1 : 0) : 0;
+    const entry = { url, requestId: null, status: 'loading', src: null, autoRetries };
     entries.set(url, entry);
     if (priority) {
       queue.unshift(entry);
@@ -335,6 +444,8 @@ export function createExerciseImageClient({
     },
     load,
     prefetch(imageUrl) { load(imageUrl, { priority: true }); },
+    hold,
+    defer,
     dispose() {
       disposed = true;
       enabled = false;

@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { createExerciseImageClient } from '../shared/exercise-image-client.js';
+import { createExerciseImageClient, holdExerciseImagesDuring } from '../shared/exercise-image-client.js';
+import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { hasImageMemoryHeadroom } from '../shared/exercise-images.js';
 import { OVERVIEW_PAGE_SIZE } from '../shared/watch-layout.js';
 
@@ -374,4 +375,131 @@ test('Memory headroom check only fails on a known near-zero reading', () => {
   assert.equal(hasImageMemoryHeadroom(null), true);
   assert.equal(hasImageMemoryHeadroom({ systemUsed: 3 * MIB - 0.3 * MIB, systemTotal: 3 * MIB }), true);
   assert.equal(hasImageMemoryHeadroom({ systemUsed: 3128592, systemTotal: 3145728 }), false);
+});
+
+function fileFor(request, path = 'data://download/squat.png') {
+  return { params: { type: 'exercise-image', ...request }, fileSize: 100, filePath: path,
+    readyState: 'transferred', on() {}, cancel() {} };
+}
+
+test('A set sync awaiting its reply defers new image requests until a quiet moment after it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = harness();
+  const release = h.client.hold();
+  h.client.load(url);
+  await flush();
+  assert.equal(h.requests.length, 0);
+  release();
+  await flush();
+  assert.equal(h.requests.length, 0, 'the post-set redraw gets a quiet moment first');
+  t.mock.timers.tick(5000);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  h.client.dispose();
+});
+
+test('An image file arriving during a set sync is shown only after the sync settles', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const changes = [];
+  const h = harness('queued', { onChange: (_, status) => changes.push(status) });
+  h.client.load(url);
+  await flush();
+  const release = h.client.hold();
+  h.receive(fileFor(h.requests[0]));
+  assert.equal(h.client.get(url).status, 'loading');
+  assert.deepEqual(changes, []);
+  release();
+  t.mock.timers.tick(5000);
+  await flush();
+  assert.equal(h.client.get(url).status, 'ready');
+  assert.deepEqual(changes, ['ready']);
+  h.client.dispose();
+});
+
+test('An image file arriving while memory is exhausted is dropped as a retryable failure', async () => {
+  let headroom = true;
+  const changes = [];
+  const requests = [];
+  const removed = [];
+  const client = createExerciseImageClient({
+    request: async (_, payload) => { requests.push(payload); return { payload: { status: 'queued' } }; },
+    removeFile: (path) => removed.push(path),
+    hasMemoryHeadroom: () => headroom,
+    onChange: (_, status, failure) => changes.push({ status, failure }),
+  });
+  client.setEnabled(true);
+  client.load(url);
+  await flush();
+  headroom = false;
+  client.receive(fileFor(requests[0]));
+  assert.equal(client.get(url).status, 'unavailable');
+  assert.deepEqual(removed, ['data://download/squat.png']);
+  assert.deepEqual(changes, [{ status: 'unavailable', failure: { reason: 'LOW_MEMORY' } }]);
+  client.dispose();
+});
+
+test('A temporary image failure is retried by a later plain load, a bounded number of times', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  let headroom = false;
+  const requests = [];
+  const client = createExerciseImageClient({
+    request: async (_, payload) => {
+      requests.push(payload);
+      return { payload: { status: 'unavailable', reason: 'DOWNLOAD_HTTP_STATUS' } };
+    },
+    removeFile() {},
+    hasMemoryHeadroom: () => headroom,
+  });
+  client.setEnabled(true);
+  client.load(url);
+  await flush();
+  assert.equal(client.get(url).status, 'unavailable');
+  client.load(url);
+  await flush();
+  assert.equal(requests.length, 0, 'an immediate render does not ask again');
+  headroom = true;
+  t.mock.timers.tick(60000);
+  client.load(url);
+  await flush();
+  assert.equal(requests.length, 1, 'the low-memory skip is retried later');
+  for (let i = 0; i < 5; i++) {
+    t.mock.timers.tick(60000);
+    client.load(url);
+    await flush();
+  }
+  assert.equal(requests.length, 1, 'a phone refusal is not temporary and is not retried');
+  client.dispose();
+});
+
+test('A repeatedly timing-out image stops auto-retrying after its bound', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const requests = [];
+  const client = createExerciseImageClient({
+    request: (_, payload) => { requests.push(payload); return new Promise(() => {}); },
+    removeFile() {},
+  });
+  client.setEnabled(true);
+  for (let round = 0; round < 6; round++) {
+    client.load(url);
+    await flush();
+    t.mock.timers.tick(45000);
+    t.mock.timers.tick(45000);
+    await flush();
+    t.mock.timers.tick(60000);
+  }
+  // Each attempt asks twice (first wait, then its one retry): the first load plus two automatic retries.
+  assert.equal(requests.length, 6);
+  assert.equal(client.get(url).status, 'unavailable');
+  client.dispose();
+});
+
+test('Images are held only while a set sync awaits its reply, failed or not', async () => {
+  const calls = [];
+  const images = { hold() { calls.push('hold'); return () => calls.push('release'); } };
+  assert.equal(await holdExerciseImagesDuring(images, MESSAGE_TYPES.GET_EXERCISE_IMAGE, async () => 'ok'), 'ok');
+  assert.deepEqual(calls, []);
+  await assert.rejects(holdExerciseImagesDuring(images, MESSAGE_TYPES.SYNC_WORKOUT_SETS,
+    async () => { calls.push('send'); throw new Error('offline'); }));
+  assert.deepEqual(calls, ['hold', 'send', 'release']);
+  assert.equal(await holdExerciseImagesDuring(null, MESSAGE_TYPES.SYNC_WORKOUT_SETS, async () => 'ok'), 'ok');
 });

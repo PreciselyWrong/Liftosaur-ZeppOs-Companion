@@ -32,7 +32,14 @@ export function createWatchExerciseImages({ request, onChange, storage = null, m
     request,
     storage,
     maxCachedImages,
-    hasMemoryHeadroom: () => hasImageMemoryHeadroom(readMemory()),
+    hasMemoryHeadroom: (stage) => {
+      const memory = readMemory();
+      const free = memory && Number.isFinite(memory.systemTotal) && Number.isFinite(memory.systemUsed)
+        ? memory.systemTotal - memory.systemUsed : 'unknown';
+      console.log('[lifto] exercise image memory ' + stage + ' free=' + free
+        + ' used=' + (memory ? memory.systemUsed : 'unknown') + ' app=' + (memory ? memory.appUsed : 'unknown'));
+      return hasImageMemoryHeadroom(memory);
+    },
     onChange: (url, status, failure) => {
       console.log('[lifto] exercise image state ' + status);
       onChange(url, status, failure);
