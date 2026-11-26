@@ -47,7 +47,7 @@ import { createScreenLayout, pairWidgetSpecs } from '../../shared/screen-layout.
 import { createMessage, MESSAGE_TYPES } from '../../shared/protocol.js';
 import { SESSION_STATES } from '../../shared/workout-session.js';
 import { createWorkoutController, defaultDirectSync } from '../../shared/workout-controller.js';
-import { createFallbackStorageAdapter, createSessionStore } from '../../shared/session-storage.js';
+import { createSessionStore, createWatchFileAdapter } from '../../shared/session-storage.js';
 import { createFileDiagnosticsStorage, createWorkoutDiagnostics, readWorkoutMemory, readWorkoutRuntimeInfo, normalizeWorkoutDiagnosticsEnabled, phoneFailureReason, WORKOUT_DIAGNOSTIC_CODES, WORKOUT_DIAGNOSTICS_KEY } from '../../shared/workout-diagnostics.js';
 import * as watchFiles from '@zos/fs';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
@@ -153,25 +153,18 @@ try {
   console.log('[lifto-ext] storage fallback to memory');
 }
 
-const deviceStorageAdapter = deviceStorage
+// Up to 0.5.15 the whole session was this LocalStorage value; it is read once and then removed.
+const legacySession = deviceStorage
   ? {
       read: () => deviceStorage.getItem(STORAGE_KEY, null),
-      write: (data) => {
-        // Saves cost the watch about 0.4 s each, so the always-on health summary keeps their duration.
-        const startedAt = Date.now();
-        deviceStorage.setItem(STORAGE_KEY, data);
-        workoutDiagnostics.notePersist(Date.now() - startedAt, data.length);
-      },
       remove: () => deviceStorage.removeItem(STORAGE_KEY),
     }
   : null;
-
-const localStoreAdapter = createFallbackStorageAdapter(
-  deviceStorageAdapter,
-  undefined,
-  () => console.log('[lifto-ext] storage fallback to memory')
+const sessionStore = createSessionStore(
+  // The always-on health summary keeps the duration of each session write.
+  createWatchFileAdapter(watchFiles, { onWrite: (ms, bytes) => workoutDiagnostics.notePersist(ms, bytes) }),
+  { legacy: legacySession, prefix: 'lifto-ext-session' }
 );
-const sessionStore = createSessionStore(localStoreAdapter);
 const diagnosticsStorage = createFileDiagnosticsStorage(watchFiles);
 try {
   // Reports used to share LocalStorage with the session; dropping that copy keeps each set save small.

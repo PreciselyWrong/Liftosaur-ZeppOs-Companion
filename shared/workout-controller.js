@@ -585,6 +585,9 @@ export function createWorkoutController({
     };
 
     log('Session resumed');
+    // A session read from an older format is stored again in the current one at once; an
+    // unchanged one costs no write.
+    persist();
     notifyChange();
     return {
       success: true,

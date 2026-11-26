@@ -57,10 +57,7 @@ import {
   createWorkoutController,
   defaultDirectSync,
 } from '../../shared/workout-controller.js';
-import {
-  createFallbackStorageAdapter,
-  createSessionStore,
-} from '../../shared/session-storage.js';
+import { createSessionStore, createWatchFileAdapter } from '../../shared/session-storage.js';
 import { MESSAGE_TYPES, createMessage } from '../../shared/protocol.js';
 import { workoutToDayPlan } from '../../shared/workout-api-plan.js';
 import { createScreenLayout, pairWidgetSpecs } from '../../shared/screen-layout.js';
@@ -179,15 +176,14 @@ const SCREEN = {
 const SESSION_KEY = 'liftosaur.session';
 
 /**
- * `@zos/storage` is documented from API_LEVEL 3.0 and declared in app.json, but
- * it has not been exercised on the real watch yet. A failure degrades to an
- * in-memory store rather than breaking a workout.
+ * `@zos/storage` holds settings and the session older builds wrote; the session
+ * itself lives in files. A failure only loses those, never breaks a workout.
  */
 let deviceStorage = null;
 try {
   deviceStorage = new LocalStorage();
 } catch (err) {
-  console.log('[liftosaur] LocalStorage unavailable, session kept in memory:', err?.message || String(err));
+  console.log('[liftosaur] LocalStorage unavailable:', err?.message || String(err));
 }
 
 /**
@@ -201,19 +197,14 @@ try {
   console.log('[liftosaur] time sensor unavailable, clock hidden:', err?.message || String(err));
 }
 
-const deviceStorageAdapter = deviceStorage
+// Up to 0.5.15 the whole session was this LocalStorage value; it is read once and then removed.
+const legacySession = deviceStorage
   ? {
       read: () => deviceStorage.getItem(SESSION_KEY, null),
-      write: (data) => deviceStorage.setItem(SESSION_KEY, data),
       remove: () => deviceStorage.removeItem(SESSION_KEY),
     }
   : null;
-const localStoreAdapter = createFallbackStorageAdapter(
-  deviceStorageAdapter,
-  undefined,
-  (err) => console.log('[liftosaur] session storage fell back to memory:', err?.message || String(err))
-);
-const sessionStore = createSessionStore(localStoreAdapter);
+const sessionStore = createSessionStore(createWatchFileAdapter(watchFiles), { legacy: legacySession, prefix: 'lifto-session' });
 const diagnosticsStorage = createFileDiagnosticsStorage(watchFiles);
 try {
   // Reports used to share LocalStorage with the session; dropping that copy keeps each set save small.

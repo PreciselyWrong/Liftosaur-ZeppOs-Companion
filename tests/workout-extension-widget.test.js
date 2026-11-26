@@ -34,7 +34,8 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
   // 2. Storage key must be exactly liftosaur.extension.session.v2
   assert.match(source, /'liftosaur\.extension\.session\.v2'/, 'Must use exact extension session key');
   assert.match(source, /createSessionStore/, 'Must use createSessionStore');
-  assert.match(source, /createFallbackStorageAdapter/, 'Must use createFallbackStorageAdapter');
+  assert.match(source, /createWatchFileAdapter\(watchFiles/, 'Must keep the session in watch files');
+  assert.match(source, /legacy: legacySession/, 'Must read the session older builds stored under that key');
 
   // 3. Controller integration
   assert.match(source, /createWorkoutController/, 'Must use createWorkoutController');

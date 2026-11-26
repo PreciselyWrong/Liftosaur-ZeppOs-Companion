@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createWorkoutController } from '../shared/workout-controller.js';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
-import { createSessionStore } from '../shared/session-storage.js';
+import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
 import { createLiftosaurApiClient } from '../app-side/liftosaur-api-client.js';
 
 const workout = () => ({
@@ -14,10 +14,11 @@ const workout = () => ({
 
 function fixture() {
   let clock = 1000;
-  let saved = null;
   let writes = 0;
-  const store = createSessionStore({ read: () => saved,
-    write: value => { saved = value; writes++; }, remove: () => { saved = null; } });
+  const disk = createMemoryStorageAdapter();
+  const store = createSessionStore({ read: disk.read, remove: disk.remove,
+    write: (name, value) => { disk.write(name, value); writes++; },
+    append: (name, value) => { disk.append(name, value); writes++; } });
   const makeController = () => createWorkoutController({ store, now: () => clock });
   const controller = makeController();
   controller.loadPlan(workoutToDayPlan(workout(), { isCurrent: true }), {
