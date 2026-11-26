@@ -128,6 +128,8 @@ export function createWorkoutController({
   let sessionGeneration = 0;
   let disposed = false;
   let saveFailing = false;
+  // Set once Liftosaur saved the workout: a later tap or native pause must not write it back.
+  let savedToCloud = false;
   let getReadySeconds = 5;
 
   function hasActiveTimer() {
@@ -178,7 +180,7 @@ export function createWorkoutController({
   }
 
   function persist() {
-    if (disposed || !dayPlan || !store) return false;
+    if (disposed || savedToCloud || !dayPlan || !store) return false;
     const saved = store.save({
       plan: dayPlan,
       journal: session.getJournal(),
@@ -475,6 +477,7 @@ export function createWorkoutController({
     directSync = normalizeDirectSync(sync, defaultMode);
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     currentStatus = { code: SYNC_STATUS_CODES.IDLE, detail: null, error: null };
 
     if (clearStore && store) {
@@ -520,6 +523,7 @@ export function createWorkoutController({
     directSync = normalizeDirectSync(snapshot.sync, defaultMode);
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     currentStatus = {
       code: directSync.conflict
         ? SYNC_STATUS_CODES.CONFLICT
@@ -602,6 +606,7 @@ export function createWorkoutController({
     directSync = defaultDirectSync('LEGACY');
     deferredServerWorkout = null;
     lastServerWorkoutSignature = null;
+    savedToCloud = false;
     setStatus({ code: SYNC_STATUS_CODES.IDLE });
     notifyChange();
   }
@@ -1074,6 +1079,7 @@ export function createWorkoutController({
 
       const res = await request(MESSAGE_TYPES.FINISH_WORKOUT, payload);
       if (!isCurrentWorkout()) return { success: false, reason: 'SESSION_REPLACED' };
+      savedToCloud = true;
       if (store) {
         store.clear();
       }
@@ -1384,7 +1390,12 @@ export function createWorkoutController({
     getLastWorkoutSetWrite: () => session.getLastWorkoutSetWrite(),
     getJournal: () => session.getJournal(),
     getWorkoutIntervals: (endTime) => session.getWorkoutIntervals(endTime),
-    clearPersisted: () => !disposed && store?.clear(),
+    // Only called once a legacy finish was saved.
+    clearPersisted: () => {
+      if (disposed) return false;
+      savedToCloud = true;
+      return store?.clear();
+    },
     isAllCompleted: () => session.isAllCompleted(),
   };
 }
