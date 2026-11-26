@@ -506,6 +506,24 @@ test('Images are held only while a set sync awaits its reply, failed or not', as
   assert.equal(await holdExerciseImagesDuring(null, MESSAGE_TYPES.SYNC_WORKOUT_SETS, async () => 'ok'), 'ok');
 });
 
+test('An image retry that falls due during a set sync waits for the quiet moment after it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = harness();
+  h.client.load(url);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  const release = h.client.hold();
+  t.mock.timers.tick(20000);
+  await flush();
+  assert.equal(h.requests.length, 1, 'no image request while the set sync awaits its reply');
+  release();
+  t.mock.timers.tick(3000);
+  await flush();
+  assert.equal(h.requests.length, 2);
+  assert.equal(h.requests[1].forceRefresh, true, 'the promised file never came, so the retry asks for a fresh one');
+  h.client.dispose();
+});
+
 test('Images still loading when images are switched off are asked for again once they are back', async () => {
   const map = new Map();
   const storage = { getItem: (key) => map.get(key) || null, setItem: (key, value) => map.set(key, value) };
