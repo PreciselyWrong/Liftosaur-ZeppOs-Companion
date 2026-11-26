@@ -837,20 +837,22 @@ function loadPrograms() {
           });
         });
     })
-    .catch((err) => {
-      if (isTemporaryPhoneError(err)) {
-        isBusy = false;
-        statusMessage = '';
-        errorMessage = '';
-        screen = SCREEN.CONNECTION;
-        renderUI();
-        scheduleConnectionRetry();
-        return;
-      }
-      resetConnectionRetry();
-      screen = SCREEN.SETUP;
-      failRequest(err);
-    });
+    .catch(handleInitialLoadFailure);
+}
+
+function handleInitialLoadFailure(err) {
+  if (isTemporaryPhoneError(err)) {
+    isBusy = false;
+    statusMessage = '';
+    errorMessage = '';
+    screen = SCREEN.CONNECTION;
+    renderUI();
+    scheduleConnectionRetry();
+    return;
+  }
+  resetConnectionRetry();
+  screen = SCREEN.SETUP;
+  failRequest(err);
 }
 
 function loadOutline(program, { nextScreen = SCREEN.WEEKS } = {}) {
@@ -868,7 +870,11 @@ function loadOutline(program, { nextScreen = SCREEN.WEEKS } = {}) {
       }
       renderUI();
     })
-    .catch(failRequest);
+    .catch((err) => {
+      // The loading screen has no Retry, so a launch failure needs a screen that does.
+      if (screen === SCREEN.LOADING) handleInitialLoadFailure(err);
+      else failRequest(err);
+    });
 }
 
 function loadDayPlan(week, day) {
