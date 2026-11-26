@@ -27,7 +27,7 @@ export function createWorkoutExtensionManifest({ appId, version, versionCode }) 
       extType: 'workout',
       version: { code: versionCode, name: version },
       icon: 'icon.png',
-      vender: 'Sni3rs',
+      vender: 'PreciselyWrong',
       description: 'Liftosaur session companion for Zepp workouts',
     },
     permissions: [
