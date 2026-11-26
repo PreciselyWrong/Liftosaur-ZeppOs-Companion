@@ -386,7 +386,10 @@ function send(type, payload = {}, options = {}) {
     }
     return res;
   }).catch((err) => {
-    workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED, { request: type, failure: phoneFailureReason(err) });
+    // A reply or timeout that outlives the page must not write diagnostics storage.
+    if (!isTearingDown) {
+      workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.PHONE_FAILED, { request: type, failure: phoneFailureReason(err) });
+    }
     throw err;
   });
 }
