@@ -238,7 +238,7 @@ test('overview screen includes visible Sync action wired to requestRefresh and k
 
 test('Workout shares Companion connection wording and bounded automatic retry', () => {
   const source = readWidgetSource();
-  const load = extractFunction(source, 'startInitialNetworkLoad');
+  const load = extractFunction(source, 'startInitialNetworkLoad') + extractFunction(source, 'handleInitialLoadFailure');
   const retry = extractFunction(source, 'scheduleConnectionRetry');
   assert.match(source, /PHONE_CONNECTING_MESSAGE/);
   assert.match(source, /PHONE_CONNECTION_TITLE/);
@@ -783,7 +783,7 @@ test('a failed program request shows the phone connection screen, not an empty a
     },
   };
   const scope = new Proxy(state, { has: (target, key) => key in target });
-  const load = new Function('scope', `with (scope) { return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  const load = new Function('scope', `with (scope) { ${extractFunction(source, 'handleInitialLoadFailure')}; return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
   load();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.equal(state.screen, 'CONNECTION');
@@ -813,7 +813,7 @@ test('a program list API failure still opens the next workout instead of Setup',
     },
   };
   const scope = new Proxy(state, { has: (target, key) => key in target });
-  const load = new Function('scope', `with (scope) { return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
+  const load = new Function('scope', `with (scope) { ${extractFunction(source, 'handleInitialLoadFailure')}; return ${extractFunction(source, 'startInitialNetworkLoad')}; }`)(scope);
   load();
   await new Promise((resolve) => setTimeout(resolve, 0));
   assert.notEqual(state.screen, 'SETUP');
@@ -822,4 +822,39 @@ test('a program list API failure still opens the next workout instead of Setup',
   assert.equal(state.outlines[0].program.id, 'p1');
   assert.equal(state.outlines[0].options.nextScreen, 'HOME');
   assert.deepEqual(state.programs.map((program) => program.id), ['p1']);
+});
+
+test('an outline failure during the first load leaves the loading screen for one with Retry', async () => {
+  const source = readWidgetSource();
+  for (const temporary of [true, false]) {
+    const state = {
+      screen: 'LOADING', programs: null, accountSettings: null, defaultWorkoutPlan: null, isBusy: false, statusMessage: '', errorMessage: '',
+      selectedProgram: null, outline: null, listPage: 0, isTearingDown: false,
+      EXTENSION_SCREENS: { CONNECTION: 'CONNECTION', EMPTY: 'EMPTY', SETUP: 'SETUP', SESSION: 'SESSION', PROGRAMS: 'PROGRAMS', HOME: 'HOME', LOADING: 'LOADING', WEEKS: 'WEEKS' },
+      MESSAGE_TYPES: { GET_WORKOUT_CURRENT: 'GET_WORKOUT_CURRENT', GET_WORKOUT_NEXT: 'GET_WORKOUT_NEXT', LIST_PROGRAMS: 'LIST_PROGRAMS', GET_PROGRAM_OUTLINE: 'GET_PROGRAM_OUTLINE' },
+      PHONE_CONNECTING_MESSAGE: '', retries: 0, programForSavedPlan, console: { log() {} },
+      renderUI() {}, resetConnectionRetry() {}, logRecoverableError() {},
+      loadDisplaySettings: () => Promise.resolve(),
+      workoutController: { markAuthoritativeResponse() {} },
+      workoutToDayPlan: () => null,
+      suggestedProgramIndex: (programs) => programs.findIndex((program) => program.isCurrent),
+      isTemporaryPhoneError: (err) => err.message === 'Phone request timeout',
+      scheduleConnectionRetry() { state.retries += 1; },
+      send: (type) => {
+        if (type === 'GET_WORKOUT_CURRENT') return Promise.resolve({ payload: { workout: null } });
+        if (type === 'GET_WORKOUT_NEXT') return Promise.resolve({ payload: { workout: null } });
+        if (type === 'LIST_PROGRAMS') return Promise.resolve({ payload: { programs: [{ id: 'p1', name: 'A', isCurrent: true }] } });
+        return Promise.reject(new Error(temporary ? 'Phone request timeout' : 'Liftosaur API error'));
+      },
+    };
+    const scope = new Proxy(state, { has: (target, key) => key in target });
+    const names = ['startInitialNetworkLoad', 'loadOutline', 'failRequest', 'beginRequest'];
+    if (source.includes('function handleInitialLoadFailure(')) names.push('handleInitialLoadFailure');
+    const fns = new Function('scope', `with (scope) { ${names.map((name) => extractFunction(source, name)).join('\n')}; return startInitialNetworkLoad; }`)(scope);
+    fns();
+    await new Promise((resolve) => setTimeout(resolve, 0));
+    assert.notEqual(state.screen, 'LOADING', `temporary=${temporary}`);
+    assert.equal(state.screen, temporary ? 'CONNECTION' : 'SETUP');
+    assert.equal(state.retries, temporary ? 1 : 0);
+  }
 });
