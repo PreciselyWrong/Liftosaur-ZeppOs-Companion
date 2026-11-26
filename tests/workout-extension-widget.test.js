@@ -872,6 +872,7 @@ test('tapping Retry again while the first load is in flight starts no second loa
       phoneConnectionMessage: () => '',
       addWidget(type, props) { if (type === 'button') buttons.push(props); },
       loadDisplaySettings() { loads += 1; return new Promise(() => {}); },
+      send: () => new Promise(() => {}),
     };
     const scope = new Proxy(state, { has: (target, key) => key in target });
     const names = [screenName, 'startInitialNetworkLoad', 'handleInitialLoadFailure', 'beginRequest', 'retryConnection', 'resetConnectionRetry'];
