@@ -858,3 +858,29 @@ test('an outline failure during the first load leaves the loading screen for one
     assert.equal(state.retries, temporary ? 1 : 0);
   }
 });
+
+test('tapping Retry again while the first load is in flight starts no second load', () => {
+  const source = readWidgetSource();
+  for (const screenName of ['renderSetupScreen', 'renderConnectionScreen', 'renderEmptyScreen']) {
+    const buttons = [];
+    let loads = 0;
+    const state = {
+      screen: 'SETUP', isBusy: false, statusMessage: '', errorMessage: '', connectionRetryTimer: null, connectionRetryAttempt: 0,
+      EXTENSION_SCREENS: {}, MESSAGE_TYPES: {}, PHONE_CONNECTING_MESSAGE: '', PHONE_CONNECTION_TITLE: '',
+      widget: { FILL_RECT: 'rect', TEXT: 'text', BUTTON: 'button' }, align: {}, text_style: {}, THEME: {},
+      px: (value) => value, font: () => 20, renderTitle() {}, renderUI() {}, clearTimeout() {},
+      phoneConnectionMessage: () => '',
+      addWidget(type, props) { if (type === 'button') buttons.push(props); },
+      loadDisplaySettings() { loads += 1; return new Promise(() => {}); },
+    };
+    const scope = new Proxy(state, { has: (target, key) => key in target });
+    const names = [screenName, 'startInitialNetworkLoad', 'handleInitialLoadFailure', 'beginRequest', 'retryConnection', 'resetConnectionRetry'];
+    const render = new Function('scope', `with (scope) { ${names.map((name) => extractFunction(source, name)).join('\n')}; return ${screenName}; }`)(scope);
+    render();
+    buttons.at(-1).click_func();
+    buttons.length = 0;
+    render();
+    buttons.at(-1).click_func();
+    assert.equal(loads, 1, screenName);
+  }
+});
