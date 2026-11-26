@@ -525,6 +525,9 @@ test('restore fails safely without clearing raw store when snapshot is missing o
   assert.notEqual(adapter.read(), null);
 });
 
+// The phone acknowledges a set batch with the start time only: snapshots arrive through GET_WORKOUT_CURRENT.
+const OPEN_REFRESH_POLICY = { beginPoll: () => true, markSuccess() {}, markFailure() {}, markAuthoritativeResponse() {}, request() {} };
+
 function createFakeTransport() {
   const calls = [];
   const handlers = new Map();
@@ -672,7 +675,7 @@ test('local set persists before the first transport call', async () => {
     completedSetCountInStoreAtTransportCall = (persisted?.journal || []).filter(
       (j) => j.type === 'COMPLETE_SET'
     ).length;
-    return Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: { workout: SAMPLE_SERVER_WORKOUT } });
+    return Promise.resolve({ type: 'SYNC_WORKOUT_SETS_RESULT', payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } } });
   });
 
   const controller = createWorkoutController({
@@ -765,7 +768,7 @@ test('concurrent drains share one promise and acknowledge only confirmed batch l
 
   resolveSync({
     type: 'SYNC_WORKOUT_SETS_RESULT',
-    payload: { workout: SAMPLE_SERVER_WORKOUT },
+    payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
   });
 
   await p1;
@@ -782,10 +785,6 @@ test('rapid exercise changes append writes behind the in-flight batch without co
       sets: exercise.sets.map((set) => ({ ...set, restSeconds: 0 })),
     })),
   };
-  const firstSnapshot = structuredClone(SAMPLE_SERVER_WORKOUT);
-  firstSnapshot.entries[0].sets[0].completed = { reps: 5, weight: '100kg' };
-  const finalSnapshot = structuredClone(firstSnapshot);
-  finalSnapshot.entries[1].sets[0].completed = { reps: 5, weight: '80kg' };
 
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
     Promise.resolve({ payload: { workout: SAMPLE_SERVER_WORKOUT } })
@@ -807,11 +806,11 @@ test('rapid exercise changes append writes behind the in-flight batch without co
   controller.completeSet();
   const drain = controller.syncSets();
 
-  syncResolvers[0]({ payload: { workout: firstSnapshot } });
+  syncResolvers[0]({ payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } } });
   await Promise.resolve();
   await Promise.resolve();
   assert.equal(syncResolvers.length, 2);
-  syncResolvers[1]({ payload: { workout: finalSnapshot } });
+  syncResolvers[1]({ payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } } });
   await drain;
 
   const batches = transport.calls
@@ -1012,17 +1011,15 @@ test('REST snapshot defers and applies only on next set', async () => {
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
     Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
-  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
-    Promise.resolve({
-      type: 'SYNC_WORKOUT_SETS_RESULT',
-      payload: { workout: modifiedWorkout },
-    })
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () =>
+    Promise.resolve({ type: 'WORKOUT_CURRENT_DATA', payload: { workout: modifiedWorkout } })
   );
 
   const controller = createWorkoutController({
     store,
     request: transport.request,
     now: () => 1000,
+    refreshPolicy: OPEN_REFRESH_POLICY,
   });
 
   controller.loadPlan(SAMPLE_DIRECT_PLAN);
@@ -1032,6 +1029,7 @@ test('REST snapshot defers and applies only on next set', async () => {
 
   assert.equal(controller.view().state, SESSION_STATES.REST);
   await controller.syncSets();
+  await controller.pollCurrent();
 
   assert.equal(controller.view().state, SESSION_STATES.REST);
   assert.equal(controller.hasDeferredServerWorkout(), true);
@@ -1347,7 +1345,7 @@ test('retryPendingWrites drains durable unacknowledged direct set writes after n
     }
     return Promise.resolve({
       type: 'SYNC_WORKOUT_SETS_RESULT',
-      payload: { workout: SAMPLE_SERVER_WORKOUT },
+      payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
     });
   });
 
@@ -1396,7 +1394,7 @@ test('REST issues one passive GET after 120 seconds without increasing the caden
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({
       type: 'SYNC_WORKOUT_SETS_RESULT',
-      payload: { workout: SAMPLE_SERVER_WORKOUT },
+      payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
     })
   );
   let getCalls = 0;
@@ -1430,7 +1428,8 @@ test('REST issues one passive GET after 120 seconds without increasing the caden
 
   currentTime += 1000;
   pollResult = await controller.pollCurrent();
-  assert.equal(pollResult, false);
+  // The acknowledgement carried no snapshot, so this first read is new to the watch and deferred.
+  assert.equal(pollResult, true);
   assert.equal(getCalls, 1);
 
   currentTime += 60000;
@@ -1450,7 +1449,7 @@ test('nextSet from REST schedules/executes one checkpoint GET when eligible with
   transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
     Promise.resolve({
       type: 'SYNC_WORKOUT_SETS_RESULT',
-      payload: { workout: SAMPLE_SERVER_WORKOUT },
+      payload: { workout: { startTime: SAMPLE_SERVER_WORKOUT.startTime } },
     })
   );
   let getCalls = 0;
@@ -1878,7 +1877,7 @@ test('successful set sync preserves edits made to the next active set', async ()
   refreshed.entries[0].sets[0].completed = { weight: '100kg', reps: 5 };
   refreshed.entries[0].sets[1].weight = '120kg';
   refreshed.entries[0].sets[1].reps = 8;
-  resolveSync({ payload: { workout: refreshed } });
+  resolveSync({ payload: { workout: { startTime: refreshed.startTime } } });
   await syncPromise;
 
   assert.equal(controller.view().currentSet.setId, 'set-2');
@@ -2009,9 +2008,11 @@ test('ending prepared superset rest retains the displayed set across deferred sy
     acknowledged.entries[0].warmupSets[0].completed = { reps: 5, weight: '20kg' };
     const transport = createFakeTransport();
     transport.on(MESSAGE_TYPES.START_WORKOUT, () => Promise.resolve({ payload: { workout } }));
-    transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () => Promise.resolve({ payload: { workout: acknowledged } }));
+    transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () => Promise.resolve({ payload: { workout: acknowledged } }));
     const store = createSessionStore(createMemoryStorageAdapter());
-    const controller = createWorkoutController({ store, request: transport.request, now: () => now });
+    const controller = createWorkoutController({
+      store, request: transport.request, now: () => now, refreshPolicy: OPEN_REFRESH_POLICY,
+    });
     controller.loadPlan(workoutToDayPlan(workout));
     controller.startWorkout();
     await controller.ensureStarted();
@@ -2024,6 +2025,7 @@ test('ending prepared superset rest retains the displayed set across deferred sy
     const edited = controller.view().pending.set;
     if (synchronize) {
       await controller.syncSets();
+      await controller.pollCurrent();
       assert.equal(controller.hasDeferredServerWorkout(), true);
     }
     now += 60_000;
@@ -2125,11 +2127,8 @@ test('deferred server snapshot during rest does not reset rest or undo selection
   transport.on(MESSAGE_TYPES.START_WORKOUT, () =>
     Promise.resolve({ type: 'START_WORKOUT_DATA', payload: { workout: SAMPLE_SERVER_WORKOUT } })
   );
-  transport.on(MESSAGE_TYPES.SYNC_WORKOUT_SETS, () =>
-    Promise.resolve({
-      type: 'SYNC_WORKOUT_SETS_RESULT',
-      payload: { workout: modifiedWorkout },
-    })
+  transport.on(MESSAGE_TYPES.GET_WORKOUT_CURRENT, () =>
+    Promise.resolve({ type: 'WORKOUT_CURRENT_DATA', payload: { workout: modifiedWorkout } })
   );
 
   let currentTime = 1000;
@@ -2137,6 +2136,7 @@ test('deferred server snapshot during rest does not reset rest or undo selection
     store,
     request: transport.request,
     now: () => currentTime,
+    refreshPolicy: OPEN_REFRESH_POLICY,
   });
 
   controller.loadPlan(SAMPLE_DIRECT_PLAN);
@@ -2146,6 +2146,7 @@ test('deferred server snapshot during rest does not reset rest or undo selection
 
   assert.equal(controller.view().state, SESSION_STATES.REST);
   await controller.syncSets();
+  await controller.pollCurrent();
 
   assert.equal(controller.view().state, SESSION_STATES.REST);
   assert.equal(controller.hasDeferredServerWorkout(), true);

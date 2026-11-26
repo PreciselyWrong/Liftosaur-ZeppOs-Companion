@@ -35,12 +35,12 @@ function fixture() {
         remote.entries[0].sets.find(set => set.setId === write.setId).completed = structuredClone(write.completed);
       }
       remote.entries[0].sets[1].weight = '65kg';
+      return { payload: { workout: { startTime: remote.startTime } } };
     } else {
       const snapshot = structuredClone(remote);
       await beforeRead();
       return { payload: { workout: snapshot } };
     }
-    return { payload: { workout: structuredClone(remote) } };
   };
   const makeController = () => createWorkoutController({ now: () => clock, store, request });
   const controller = makeController();
@@ -75,6 +75,9 @@ test('corrections append behind an in-flight completion without mutating it', as
   assert.equal(f.batches.length, 2);
   assert.deepEqual(f.batches[1].map(write => write.completed.weight), ['65kg', '70kg']);
   assert.equal(f.controller.getPendingSetCount(), 0);
+  // The phone edit to the next set reaches the watch with the next running workout read.
+  f.advance();
+  await f.controller.requestRefresh();
   f.controller.nextSet();
   assert.equal(f.controller.canCorrectLastSet().set.weight, 70);
   assert.equal(f.controller.view().pending.set.weight, 65);
