@@ -157,7 +157,8 @@ for (const product of ['page', 'data-widget']) {
     const active = source.slice(start, source.indexOf('\nfunction ', start + 1));
     assert.match(active, /canSkipWarmup/);
     assert.match(active, /text:\s*'Skip'/);
-    assert.match(active, /x:\s*px\(62\)[\s\S]*?y:\s*px\((?:86|88)\)[\s\S]*?w:\s*px\((?:64|74)\)[\s\S]*?h:\s*px\((?:36|38)\)/);
+    // The compact left rect (62, 88, 64x38) now lives in activeSetHeaderLayout, asserted in watch-layout.test.js.
+    assert.match(active, /x:\s*px\(header\.skip\.x\)[\s\S]*?y:\s*px\(header\.skip\.y\)[\s\S]*?w:\s*px\(header\.skip\.w\)[\s\S]*?h:\s*px\(header\.skip\.h\)/);
     assert.match(active, /skipWarmup\(/);
   });
 

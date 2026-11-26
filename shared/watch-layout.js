@@ -99,6 +99,43 @@ export const ACTIVE_SET_LAYOUT = Object.freeze({
   }),
 });
 
+/**
+ * Header band of the set and Prepare screens, above the first stepper row (y 170 with RPE). The
+ * exercise image owns the top-left corner it always had on Prepare; Skip warm-up keeps that corner
+ * when there is no image and otherwise moves under Info, so the image, the title, the set progress
+ * and both buttons are all visible at once and no stepper row moves.
+ */
+export const ACTIVE_SET_HEADER_LAYOUT = Object.freeze({
+  y: 88,
+  skip: Object.freeze({ x: 62, width: 64, height: 38 }),
+  skipUnderInfo: Object.freeze({ gap: 4, height: 36 }),
+  text: Object.freeze({ x: 64, width: 282 }),
+  textBesideLeft: Object.freeze({ x: 132, width: 216 }),
+});
+
+/** The white tile and the image inside it, in the header's top-left corner. */
+export const ACTIVE_SET_IMAGE_TILE = Object.freeze({
+  x: 62, y: ACTIVE_SET_HEADER_LAYOUT.y, w: 64, h: 64,
+  inner: Object.freeze({ x: 66, y: ACTIVE_SET_HEADER_LAYOUT.y + 4, w: 56, h: 56 }),
+});
+
+export function activeSetHeaderLayout({ showsImage = false, canSkipWarmup = false, info }) {
+  const { y, skip, skipUnderInfo, text, textBesideLeft } = ACTIVE_SET_HEADER_LAYOUT;
+  const besideLeft = showsImage || canSkipWarmup;
+  let skipRect = null;
+  if (canSkipWarmup) {
+    skipRect = showsImage
+      ? { x: info.x, y: info.y + info.h + skipUnderInfo.gap, w: info.w, h: skipUnderInfo.height }
+      : { x: skip.x, y, w: skip.width, h: skip.height };
+  }
+  return {
+    textX: besideLeft ? textBesideLeft.x : text.x,
+    textWidth: besideLeft ? textBesideLeft.width : text.width,
+    image: showsImage ? ACTIVE_SET_IMAGE_TILE : null,
+    skip: skipRect,
+  };
+}
+
 export function extensionRestActionsLayout(remaining) {
   const x = 64;
   const width = 352;

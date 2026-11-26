@@ -1,6 +1,6 @@
 import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
-import { ACTIVE_SET_ACTION_LAYOUT, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
+import { ACTIVE_SET_ACTION_LAYOUT, ACTIVE_SET_IMAGE_TILE, activeSetHeaderLayout, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
 import { createRestPresentationState, updateRestPresentation, readAutoPreparePreference, saveAutoPreparePreference } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
@@ -2920,7 +2920,6 @@ function renderTimedSetScreen(view) {
   const layout = TIMED_SET_LAYOUT;
   renderedTimedPhase = timer.phase;
   renderTopBar(view, () => { isOverviewOpen = true; renderUI(); });
-  exerciseImages?.prefetch(view.exerciseImageUrl);
   addWidget(widget.BUTTON, { x: px(344), y: px(88), w: px(74), h: px(36), radius: px(18), normal_color: THEME.card, press_color: THEME.cardActive, text: 'Info', text_size: font('caption'), diagnosticAction: 'OPEN_INFO', click_func: () => openTextModal(view.exerciseName, view.exerciseDetails || 'No exercise details available.', view.exerciseImageUrl) });
   const label = (key, y, h, text, size, color = THEME.textPrimary) => addLiveLabel(key, {
     x: px(62), y: px(y), w: px(356), h: px(h), text, text_size: font(size),
@@ -3015,7 +3014,8 @@ function renderActiveSetScreen(view) {
   const loadingEquipment = isResting && pending ? pending.loadingEquipment : view.loadingEquipment;
   const canSkipWarmup = Boolean(set?.isWarmup && (!view.timedSet || view.timedSet.phase === 'READY'));
   const controls = activeSetLayout(set);
-  exerciseImages?.prefetch(isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl);
+  // A set under way never asks the phone for an image: the BLE transfer would overlap the set sync.
+  if (isResting && pending) exerciseImages?.prefetch(pending.exerciseImageUrl);
 
   if (isResting) {
     renderRestBezel(view.rest);
@@ -3030,9 +3030,13 @@ function renderActiveSetScreen(view) {
     });
   }
 
-  const showsPreparationImage = isResting && !canSkipWarmup && renderPreparationImage(pending?.exerciseImageUrl);
-  const headerX = (canSkipWarmup || showsPreparationImage) ? 132 : 64;
-  const headerWidth = (canSkipWarmup || showsPreparationImage) ? 216 : 282;
+  // During the set the image comes from the flash cache only; Prepare may still ask the phone for it.
+  const showsImage = renderPreparationImage(isResting ? pending?.exerciseImageUrl : view.exerciseImageUrl,
+    { fromFlashOnly: !isResting });
+  const infoButton = { x: 354, y: 88, w: 64, h: 38 };
+  const header = activeSetHeaderLayout({ showsImage, canSkipWarmup, info: infoButton });
+  const headerX = header.textX;
+  const headerWidth = header.textWidth;
   const hasPurpleBezel = isPurpleRestRing({ isResting, rest: view.rest });
 
   addLiveLabel('exerciseTitle', {
@@ -3049,11 +3053,11 @@ function renderActiveSetScreen(view) {
   });
 
   addWidget(widget.BUTTON, {
-    x: px(354),
-    y: px(88),
-    w: px(64),
-    h: px(38),
-    radius: px(19),
+    x: px(infoButton.x),
+    y: px(infoButton.y),
+    w: px(infoButton.w),
+    h: px(infoButton.h),
+    radius: px(infoButton.h / 2),
     normal_color: THEME.cardActive,
     press_color: THEME.card,
     color: THEME.primaryLight,
@@ -3063,13 +3067,13 @@ function renderActiveSetScreen(view) {
     click_func: () => openTextModal(exerciseName, exerciseDetails || 'No exercise details available.', isResting && pending ? pending.exerciseImageUrl : view.exerciseImageUrl),
   });
 
-  if (canSkipWarmup) {
+  if (header.skip) {
     addWidget(widget.BUTTON, {
-      x: px(62),
-      y: px(88),
-      w: px(64),
-      h: px(38),
-      radius: px(19),
+      x: px(header.skip.x),
+      y: px(header.skip.y),
+      w: px(header.skip.w),
+      h: px(header.skip.h),
+      radius: px(header.skip.h / 2),
       normal_color: THEME.card,
       press_color: THEME.cardActive,
       color: 0xffb544,
@@ -3488,25 +3492,31 @@ function renderRestScreen(view) {
   });
 }
 
-function renderPreparationImage(apiImageUrl) {
+function renderPreparationImage(apiImageUrl, { fromFlashOnly = false } = {}) {
+  // Returns whether the image owns the header corner. Prepare keeps it while the image loads, so Skip does
+  // not jump; the set screen draws only an image already in flash and never asks the phone.
   if (!normalizeExerciseImages(accountSettings?.exerciseImages)) return false;
   const imageUrl = exerciseDisplayImageUrl(apiImageUrl);
   if (!imageUrl) return false;
-  preparationImageUrl = imageUrl;
-  exerciseImages?.load(imageUrl);
+  if (!fromFlashOnly) {
+    preparationImageUrl = imageUrl;
+    exerciseImages?.load(imageUrl);
+  }
   const image = exerciseImages?.get(imageUrl);
   if (image?.status === 'unavailable') return false;
+  if (fromFlashOnly && image?.status !== 'ready') return false;
   if (image?.status === 'ready') {
+    const tile = ACTIVE_SET_IMAGE_TILE;
     addWidget(widget.FILL_RECT, {
-      x: px(62),
-      y: px(88),
-      w: px(64),
-      h: px(64),
+      x: px(tile.x),
+      y: px(tile.y),
+      w: px(tile.w),
+      h: px(tile.h),
       radius: px(12),
       color: 0xffffff,
     });
     addWidget(widget.IMG, {
-      x: px(66), y: px(92), w: px(56), h: px(56), src: image.src,
+      x: px(tile.inner.x), y: px(tile.inner.y), w: px(tile.inner.w), h: px(tile.inner.h), src: image.src,
       auto_scale: true, auto_scale_obj_fit: false,
     });
   }
