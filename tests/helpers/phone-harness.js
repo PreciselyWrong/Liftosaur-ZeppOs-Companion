@@ -40,7 +40,10 @@ function clone(value) {
   return value === undefined ? undefined : JSON.parse(JSON.stringify(value));
 }
 
-/** Builds an API workout: `shape` lists [warmupCount, workCount] per exercise. */
+/**
+ * Builds an API workout: `shape` lists [warmupCount, workCount, extraSetFields]
+ * per exercise, for example `{ setTimer: 30, isUnilateral: true }`.
+ */
 export function buildApiWorkout(shape, { programId = 'prog-1', restSeconds = 60, unit = 'kg' } = {}) {
   return {
     programId,
@@ -48,7 +51,7 @@ export function buildApiWorkout(shape, { programId = 'prog-1', restSeconds = 60,
     dayName: 'Day 1',
     dayData: { week: 1, dayInWeek: 1 },
     startTime: null,
-    entries: shape.map(([warmups, works], exerciseIndex) => {
+    entries: shape.map(([warmups, works, extra = {}], exerciseIndex) => {
       const entryId = `entry-${exerciseIndex + 1}`;
       const set = (kind, index) => ({
         setId: `${entryId}-${kind}-${index + 1}`,
@@ -57,6 +60,7 @@ export function buildApiWorkout(shape, { programId = 'prog-1', restSeconds = 60,
         reps: 5,
         weight: `${kind === 'warmup' ? 20 : 60 + exerciseIndex}${unit}`,
         timer: restSeconds,
+        ...extra,
         completed: null,
       });
       return {
@@ -70,7 +74,8 @@ export function buildApiWorkout(shape, { programId = 'prog-1', restSeconds = 60,
   };
 }
 
-export function createFakeCloud(template) {
+/** `strictStart`: a repeated start is refused even for the running workout's own start time. */
+export function createFakeCloud(template, { strictStart = false } = {}) {
   let current = null;
   let startCount = 0;
   const history = [];
@@ -87,7 +92,10 @@ export function createFakeCloud(template) {
     },
     async startRunningWorkout({ startTime }) {
       if (current) {
-        if (current.startTime === startTime) return { workout: clone(current) };
+        if (current.startTime === startTime) {
+          if (strictStart) throw apiError('workout_start_time_taken');
+          return { workout: clone(current) };
+        }
         throw apiError('workout_already_active');
       }
       startCount += 1;
