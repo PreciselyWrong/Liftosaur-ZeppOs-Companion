@@ -1240,7 +1240,7 @@ function renderSetupScreen() {
     press_color: THEME.primaryDeep,
     text: isBusy ? 'Checking...' : 'Retry',
     text_size: font('title'),
-    click_func: startInitialNetworkLoad,
+    click_func: retryConnection,
   });
 }
 
@@ -1318,7 +1318,7 @@ function renderEmptyScreen() {
     press_color: THEME.primaryDeep,
     text: 'Retry',
     text_size: font('title'),
-    click_func: startInitialNetworkLoad,
+    click_func: retryConnection,
   });
 }
 
@@ -3622,6 +3622,8 @@ function scheduleConnectionRetry() {
 }
 
 function retryConnection() {
+  // A second load in flight could land on Home after the lifter has already started a workout.
+  if (isBusy) return;
   resetConnectionRetry();
   startInitialNetworkLoad();
 }
