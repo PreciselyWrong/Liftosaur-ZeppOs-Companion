@@ -42,3 +42,28 @@ test('a refresh after skipping a warmup keeps the work set logged after it', asy
   assert.equal(controller.sync().acknowledgedSetCount, 1);
   assert.equal(controller.view().currentSet.setId, 'live1-entry-1-work-2');
 });
+
+test('a finish retry after a lost reply reports the missing phone workout and keeps the session', async () => {
+  const { cloud, link, store, controller } = await startDirectWorkout([[0, 1]], { auto: false });
+  await link.deliver(0, 'ok');
+  await flush();
+  controller.completeSet();
+  await flush();
+  await link.deliver(0, 'ok');
+  await flush();
+
+  const first = controller.finishWorkoutRemote().catch((err) => err);
+  await flush();
+  await link.deliver(0, 'noReply');
+  assert.equal((await first).code, 'NETWORK');
+  assert.equal(cloud.history.length, 1);
+
+  const retry = controller.finishWorkoutRemote().catch((err) => err);
+  await flush();
+  await link.deliver(0, 'ok');
+  assert.equal((await retry).code, 'no_active_workout');
+
+  assert.equal(controller.sync().remoteMissing, true);
+  assert.equal(controller.status().code, 'remote-missing');
+  assert.notEqual(store.load(), null);
+});
