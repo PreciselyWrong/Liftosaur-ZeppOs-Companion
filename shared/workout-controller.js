@@ -544,7 +544,16 @@ export function createWorkoutController({
       return { success: false, reason: 'NO_STORE' };
     }
 
-    const snapshot = store.load();
+    let snapshot;
+    try {
+      snapshot = store.load();
+    } catch (err) {
+      // A session file that did not read is kept as it is, and every save reports it is not
+      // stored until a launch reads it, so a new workout carries the "Unsaved on watch" warning.
+      logError('restore read failed', err);
+      saveFailing = true;
+      return { success: false, reason: 'UNREADABLE', error: err };
+    }
     if (!snapshot || !snapshot.plan || !Array.isArray(snapshot.journal)) {
       return { success: false, reason: 'NO_SNAPSHOT' };
     }

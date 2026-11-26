@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import { createSessionStore, createMemoryStorageAdapter } from '../shared/session-storage.js';
+import { createSessionStore, createMemoryStorageAdapter, SESSION_UNREADABLE } from '../shared/session-storage.js';
 
 const PLAN = {
   programId: 'p1',
@@ -75,7 +75,8 @@ test('survives an adapter that throws', () => {
     { legacy: { read: fail, remove: fail } }
   );
 
-  assert.equal(store.load(), null);
+  // Files that may exist but do not read are not "no session": a new workout must not clear them.
+  assert.throws(() => store.load(), (err) => err.code === SESSION_UNREADABLE);
   assert.equal(store.save({ plan: PLAN, journal: JOURNAL }), false);
   store.clear();
 });
