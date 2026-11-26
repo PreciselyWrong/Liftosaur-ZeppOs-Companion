@@ -11,7 +11,7 @@ the data handled by both products.
 
 These applications have no dedicated server, no backend, and no analytics service. Workout
 data is exchanged directly between your phone and Liftosaur. If you enable exercise images,
-the phone also contacts the image host; PNG images are requested through wsrv.nl for conversion.
+the phone also contacts the image host; PNG, JPEG and WebP images are requested through wsrv.nl for conversion.
 
 ## What the application handles
 
@@ -23,14 +23,14 @@ the phone also contacts the image host; PNG images are requested through wsrv.nl
 | Heart rate in Lifto Companion | Watch memory only, during the session | Nowhere | Displayed live on the standalone workout screen |
 | Native duration and calories in Lifto Workout | Read live from the active Zepp workout; watch memory only | Nowhere by Lifto Workout | Displayed in the Workout Extension |
 | Rest timer preferences | Read from Liftosaur Cloud | Nowhere else | Used when a workout set does not specify its own timer |
-| Optional exercise images | Downloaded on the phone, then stored locally on the watch | The phone requests images from their HTTPS host; PNG requests go through `https://wsrv.nl`, which receives the original image URL. Image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
+| Optional exercise images | Downloaded on the phone, then stored locally on the watch | The phone requests images from their HTTPS host; PNG, JPEG and WebP requests go through `https://wsrv.nl`, which receives the original image URL. Image files travel to the watch over Bluetooth | Displays exercise pictures in the workout list, Info and Prepare when enabled |
 | Optional watch diagnostics for Lifto Companion and Lifto Workout (up to 12 events each from the current run and the three previous runs: timestamps, product, app/firmware/OS/API versions, device source and screen geometry, screen/session state, widget count, modal/overview/preparation/image-setting flags, safe action names, phone request types and outcomes, exercise image load outcomes with the failing step and HTTP status, lifecycle/drawing phases, JavaScript error class/phase, and available memory measurements) | Each product's local storage on the watch and settings storage on your phone after reconnection | From the watch to your paired phone only; never to Liftosaur | Helps identify recent app actions and memory conditions when system logs cannot be exported |
 
 ## What the application never does
 
 - The API key is never transmitted to the watch, never sent over the Bluetooth link, and never written to any log or diagnostic export. It stays strictly inside the phone Side Service.
 - Companion heart rate and Workout's native duration and calories are never sent to Liftosaur, logged, or stored between Lifto sessions.
-- The API key and diagnostics are not sent to image hosts or wsrv.nl. Optional image requests disclose the image URL to wsrv.nl for PNG conversion; that URL may identify an exercise image from your workout.
+- The API key and diagnostics are not sent to image hosts or wsrv.nl. Optional image requests disclose the image URL to wsrv.nl for resizing and PNG conversion; that URL may identify an exercise image from your workout.
 - No advertising, tracking, third-party analytics, or remote crash reporters are included.
 - Watch diagnostics contain no API key, workout name, exercise name, weight, repetition count, heart-rate value, or details about other applications.
 - Watch diagnostics are off by default and enabled separately in each product's phone settings; switching them off stops collection after the watch reconnects and clears that product's stored report.
@@ -39,7 +39,7 @@ the phone also contacts the image host; PNG images are requested through wsrv.nl
 
 Your workout data is stored in your Liftosaur account, and its handling is governed by
 Liftosaur's privacy policy at <https://www.liftosaur.com>. If you enable exercise images,
-the image host receives the download request, and wsrv.nl processes PNG image URLs.
+the image host receives the download request, and wsrv.nl processes PNG, JPEG and WebP image URLs.
 This application is independent and is not affiliated with, maintained by, or endorsed
 by Liftosaur or its author.
 
