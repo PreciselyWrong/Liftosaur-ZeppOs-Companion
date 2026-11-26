@@ -79,6 +79,26 @@ export function normalizeDirectSync(sync, defaultMode = 'LEGACY') {
 }
 
 /**
+ * Identity of a received server workout, kept instead of its serialised form, which is
+ * tens of kilobytes held for the whole workout: the text length and a 64-bit hash of it
+ * (two independent 32-bit lanes, cyrb53-style mixing). Only "unchanged since the last
+ * one received" is decided with it.
+ */
+export function workoutSignature(workout) {
+  const text = String(JSON.stringify(workout));
+  let h1 = 0xdeadbeef;
+  let h2 = 0x41c6ce57;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    h1 = Math.imul(h1 ^ code, 2654435761);
+    h2 = Math.imul(h2 ^ code, 1597334677);
+  }
+  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
+  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
+  return `${text.length}:${h1 >>> 0}:${h2 >>> 0}`;
+}
+
+/**
  * Merge a list of [start, end] activity intervals into the minimal set of
  * non-overlapping spans, sorted by start. Adjacent or overlapping intervals are
  * fused. This keeps `preservedIntervals` bounded to the number of distinct
@@ -352,7 +372,7 @@ export function createWorkoutController({
     if (!plan || !plan.unit) return;
     const completionJournal = localCompletionJournal(plan);
     dayPlan = plan;
-    lastServerWorkoutSignature = JSON.stringify(serverWorkout);
+    lastServerWorkoutSignature = workoutSignature(serverWorkout);
     session = createWorkoutSession({
       plan: dayPlan,
       resumeFromEntryId,
@@ -874,7 +894,7 @@ export function createWorkoutController({
             const currentState = session.view(now()).state;
             if (currentState === SESSION_STATES.REST) {
               deferredServerWorkout = returnedWorkout;
-              lastServerWorkoutSignature = JSON.stringify(returnedWorkout);
+              lastServerWorkoutSignature = workoutSignature(returnedWorkout);
             } else if (currentState === SESSION_STATES.ACTIVE_SET) {
               applyAdoptedSnapshot(returnedWorkout);
               break;
@@ -962,7 +982,7 @@ export function createWorkoutController({
       }
 
       if (currentPending === 0 && currentWriteCount === writeCountAtPollStart) {
-        const serverSignature = JSON.stringify(serverWorkout);
+        const serverSignature = workoutSignature(serverWorkout);
         if (serverSignature === lastServerWorkoutSignature) return false;
         if (stateNow === SESSION_STATES.REST) {
           deferredServerWorkout = serverWorkout;
