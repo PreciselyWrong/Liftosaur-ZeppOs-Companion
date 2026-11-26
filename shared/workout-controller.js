@@ -292,12 +292,18 @@ export function createWorkoutController({
     }] : [];
   }
 
+  // A workout without entries cannot be run: adopting it would end the workout on NO_PLAN.
+  function isRunnableWorkout(workout) {
+    return Array.isArray(workout?.entries) && workout.entries.length > 0;
+  }
+
   function applyAdoptedSnapshot(serverWorkout, { preserveNavigation = true } = {}) {
     if (disposed) return;
     if (hasActiveTimer()) {
       deferredServerWorkout = serverWorkout;
       return;
     }
+    if (!isRunnableWorkout(serverWorkout)) return;
     const capturedAt = now();
     const localView = session.view(capturedAt);
     const mappedPlan = mapWorkout(serverWorkout, {
@@ -949,6 +955,10 @@ export function createWorkoutController({
         setStatus({ code: SYNC_STATUS_CODES.REMOTE_MISSING, detail: 'NO_REMOTE_WORKOUT' });
         notifyChange();
         return { success: false, reason: 'NO_REMOTE_WORKOUT' };
+      }
+      if (!isRunnableWorkout(workout)) {
+        setStatus({ code: SYNC_STATUS_CODES.ERROR, detail: 'EMPTY_REMOTE_WORKOUT' });
+        return { success: false, reason: 'EMPTY_REMOTE_WORKOUT' };
       }
       directSync.conflict = false;
       directSync.remoteMissing = false;

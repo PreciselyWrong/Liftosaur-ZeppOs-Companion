@@ -67,3 +67,35 @@ test('a finish retry after a lost reply reports the missing phone workout and ke
   assert.equal(controller.status().code, 'remote-missing');
   assert.notEqual(store.load(), null);
 });
+
+for (const [label, strip] of [
+  ['without entries', (workout) => { delete workout.entries; }],
+  ['with no entries', (workout) => { workout.entries = []; }],
+]) {
+  test(`a current workout reply ${label} keeps the running plan and its sets`, async () => {
+    let time = 1_000_000;
+    const { cloud, controller } = await startDirectWorkout([[0, 2], [0, 1]], { time: () => time });
+    controller.completeSet();
+    await flush();
+    time += 200_000;
+    controller.nextSet();
+    await flush();
+    const exerciseCount = controller.plan().exercises.length;
+
+    const reduced = structuredClone(cloud.current());
+    strip(reduced);
+    cloud.setCurrent(reduced);
+    time += 200_000;
+    controller.requestRefresh();
+    await flush();
+
+    assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(controller.plan().exercises.length, exerciseCount);
+    assert.equal(controller.getWorkoutSetWrites().length, 1);
+
+    const adopted = await controller.adoptCurrent({ preserveNavigation: false });
+    assert.equal(adopted.success, false);
+    assert.equal(controller.view().state, SESSION_STATES.ACTIVE_SET);
+    assert.equal(controller.plan().exercises.length, exerciseCount);
+  });
+}
