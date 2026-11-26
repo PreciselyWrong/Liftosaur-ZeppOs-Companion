@@ -7,9 +7,10 @@
  */
 
 import { MESSAGE_TYPES, ERROR_CODES, validateEnvelope, createPong, createError, createReply } from '../shared/protocol.js';
+import { isValidReply } from '../shared/protocol-schema.js';
 import { createWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled, WORKOUT_DIAGNOSTICS_ENABLED_KEY } from '../shared/workout-diagnostics.js';
 
-export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null, exerciseImageService = null, diagnosticsStorage = null } = {}) {
+export function createSideRouter({ programService = null, workoutService = null, workoutAbandoner = null, exerciseImageService = null, diagnosticsStorage = null, log = console.log } = {}) {
   function notConfigured(message) {
     return createError(message, ERROR_CODES.NOT_CONFIGURED, 'No Liftosaur API key configured on the phone');
   }
@@ -23,8 +24,8 @@ export function createSideRouter({ programService = null, workoutService = null,
     return createError(message, code, text);
   }
 
-  return {
-    async handle(rawMessage) {
+  const routes = {
+    async route(rawMessage) {
       const validation = validateEnvelope(rawMessage);
       if (!validation.valid) {
         return createError(rawMessage, ERROR_CODES.INVALID_ENVELOPE, validation.reason);
@@ -251,6 +252,16 @@ export function createSideRouter({ programService = null, workoutService = null,
             `Message type '${rawMessage.type}' is not supported`
           );
       }
+    },
+  };
+
+  return {
+    // A reply of the wrong shape never reaches the watch as data: it leaves as an error the watch retries.
+    async handle(rawMessage) {
+      const reply = await routes.route(rawMessage);
+      if (isValidReply(rawMessage?.type, reply)) return reply;
+      log('[liftosaur-side] protocol error: invalid reply', rawMessage?.type, reply?.type);
+      return createError(rawMessage, ERROR_CODES.API_FAILED, `Invalid ${reply?.type} reply`);
     },
   };
 }
