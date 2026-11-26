@@ -38,6 +38,12 @@ export function createLiftosaurApiClient({
   deviceId = null,
   clientName = null,
 } = {}) {
+  // Keys without the lftsk_ prefix are not caught by redactMessage, and a server may echo the key back.
+  function withoutKey(message) {
+    const text = String(message || '');
+    return apiKey ? text.split(String(apiKey)).join('***') : text;
+  }
+
   async function request(endpoint, { method = 'GET', body = null, requireIdentity = false } = {}) {
     if (!fetcher) {
       throw new LiftosaurApiError('No HTTP fetcher available', { status: 0, endpoint });
@@ -72,7 +78,7 @@ export function createLiftosaurApiClient({
         body: body ? JSON.stringify(body) : undefined,
       });
     } catch (networkErr) {
-      throw new LiftosaurApiError(`Network failure: ${networkErr?.message || 'unknown'}`, {
+      throw new LiftosaurApiError(withoutKey(`Network failure: ${networkErr?.message || 'unknown'}`), {
         status: 0,
         endpoint,
         code: 'NETWORK',
@@ -80,18 +86,19 @@ export function createLiftosaurApiClient({
     }
 
     let parsed = null;
-    let rawText = '';
     try {
-      rawText = await response.text();
+      const rawText = await response.text();
       parsed = rawText ? JSON.parse(rawText) : null;
     } catch (parseErr) {
       parsed = null;
     }
 
     if (!response.ok) {
-      const apiMessage =
-        parsed?.error?.message || parsed?.error || parsed?.message || rawText || response.statusText;
-      throw new LiftosaurApiError(apiMessage, {
+      // A body that is not the API's JSON (a proxy's HTML page, say) is not a message for the watch.
+      const apiMessage = [parsed?.error?.message, parsed?.error, parsed?.message]
+        .find((candidate) => typeof candidate === 'string' && candidate.trim())
+        || `HTTP ${response.status}${response.statusText ? ` ${response.statusText}` : ''}`;
+      throw new LiftosaurApiError(withoutKey(apiMessage), {
         status: response.status,
         endpoint,
         code: parsed?.error?.code || null,
