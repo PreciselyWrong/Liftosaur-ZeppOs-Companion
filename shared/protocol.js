@@ -4,6 +4,12 @@
  * Version 3 adds the shared running-workout lifecycle. The watch and phone use
  * the same Liftosaur workout while version 2 remains an intentionally rejected
  * legacy protocol.
+ *
+ * Workout replies (next, current, start) may add `workout.gymEquipment`, a
+ * deduplicated list of compact equipment in the workout's unit
+ * (`{ unit, bar, sides, plates: [[weight, totalCount]] }` or
+ * `{ unit, fixed: [weight] }`), and `entry.gymEquipment`, an index into it.
+ * The reduced SYNC_WORKOUT_SETS_RESULT never carries them.
  */
 
 export const PROTOCOL_VERSION = 3;

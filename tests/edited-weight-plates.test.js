@@ -4,6 +4,11 @@ import assert from 'node:assert/strict';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { createWorkoutSession, SESSION_STATES } from '../shared/workout-session.js';
 import { formatLoadoutLabel } from '../shared/weight-rounding.js';
+import { createWorkoutController } from '../shared/workout-controller.js';
+import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
+import { weightStepperDisplay } from '../shared/workout-display-settings.js';
+import { MESSAGE_TYPES } from '../shared/protocol.js';
+import { createFakeCloud, createPhoneLink, flush } from './helpers/phone-harness.js';
 
 // Synthetic sets with the shape of real WORKOUT_CURRENT_DATA payloads: each set
 // carries the server's breakdown twice, as `plates` (strings) and as
@@ -202,4 +207,83 @@ test('fixed weights and sets without loading data show no breakdown after an edi
   const legacy = sessionOnFirstWorkSet({ startTime: 1, entries: [entry('cable_row', 'cable', [], [bare])] });
   legacy.adjustWeight(1, { timestamp: 2000 });
   assert.equal(workSetLabel(legacy), null);
+});
+
+// Synthetic gym in the GET /gyms/:id/equipment shape: more plates than the
+// workout ever proposes, and a rack of fixed dumbbells.
+const ACCOUNT = {
+  currentGymId: 'gym-1',
+  exerciseData: [],
+  equipment: [
+    {
+      id: 'barbell', isDeleted: false, bar: { kg: '20kg', lb: '45lb' }, multiplier: 2, isFixed: false, fixed: [],
+      plates: [{ weight: '20kg', num: 4 }, { weight: '5kg', num: 2 }, { weight: '2.5kg', num: 2 }, { weight: '1.25kg', num: 2 }],
+    },
+    {
+      id: 'dumbbell', isDeleted: false, bar: { kg: '0kg', lb: '0lb' }, multiplier: 1, isFixed: true, plates: [],
+      fixed: ['10kg', '12.5kg', '17.5kg'],
+    },
+  ],
+};
+
+async function controllerThroughPhone(workout, account) {
+  const cloud = createFakeCloud(workout, { account });
+  const link = createPhoneLink(cloud);
+  link.setAuto(true);
+  const controller = createWorkoutController({
+    store: createSessionStore(createMemoryStorageAdapter()),
+    request: link.request,
+    now: () => 1_000_000,
+  });
+  const next = await link.phoneHandle(MESSAGE_TYPES.GET_WORKOUT_NEXT, {});
+  controller.loadPlan(workoutToDayPlan(next.payload.workout), { clearStore: true });
+  controller.startWorkout();
+  await flush();
+  return controller;
+}
+
+// What the weight stepper shows: the label line under the value.
+function stepperLabel(controller) {
+  const view = controller.view();
+  const set = view.currentSet;
+  return weightStepperDisplay(set.weight, view.unit,
+    formatLoadoutLabel(set.weight, view.loadingEquipment, view.unit, set.plates, set.targetWeight), true).label;
+}
+
+test('through the phone, an edited weight shows the plates from the gym equipment', async () => {
+  const workout = {
+    programId: 'p', programName: 'P', dayName: 'D', dayData: { week: 1, dayInWeek: 1 }, startTime: null,
+    entries: [
+      entry('row_barbell', 'barbell', [], [plateSet('s1', 0, false, 60, [[20, 1]], { sides: 2 })]),
+      entry('curl_dumbbell', 'dumbbell', [], [fixedSet('s2', 0, 12.5)]),
+    ],
+  };
+  const controller = await controllerThroughPhone(workout, ACCOUNT);
+  assert.equal(controller.sync().startConfirmed, true);
+  assert.equal(stepperLabel(controller), '1×20 KG');
+
+  controller.adjustWeight(1);
+  assert.equal(controller.view().currentSet.weight, 62.5);
+  assert.equal(stepperLabel(controller), '1×20 + 1×1.25 KG');
+
+  controller.adjustWeight(-3);
+  assert.equal(controller.view().currentSet.weight, 55);
+  // Only small plates sit between one 20 per side and two: 37.5 is the most below.
+  assert.equal(stepperLabel(controller), 'NEAR 37.5/60 KG');
+
+  controller.selectExercise(1);
+  assert.equal(stepperLabel(controller), 'USE 12.5 KG');
+  controller.adjustWeight(1);
+  assert.equal(controller.view().currentSet.weight, 15);
+  assert.equal(stepperLabel(controller), 'NEAR 12.5/17.5 KG');
+});
+
+test('through the phone without the equipment endpoints, inference still breaks down what it can', async () => {
+  const workout = {
+    programId: 'p', programName: 'P', dayName: 'D', dayData: { week: 1, dayInWeek: 1 }, startTime: null,
+    entries: [entry('curl_dumbbell', 'dumbbell', [], [fixedSet('s2', 0, 12.5)])],
+  };
+  const controller = await controllerThroughPhone(workout, null);
+  controller.adjustWeight(1);
+  assert.equal(stepperLabel(controller), 'KG');
 });
