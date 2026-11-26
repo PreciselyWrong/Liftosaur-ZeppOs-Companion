@@ -52,10 +52,28 @@ function setup(overrides = {}) {
 }
 
 const wrongForSync = [
-  ['a full snapshot', () => ({ workout: changedSnapshot() })],
   ['a workout without its start time', () => ({ workout: {} })],
   ['entries that are not an array', () => ({ workout: { startTime: START, entries: {} } })],
 ];
+
+// An older phone during an app update still answers with the full workout: an acknowledgement, never adopted.
+test('a set sync answered with a full snapshot acknowledges the sets and adopts nothing', async () => {
+  const { controller, replies, snapshot } = setup();
+  await controller.ensureStarted();
+  controller.completeSet();
+  const before = JSON.parse(snapshot());
+  replies[T.SYNC_WORKOUT_SETS] = () => ({ payload: { workout: changedSnapshot() } });
+
+  assert.equal(await controller.syncSets(), true);
+  controller.nextSet();
+  controller.selectExercise(0);
+
+  assert.equal(controller.sync().conflict, false);
+  assert.equal(controller.sync().acknowledgedSetCount, 1);
+  assert.equal(controller.hasDeferredServerWorkout(), false);
+  assert.deepEqual(JSON.parse(snapshot()).plan, before.plan);
+  assert.deepEqual(JSON.parse(snapshot()).writes, before.writes);
+});
 
 for (const [label, payload] of wrongForSync) {
   test(`a set sync answered with ${label} acknowledges nothing and adopts nothing`, async () => {
