@@ -1,3 +1,5 @@
+import { syncConflictMessage } from './sync-conflict-text.js';
+
 function count(value) {
   return Number.isSafeInteger(value) && value >= 0 ? value : 0;
 }
@@ -20,7 +22,7 @@ export function recordingLabel(sync, writeCount, distinctCount) {
   return pending ? `${pending} pending` : 'Synced';
 }
 
-export function recordingDetails(sync, { completedCount = 0, pendingCount: distinctCount } = {}) {
+export function recordingDetails(sync, { completedCount = 0, pendingCount: distinctCount, conflictCode = null } = {}) {
   const pending = pendingCount(sync, completedCount, distinctCount);
   const statusLabel = recordingLabel(sync, completedCount, distinctCount);
   let description;
@@ -29,7 +31,8 @@ export function recordingDetails(sync, { completedCount = 0, pendingCount: disti
   } else if (sync.remoteMissing) {
     description = 'Cloud workout missing. Local sets preserved. Check your phone.';
   } else if (sync.conflict) {
-    description = 'Sync conflict. Local sets preserved. Resolve it on your phone.';
+    const reason = syncConflictMessage(conflictCode);
+    description = `${reason ? `${reason}.` : 'Sync conflict.'} Local sets preserved. Resolve it on your phone.`;
   } else if (!sync.startConfirmed) {
     description = 'Cloud start pending. Sets stay on watch until the phone reconnects.';
   } else if (pending) {

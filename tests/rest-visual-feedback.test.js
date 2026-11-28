@@ -158,6 +158,11 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
     restHaloWidgets: [],
     restPulseAnimHandles: [],
     restPulseAttempted: false,
+    widgetPlan: null,
+    widgetSpecs: new Map(),
+    plannedBuild: false,
+    holdExerciseImagesWhile: (_images, work) => work(),
+    UI_WORK_QUIET_MS: 1000,
     THEME,
     W: 480,
     H: 480,
@@ -325,6 +330,7 @@ for (const [name, source, isCompanion] of [
     const fn = new Function('env', `with (env) {
       ${source.includes('function stopRestBezelAnimation(') ? extractFunction(source, 'stopRestBezelAnimation') : ''}
       ${extractFunction(source, 'restStatusColor')}
+      ${extractFunction(source, 'startRestBezelPulse')}
       ${extractFunction(source, 'renderRestBezel')}
       ${extractFunction(source, topBarFn)}
       ${isCompanion ? '' : extractFunction(source, 'renderExerciseInfo')}
@@ -368,7 +374,7 @@ for (const [name, source, isCompanion] of [
       restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },
     });
     const names = ['stopRestBezelAnimation', 'restStatusColor', 'updateRestBezelAndHalo',
-      'renderRestBezel', 'updatePreparedRestVisuals', 'renderPreparedTopBar',
+      'startRestBezelPulse', 'renderRestBezel', 'updatePreparedRestVisuals', 'renderPreparedTopBar',
       'renderStepper', 'renderActiveSetScreen', 'tick'];
     if (!isCompanion) names.push('refreshActiveSetControls');
     const api = new Function('env', `with (env) {
@@ -502,7 +508,9 @@ for (const [name, source, isCompanion] of [
       extractFunction(source, 'stopRestBezelAnimation'),
       extractFunction(source, 'restStatusColor'),
       extractFunction(source, 'updateRestBezelAndHalo'),
+      extractFunction(source, 'startRestBezelPulse'),
       extractFunction(source, 'renderRestBezel'),
+      extractFunction(source, 'setWidgetProps'),
       "const LIVE_WIDGET_MUTABLE_KEYS = ['x', 'y', 'w', 'h', 'text', 'color', 'text_size', 'radius', 'line_width', 'start_angle', 'end_angle'];",
       extractFunction(source, 'updateLiveWidget'),
     ];
@@ -546,7 +554,7 @@ test('unavailable native animation leaves a static halo without retrying every t
     };
     return entry;
   };
-  const names = ['stopRestBezelAnimation', 'restStatusColor', 'updateRestBezelAndHalo', 'renderRestBezel'];
+  const names = ['stopRestBezelAnimation', 'restStatusColor', 'updateRestBezelAndHalo', 'startRestBezelPulse', 'renderRestBezel'];
   const api = new Function('env', `with (env) {
     ${names.map(name => extractFunction(companionSource, name)).join('\n')}
     return { render: renderRestBezel, update: updateRestBezelAndHalo };
@@ -565,7 +573,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
   test(`${name}: a rejected native color update schedules a safe redraw`, () => {
     const { env, view } = createMockEnv({ source });
     const names = ['stopRestBezelAnimation', 'restStatusColor', 'updateRestBezelAndHalo',
-      'renderRestBezel', 'updatePreparedRestVisuals'];
+      'startRestBezelPulse', 'renderRestBezel', 'updatePreparedRestVisuals'];
     const api = new Function('env', `with (env) {
       ${names.map(name => extractFunction(source, name)).join('\n')}
       return { render: renderRestBezel, update: updatePreparedRestVisuals };
@@ -582,9 +590,14 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
   test(`${name}: transparent changing labels replace only their text widget`, () => {
     const { env, widgets, liveWidgets } = createMockEnv({ source });
     env.LAYOUT = { fit: props => props };
+    env.createWidget = (type, props) => {
+      const entry = env.addWidget(type, props);
+      env.activeWidgets.pop();
+      return entry;
+    };
     const labels = new Function('env', `with (env) {
-      ${extractFunction(source, 'addTransparentLabel')}
-      ${extractFunction(source, 'updateTransparentLabel')}
+      ${['addRawWidget', 'createSpecWidget', 'addTransparentLabel', 'replaceTransparentLabel', 'updateTransparentLabel']
+    .map(name => extractFunction(source, name)).join('\n')}
       return { add: addTransparentLabel, update: updateTransparentLabel };
     }`)(env);
     const first = labels.add('clock', { x: 10, y: 20, w: 100, h: 30, text: '12:59 | Synced' });
@@ -619,7 +632,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
         preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
         workoutDiagnostics: createWorkoutDiagnostics(), cancelScheduledRender() {},
         updateSyncWarning() {}, clearWidgets() {}, hideModalControls() {},
-        renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => false,
+        renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => false, canPlanScreen: () => false,
       });
       env.workoutController.sync = () => ({});
       env.workoutController.getWorkoutSetWrites = () => [1];
@@ -630,7 +643,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       };
       env.addLiveLabel = addFooter;
       env.addTransparentLabel = addFooter;
-      const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'renderUI'];
+      const names = ['restStatusColor', 'stopRestBezelAnimation', 'startRestBezelPulse', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'drawScreen', 'renderUI'];
       const render = new Function('env', `with (env) {
         ${names.map(name => extractFunction(source, name)).join('\n')}
         const renderScreen = () => renderRestBezel(view.rest);
@@ -681,7 +694,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
       preparationImageUrl: null, WORKOUT_DIAGNOSTIC_CODES: {},
       workoutDiagnostics: createWorkoutDiagnostics(), cancelScheduledRender() {},
       updateSyncWarning() {}, clearWidgets() {}, hideModalControls() {},
-      renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => true,
+      renderDemoBadge() {}, redraw() {}, canOpenSyncDetails: () => true, canPlanScreen: () => false,
       openSyncDetailsModal: openDetails,
     });
     env.workoutController.sync = () => ({});
@@ -694,7 +707,7 @@ for (const [name, source] of [['Companion', companionSource], ['Workout', extens
     env.addLiveLabel = add('text');
     env.addTransparentLabel = add('text');
     env.addLiveButton = add('button');
-    const names = ['restStatusColor', 'stopRestBezelAnimation', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'renderUI'];
+    const names = ['restStatusColor', 'stopRestBezelAnimation', 'startRestBezelPulse', 'renderRestBezel', 'renderClockTarget', 'renderClock', 'drawScreen', 'renderUI'];
     const render = new Function('env', `with (env) {
       ${names.map(functionName => extractFunction(source, functionName)).join('\n')}
       const renderScreen = () => renderRestBezel(view.rest);

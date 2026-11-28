@@ -2,7 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import vm from 'node:vm';
-import { createExerciseImageClient, holdExerciseImagesDuring } from '../shared/exercise-image-client.js';
+import { createExerciseImageClient, holdExerciseImagesDuring, holdExerciseImagesDuringSaves, holdExerciseImagesWhile, UI_WORK_QUIET_MS } from '../shared/exercise-image-client.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
 import { hasImageMemoryHeadroom } from '../shared/exercise-images.js';
 import { OVERVIEW_PAGE_SIZE } from '../shared/watch-layout.js';
@@ -738,3 +738,85 @@ test('Preloading keeps the day images already in flash ahead of newer arrivals, 
   assert.equal(relaunched.client.get(day[0]).status, 'ready');
   relaunched.client.dispose();
 });
+
+test('Image work waits for a screen rebuild or a save and a short quiet moment after it', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = harness();
+  assert.equal(holdExerciseImagesWhile(h.client, () => { h.client.load(url); return 'drawn'; }), 'drawn');
+  await flush();
+  assert.equal(h.requests.length, 0, 'no request starts during the rebuild');
+  t.mock.timers.tick(UI_WORK_QUIET_MS - 1);
+  await flush();
+  assert.equal(h.requests.length, 0, 'nor right after it');
+  t.mock.timers.tick(1);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  assert.equal(holdExerciseImagesWhile(null, () => 'saved'), 'saved', 'a page without images still saves');
+  h.client.dispose();
+});
+
+test('An image file landing during a rebuild is shown after its quiet moment, and a rebuild never shortens a set sync hold', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const changes = [];
+  const h = harness('queued', { onChange: (_, status) => changes.push(status) });
+  h.client.load(url);
+  await flush();
+  const releaseSync = h.client.hold();
+  holdExerciseImagesWhile(h.client, () => h.receive(fileFor(h.requests[0])));
+  t.mock.timers.tick(UI_WORK_QUIET_MS);
+  await flush();
+  assert.deepEqual(changes, [], 'the set sync still holds the image');
+  releaseSync();
+  t.mock.timers.tick(UI_WORK_QUIET_MS);
+  await flush();
+  assert.deepEqual(changes, [], 'the sync keeps its own, longer quiet moment');
+  t.mock.timers.tick(5000);
+  await flush();
+  assert.deepEqual(changes, ['ready']);
+  const later = harness('queued', { onChange: (_, status) => changes.push(`later ${status}`) });
+  later.client.load(url);
+  await flush();
+  holdExerciseImagesWhile(later.client, () => later.receive(fileFor(later.requests[0])));
+  assert.equal(later.client.get(url).status, 'loading', 'the file is not decoded inside the rebuild');
+  t.mock.timers.tick(UI_WORK_QUIET_MS);
+  await flush();
+  assert.equal(later.client.get(url).status, 'ready');
+  h.client.dispose();
+  later.client.dispose();
+});
+
+test('Every session save the controller makes holds image work, even one that fails, and the store keeps its other methods', async (t) => {
+  t.mock.timers.enable({ apis: ['setTimeout', 'Date'] });
+  const h = harness();
+  let writes = 0;
+  const store = {
+    load() { return 'loaded'; },
+    save(snapshot) { writes++; h.client.load(url); if (snapshot.fail) throw new Error('flash full'); return true; },
+    hasSession() { return this.load() === 'loaded'; },
+  };
+  const held = holdExerciseImagesDuringSaves(store, () => h.client);
+  assert.equal(held.load(), 'loaded');
+  assert.equal(held.hasSession(), true, 'methods that use this still work');
+  assert.equal(held.save({}), true);
+  assert.throws(() => held.save({ fail: true }), /flash full/);
+  assert.equal(writes, 2);
+  await flush();
+  assert.equal(h.requests.length, 0, 'no image request starts inside or right after a save');
+  t.mock.timers.tick(UI_WORK_QUIET_MS);
+  await flush();
+  assert.equal(h.requests.length, 1);
+  // The images of a page are created after its store: they are read at save time.
+  let images = null;
+  const early = holdExerciseImagesDuringSaves({ save: () => 'saved' }, () => images);
+  assert.equal(early.save({}), 'saved');
+  images = h.client;
+  assert.equal(early.save({}), 'saved');
+  h.client.dispose();
+});
+
+for (const product of ['page', 'data-widget']) {
+  test(`${product} saves its session through the image hold`, () => {
+    const source = readFileSync(new URL(`../${product}/common/index.js`, import.meta.url), 'utf8');
+    assert.match(source, /store: holdExerciseImagesDuringSaves\(sessionStore, \(\) => exerciseImages\)/);
+  });
+}

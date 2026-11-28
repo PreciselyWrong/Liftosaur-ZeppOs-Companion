@@ -544,7 +544,16 @@ export function createWorkoutController({
       return { success: false, reason: 'NO_STORE' };
     }
 
-    const snapshot = store.load();
+    let snapshot;
+    try {
+      snapshot = store.load();
+    } catch (err) {
+      // A session file that did not read is kept as it is, and every save reports it is not
+      // stored until a launch reads it, so a new workout carries the "Unsaved on watch" warning.
+      logError('restore read failed', err);
+      saveFailing = true;
+      return { success: false, reason: 'UNREADABLE', error: err };
+    }
     if (!snapshot || !snapshot.plan || !Array.isArray(snapshot.journal)) {
       return { success: false, reason: 'NO_SNAPSHOT' };
     }
@@ -585,6 +594,9 @@ export function createWorkoutController({
     };
 
     log('Session resumed');
+    // A session read from an older format is stored again in the current one at once; an
+    // unchanged one costs no write.
+    persist();
     notifyChange();
     return {
       success: true,
@@ -1259,6 +1271,15 @@ export function createWorkoutController({
           logError('background set sync failed', err);
         });
       }
+    },
+    canAddSet: (exerciseIndex) => !disposed && session.canAddSet(exerciseIndex),
+    // Returns the new set's id, or null when the workout cannot take another set.
+    addSet: (exerciseIndex, options = {}) => {
+      let setId = null;
+      mutateSession(() => {
+        setId = session.addSet({ exerciseIndex, setId: options.setId, timestamp: options.timestamp ?? now() });
+      });
+      return setId;
     },
     skipWarmup: (options = {}) => {
       if (disposed) return false;

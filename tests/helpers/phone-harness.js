@@ -120,9 +120,19 @@ export function createFakeCloud(template, { strictStart = false, account = null 
       if (!current) throw apiError('no_active_workout');
       const byId = new Map(allSets(current).map((set) => [set.setId, set]));
       for (const write of sets) {
-        if (!byId.has(write.setId)) throw apiError('set_not_found');
+        if (write.append) {
+          if (!current.entries.some((entry) => entry.entryId === write.entryId)) throw apiError('entry_not_found');
+        } else if (!byId.has(write.setId)) throw apiError('set_not_found');
       }
       for (const write of sets) {
+        if (write.append && !byId.has(write.setId)) {
+          // An appended set takes the last work set's targets, like the watch's own copy.
+          const entry = current.entries.find((item) => item.entryId === write.entryId);
+          const last = entry.sets[entry.sets.length - 1] || {};
+          const added = { ...clone(last), setId: write.setId, index: entry.sets.length, completed: null };
+          entry.sets.push(added);
+          byId.set(write.setId, added);
+        }
         byId.get(write.setId).completed = clone(write.completed);
         log.push(clone(write));
       }

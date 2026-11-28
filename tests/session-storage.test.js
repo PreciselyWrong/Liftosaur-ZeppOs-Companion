@@ -1,11 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
-import {
-  createSessionStore,
-  createMemoryStorageAdapter,
-  createFallbackStorageAdapter,
-} from '../shared/session-storage.js';
+import { createSessionStore, createMemoryStorageAdapter, SESSION_UNREADABLE } from '../shared/session-storage.js';
 
 const PLAN = {
   programId: 'p1',
@@ -17,6 +13,14 @@ const PLAN = {
 };
 
 const JOURNAL = [{ type: 'START_WORKOUT', timestamp: 1000 }];
+
+/** The single LocalStorage value builds up to 0.5.15 stored the whole session in. */
+function legacySlot(value = null) {
+  const slot = { value };
+  slot.read = () => slot.value;
+  slot.remove = () => { slot.value = null; };
+  return slot;
+}
 
 test('stores the plan alongside the journal so a session can be replayed', () => {
   const store = createSessionStore(createMemoryStorageAdapter());
@@ -49,33 +53,30 @@ test('refuses to save a journal with no plan to replay it against', () => {
 });
 
 test('treats a corrupted or foreign snapshot as no session', () => {
-  const adapter = createMemoryStorageAdapter();
-  const store = createSessionStore(adapter);
+  const legacy = legacySlot();
+  const store = createSessionStore(createMemoryStorageAdapter(), { legacy });
 
-  adapter.write('{not json');
+  legacy.value = '{not json';
   assert.equal(store.load(), null);
 
-  adapter.write(JSON.stringify({ version: 99, plan: PLAN, journal: JOURNAL }));
+  legacy.value = JSON.stringify({ version: 99, plan: PLAN, journal: JOURNAL });
   assert.equal(store.load(), null);
 
-  adapter.write(JSON.stringify({ version: 1, journal: JOURNAL }));
+  legacy.value = JSON.stringify({ version: 1, journal: JOURNAL });
   assert.equal(store.load(), null);
 });
 
 test('survives an adapter that throws', () => {
-  const store = createSessionStore({
-    read: () => {
-      throw new Error('storage unavailable');
-    },
-    write: () => {
-      throw new Error('storage unavailable');
-    },
-    remove: () => {
-      throw new Error('storage unavailable');
-    },
-  });
+  const fail = () => {
+    throw new Error('storage unavailable');
+  };
+  const store = createSessionStore(
+    { read: fail, write: fail, append: fail, remove: fail },
+    { legacy: { read: fail, remove: fail } }
+  );
 
-  assert.equal(store.load(), null);
+  // Files that may exist but do not read are not "no session": a new workout must not clear them.
+  assert.throws(() => store.load(), (err) => err.code === SESSION_UNREADABLE);
   assert.equal(store.save({ plan: PLAN, journal: JOURNAL }), false);
   store.clear();
 });
@@ -94,14 +95,13 @@ test('persists direct synchronization progress with the session snapshot', () =>
   store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000, sync });
 
   assert.deepEqual(store.load().sync, sync);
-  assert.equal(JSON.parse(adapter.read()).version, 2);
+  assert.deepEqual(createSessionStore(adapter).load().sync, sync, 'after a restart');
 });
 
 test('loads a version 1 snapshot only as an explicit legacy finalization session', () => {
-  const adapter = createMemoryStorageAdapter();
-  adapter.write(JSON.stringify({ version: 1, plan: PLAN, journal: JOURNAL, startedAt: 1000 }));
+  const legacy = legacySlot(JSON.stringify({ version: 1, plan: PLAN, journal: JOURNAL, startedAt: 1000 }));
 
-  const restored = createSessionStore(adapter).load();
+  const restored = createSessionStore(createMemoryStorageAdapter(), { legacy }).load();
 
   assert.equal(restored.sync.mode, 'LEGACY');
   assert.equal(restored.startedAt, 1000);
@@ -109,15 +109,11 @@ test('loads a version 1 snapshot only as an explicit legacy finalization session
 
 test('keeps the current session in memory when device storage fails mid-workout', () => {
   let writes = 0;
-  const primary = {
-    read: () => null,
-    write: () => {
-      writes += 1;
-      throw new Error('device storage full');
-    },
-    remove: () => {},
+  const full = () => {
+    writes += 1;
+    throw new Error('device storage full');
   };
-  const store = createSessionStore(createFallbackStorageAdapter(primary));
+  const store = createSessionStore({ read: () => null, write: full, append: full, remove: () => {} });
 
   assert.equal(store.save({ plan: PLAN, journal: JOURNAL, startedAt: 1000 }), false, 'a memory-only save is reported');
   assert.equal(store.load().startedAt, 1000);

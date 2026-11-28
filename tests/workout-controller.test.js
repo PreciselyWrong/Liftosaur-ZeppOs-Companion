@@ -419,11 +419,18 @@ test('clear resets store, session, plan, and directSync metadata', () => {
   assert.equal(changed, true);
 });
 
-test('restore recovers version 1 legacy snapshot', () => {
-  const adapter = createMemoryStorageAdapter();
-  const store = createSessionStore(adapter);
+function legacySlot() {
+  const slot = { value: null };
+  slot.read = () => slot.value;
+  slot.remove = () => { slot.value = null; };
+  return slot;
+}
 
-  adapter.write(
+test('restore recovers version 1 legacy snapshot', () => {
+  const legacy = legacySlot();
+  const store = createSessionStore(createMemoryStorageAdapter(), { legacy });
+
+  legacy.value = (
     JSON.stringify({
       version: 1,
       plan: SAMPLE_PLAN,
@@ -519,10 +526,17 @@ test('restore fails safely without clearing raw store when snapshot is missing o
   assert.equal(noPlanResult.reason, 'NO_PLAN');
   assert.equal(store.hasSession(), true);
 
-  adapter.write(JSON.stringify({ version: 2, plan: { exercises: null }, journal: [] }));
+  store.save({ plan: { exercises: null }, journal: [] });
   const corruptResult = controller.restore();
   assert.equal(corruptResult.success, false);
-  assert.notEqual(adapter.read(), null);
+  assert.notEqual(adapter.files.size, 0);
+
+  // The same for a session an older build stored.
+  const legacy = legacySlot();
+  legacy.value = JSON.stringify({ version: 2, plan: { exercises: null }, journal: [] });
+  const olderBuild = createWorkoutController({ store: createSessionStore(createMemoryStorageAdapter(), { legacy }) });
+  assert.equal(olderBuild.restore().success, false);
+  assert.notEqual(legacy.value, null);
 });
 
 // The phone acknowledges a set batch with the start time only: snapshots arrive through GET_WORKOUT_CURRENT.

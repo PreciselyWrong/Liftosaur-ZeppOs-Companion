@@ -2,23 +2,26 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import test from 'node:test';
 import vm from 'node:vm';
-import { createFallbackStorageAdapter, createSessionStore } from '../shared/session-storage.js';
+import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
 import { createWorkoutController } from '../shared/workout-controller.js';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 
 function flakyWatchStorage() {
-  const disk = { value: null, failures: 0 };
+  const disk = createMemoryStorageAdapter();
+  const state = { failures: 0 };
+  const busy = (write) => (name, data) => {
+    if (state.failures > 0) {
+      state.failures -= 1;
+      throw new Error('storage busy');
+    }
+    write(name, data);
+  };
   return {
-    disk,
-    read: () => disk.value,
-    write: (data) => {
-      if (disk.failures > 0) {
-        disk.failures -= 1;
-        throw new Error('storage busy');
-      }
-      disk.value = data;
-    },
-    remove: () => { disk.value = null; },
+    disk: Object.assign(state, { files: disk.files }),
+    read: disk.read,
+    write: busy(disk.write),
+    append: busy(disk.append),
+    remove: disk.remove,
   };
 }
 
@@ -29,25 +32,25 @@ const snapshot = (sets) => ({
 
 test('one failed save does not stop later saves from reaching the watch', () => {
   const primary = flakyWatchStorage();
-  const store = createSessionStore(createFallbackStorageAdapter(primary));
+  const store = createSessionStore(primary);
   assert.equal(store.save(snapshot(1)), true);
   primary.disk.failures = 1;
   assert.equal(store.save(snapshot(2)), false);
   assert.equal(store.save(snapshot(3)), true);
-  const afterRestart = createSessionStore(createFallbackStorageAdapter(primary));
+  const afterRestart = createSessionStore(primary);
   assert.equal(afterRestart.load().journal.length, 3);
 });
 
 test('while saving fails, the newest session is still read from memory', () => {
   const primary = flakyWatchStorage();
-  const store = createSessionStore(createFallbackStorageAdapter(primary));
+  const store = createSessionStore(primary);
   store.save(snapshot(1));
   primary.disk.failures = 1;
   store.save(snapshot(2));
   assert.equal(store.load().journal.length, 2);
   store.clear();
   assert.equal(store.load(), null);
-  assert.equal(primary.disk.value, null);
+  assert.equal(primary.disk.files.size, 0);
 });
 
 function workout() {
@@ -62,7 +65,7 @@ function workout() {
 
 test('the controller reports when the session is not saved on the watch', () => {
   const primary = flakyWatchStorage();
-  const controller = createWorkoutController({ now: () => 1000, store: createSessionStore(createFallbackStorageAdapter(primary)) });
+  const controller = createWorkoutController({ now: () => 1000, store: createSessionStore(primary) });
   controller.loadPlan(workoutToDayPlan(workout()));
   controller.startWorkout();
   assert.equal(controller.isSaveFailing(), false);
@@ -71,7 +74,7 @@ test('the controller reports when the session is not saved on the watch', () => 
   assert.equal(controller.isSaveFailing(), true);
   controller.nextSet();
   assert.equal(controller.isSaveFailing(), false);
-  assert.equal(JSON.parse(primary.disk.value).journal.length, controller.getJournal().length);
+  assert.equal(createSessionStore(primary).load().journal.length, controller.getJournal().length, 'read back after a restart');
 });
 
 function warningAfterStatusUpdate(file, functionName) {

@@ -1,14 +1,15 @@
 /**
  * Seeded abuse runs of the real watch controller against the real phone
  * router: random lifter taps interleaved with lost, unanswered and late
- * Bluetooth messages, app kills with restore, and phone-side edits. Every
- * seed is fixed so a failure replays exactly.
+ * Bluetooth messages, app kills with restore, kills in the middle of a file
+ * write, and phone-side edits. Every seed is fixed so a failure replays exactly.
  */
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
 import { createWorkoutController } from '../shared/workout-controller.js';
 import { createMemoryStorageAdapter, createSessionStore } from '../shared/session-storage.js';
+import { createCrashableFiles } from './helpers/torn-files.js';
 import { SESSION_STATES } from '../shared/workout-session.js';
 import { workoutToDayPlan } from '../shared/workout-api-plan.js';
 import { MESSAGE_TYPES } from '../shared/protocol.js';
@@ -27,13 +28,46 @@ function randomShape(rnd, { timed, zeroSets }) {
 async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, phoneEdits = false, hostilePhone = false, strictStart = false } = {}) {
   const rnd = createRandom(seed);
   const cloud = createFakeCloud(buildApiWorkout(randomShape(rnd, { timed, zeroSets })), { strictStart });
-  const store = createSessionStore(createMemoryStorageAdapter());
+  // Its own stream, so the lifter and the link do the same as without these kills.
+  const crashRnd = createRandom(seed * 7919 + 1);
+  const files = createCrashableFiles(crashRnd);
+  // The last save or clear that finished, and the one in progress: a watch killed mid-write
+  // must come back with one of them, exactly.
+  const CLEARED = 'cleared';
+  let durable = null;
+  let attempting = null;
+  let tornKills = 0;
+  // Each launch opens the files again, as a new app process does.
+  const openStore = () => {
+    const inner = createSessionStore(files);
+    return {
+      ...inner,
+      save(snapshot) {
+        attempting = { journal: JSON.stringify(snapshot.journal), acknowledged: snapshot.sync?.acknowledgedSetCount ?? 0 };
+        const saved = inner.save(snapshot);
+        if (saved) durable = attempting;
+        return saved;
+      },
+      clear() {
+        attempting = CLEARED;
+        inner.clear();
+        if (!files.dead) durable = CLEARED;
+      },
+    };
+  };
+  let store = openStore();
   let time = 1_000_000;
   let link = createPhoneLink(cloud);
   const late = [];
   const trace = [];
   const fail = (message) => assert.fail(`seed ${seed}: ${message}\n${trace.slice(-30).join('\n')}`);
-  const makeController = () => createWorkoutController({ store, request: link.request, now: () => time });
+  // A dead app sends nothing: a request made after the kill never leaves the watch.
+  const makeController = () => {
+    const own = link;
+    return createWorkoutController({
+      store, request: (...args) => (files.dead ? new Promise(() => {}) : own.request(...args)), now: () => time,
+    });
+  };
 
   let controller = makeController();
   const next = await link.phoneHandle(MESSAGE_TYPES.GET_WORKOUT_NEXT, {});
@@ -94,6 +128,7 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
     for (const item of link.queue) if (rnd.chance(0.5)) late.push(item);
     link.failAll();
     link = createPhoneLink(cloud);
+    store = openStore();
     controller = makeController();
     const restored = controller.restore();
     if (finished || discarded) return;
@@ -102,11 +137,40 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
     if (controller.sync().acknowledgedSetCount !== acknowledged) fail('restore changed the acknowledged count');
   }
 
+  // The watch died during a file write: the torn bytes stay, nothing after the kill happened.
+  async function tornKill() {
+    tornKills += 1;
+    const candidates = [durable, attempting];
+    controller.dispose();
+    for (const item of link.queue) if (crashRnd.chance(0.5)) late.push(item);
+    link.failAll();
+    link = createPhoneLink(cloud);
+    files.revive();
+    store = openStore();
+    controller = makeController();
+    const restored = controller.restore();
+    if (!restored.success) {
+      if (!candidates.includes(CLEARED)) fail(`restore after a torn write failed: ${restored.reason}`);
+      return;
+    }
+    const journal = JSON.stringify(controller.getJournal());
+    const { acknowledgedSetCount } = controller.sync();
+    if (!candidates.some((state) => state && state !== CLEARED && state.journal === journal
+      && state.acknowledged === acknowledgedSetCount)) {
+      fail('a torn write restored a state that was never saved');
+    }
+    if (acknowledgedSetCount > controller.getWorkoutSetWrites().length) fail('acknowledged more sets than written');
+    // A set whose save the kill cut short was never stored nor sent, so it is not logged.
+    loggedSets = distinctWrites();
+  }
+
   for (let step = 0; step < steps && !finished && !(discarded && !store.load()); step++) {
     time += rnd.int(30_000);
     const state = controller.view().state;
     const roll = rnd.next();
     let action = 'wait';
+    // The watch may also die during one of the next few file writes, whatever the lifter does.
+    if (crashRnd.chance(0.02)) files.arm(crashRnd.int(4));
     if (roll < 0.25 && ACTIVE.has(state)) {
       action = 'complete';
       countLogged(() => controller.completeSet());
@@ -172,8 +236,13 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
       action = phoneAction();
       if (action === 'phone discards' || action === 'phone restarts') replaced = true;
     } else if (roll < 0.80) {
-      action = 'kill';
-      await kill();
+      if (crashRnd.chance(0.5)) {
+        action = 'kill';
+        await kill();
+      } else {
+        action = 'arm a kill mid-write';
+        files.arm(crashRnd.int(4));
+      }
     } else if (roll < 0.82 && controller.sync().conflict) {
       action = 'use phone workout';
       replaced = true;
@@ -188,11 +257,16 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
       controller.discardWorkoutRemote().catch(() => {});
     }
     await flush();
+    if (files.dead) {
+      action += ', killed mid-write';
+      await tornKill();
+    }
     trace.push(`${step} ${action} -> ${controller.view().state} writes=${controller.getWorkoutSetWrites().length} ack=${controller.sync().acknowledgedSetCount} conflict=${controller.sync().conflict} queued=${link.queue.length}`);
     checkInvariants(`step ${step} ${action}`);
   }
 
-  if (finished || discarded) return { finished, saved: cloud.history.length };
+  if (finished || discarded) return { finished, saved: cloud.history.length, tornKills };
+  files.arm(null);
 
   // A healthy link and a lifter who finishes must leave the account with every set.
   link.setAuto(true);
@@ -200,7 +274,7 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
   await flush();
   // A finish whose reply was lost already saved; the watch then reports the missing workout.
   const savedEarlier = () => controller.sync().remoteMissing && cloud.history.length === 1;
-  if (controller.sync().conflict && !savedEarlier()) return { finished: false, conflict: controller.status().detail };
+  if (controller.sync().conflict && !savedEarlier()) return { finished: false, conflict: controller.status().detail, tornKills };
   if (!savedEarlier()) {
     for (let i = 0; i < 20 && controller.view().timedSet && controller.view().timedSet.phase !== 'READY'; i++) {
       time += 100_000;
@@ -226,12 +300,12 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
     }
     if (!result.success && !savedEarlier()) {
       // The phone replaced or dropped the workout: the watch keeps it and asks the lifter.
-      if (replaced && controller.sync().conflict && store.load()) return { finished: false };
+      if (replaced && controller.sync().conflict && store.load()) return { finished: false, tornKills };
       fail(`final finish failed: ${result.reason}`);
     }
   }
   assert.equal(cloud.history.length, 1, `seed ${seed}: one saved workout`);
-  if (replaced) return { finished: true };
+  if (replaced) return { finished: true, tornKills };
 
   const saved = cloud.completedSets(cloud.history[0].workout);
   if (saved.length < loggedSets || (!phoneEdits && !hostilePhone && saved.length !== loggedSets)) {
@@ -243,7 +317,7 @@ async function runAbuse(seed, { steps = 300, timed = false, zeroSets = false, ph
     if (!remote) fail(`${setId} is missing from the saved workout`);
     assert.deepEqual(remote.completed, completed, `seed ${seed}: ${setId} saved with the watch values`);
   }
-  return { finished: true };
+  return { finished: true, tornKills };
 }
 
 const CONFIGS = [
@@ -257,12 +331,15 @@ const CONFIGS = [
 for (const [label, options] of CONFIGS) {
   test(`seeded abuse with ${label} keeps every logged set`, async () => {
     let finishedRuns = 0;
+    let tornKills = 0;
     for (let seed = 1; seed <= 25; seed++) {
       const outcome = await runAbuse(seed, options);
       if (outcome.finished) finishedRuns += 1;
+      tornKills += outcome.tornKills;
     }
     // Guards the harness itself: most runs must reach a saved workout to mean anything.
     assert.ok(finishedRuns >= 15, `${finishedRuns} of 25 runs finished`);
+    assert.ok(tornKills >= 10, `${tornKills} kills mid-write`);
   });
 }
 

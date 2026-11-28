@@ -48,10 +48,12 @@ function createClockHarness(initialState = 'ACTIVE_SET') {
     renderRestScreen() {}, renderActiveSetScreen() {}, renderHomeScreen() {}, applyDisplayHold() {},
     stopRestBezelAnimation() {}, resetConnectionRetry() {}, resetDisplayHold() {}, stopVibration() {},
     loadDisplaySettings: () => Promise.resolve(),
+    holdExerciseImagesWhile: (_images, work) => work(), canPlanScreen: () => false, UI_WORK_QUIET_MS: 1000,
+    widgetPlan: null, widgetSpecs: new Map(), plannedBuild: false, controllerChanges: 0,
     restAlertTracker: { checkTick: () => ({ shouldAlert: false }), checkResume: () => ({ shouldAlert: false }) },
   };
   const constants = source.match(/const TICK_FAST_MS = \d+;\s*const TICK_SLOW_MS = \d+;/)[0];
-  const functions = ['markControllerUiDirty', 'cancelScheduledRender', 'consumeControllerUiChange', 'renderUI', 'renderScreen', 'tick'].map(extractFunction).join('\n');
+  const functions = ['markControllerUiDirty', 'cancelScheduledRender', 'consumeControllerUiChange', 'renderUI', 'drawScreen', 'renderScreen', 'tick'].map(extractFunction).join('\n');
   const clockFunctions = source.slice(source.indexOf('function startClock('), source.indexOf('\nDataWidget('));
   const lifecycle = ['build', 'onResume', 'onPause'].map(extractLifecycle).join(',\n');
   const api = new Function('env', `with (env) {

@@ -111,3 +111,40 @@ export function createScreenLayout(deviceInfo = {}) {
 
   return { width, height, isFitted: true, scale, insetTop, fit };
 }
+
+/**
+ * Pairs the widgets a redraw would create (`next`) with those on screen (`current`), each a
+ * `{ type, props, key }` spec in drawing order. Returns one `{ previous, next, changes }` per widget,
+ * `changes` holding the values to set in place, or null when anything else differs: a widget added,
+ * removed, reordered, moved or restyled needs a full rebuild. `mutable` lists, per widget type, the
+ * props an in-place update may change. A keyed spec is a transparent label: it pairs by key, because
+ * its only safe update (a replacement: TEXT does not repaint after setProperty) moves it to the top,
+ * and only its text and color may change. Handlers are compared by presence, not identity.
+ */
+export function pairWidgetSpecs(current, next, mutable) {
+  if (current.length !== next.length) return null;
+  const labels = new Map();
+  const solid = [];
+  for (const spec of current) {
+    if (spec.key) labels.set(spec.key, spec);
+    else solid.push(spec);
+  }
+  const pairs = [];
+  let index = 0;
+  for (const spec of next) {
+    const previous = spec.key ? labels.get(spec.key) : solid[index++];
+    if (!previous || previous.type !== spec.type || previous.key !== spec.key) return null;
+    labels.delete(spec.key);
+    const allowed = spec.key ? ['text', 'color'] : mutable[spec.type] || [];
+    const changes = {};
+    for (const name of new Set([...Object.keys(previous.props), ...Object.keys(spec.props)])) {
+      const before = previous.props[name];
+      const after = spec.props[name];
+      if (before === after || (typeof before === 'function' && typeof after === 'function')) continue;
+      if (allowed.indexOf(name) === -1) return null;
+      changes[name] = after;
+    }
+    pairs.push({ previous, next: spec, changes });
+  }
+  return pairs;
+}

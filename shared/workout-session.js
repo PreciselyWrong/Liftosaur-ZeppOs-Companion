@@ -39,6 +39,7 @@ export const EVENT_TYPES = {
   TIMED_SET: 'TIMED_SET',
   CORRECT_SET: 'CORRECT_SET',
   LOCAL_COMPLETIONS: 'LOCAL_COMPLETIONS',
+  ADD_SET: 'ADD_SET',
 };
 
 export function weightStepFor(unit) {
@@ -553,6 +554,7 @@ export function createWorkoutSession({
           completedAt: event.timestamp,
           isImported: false,
           isUnilateral: Boolean(target?.isUnilateral),
+          isAppended: Boolean(target?.isAppended),
         };
         prog.completedSets.push(completedRecord);
         const write = formatSetWrite(completedRecord);
@@ -777,6 +779,39 @@ export function createWorkoutSession({
               break;
             }
           }
+        }
+        break;
+      }
+
+      case EVENT_TYPES.ADD_SET: {
+        const { exerciseIndex, setId } = event.payload || {};
+        const exercise = exercises[exerciseIndex];
+        const prog = progress[exerciseIndex];
+        if (!exercise || !prog || !setId) break;
+        const before = exercise.sets.length;
+        const template = [...exercise.sets].reverse().find((set) => !set.isWarmup) || exercise.sets[before - 1] || {};
+        exercise.workSetsCount += 1;
+        exercise.sets.push({
+          ...template,
+          index: before + 1,
+          setId,
+          serverIndex: null,
+          isWarmup: false,
+          warmupIndex: null,
+          workSetIndex: exercise.workSetsCount,
+          completed: null,
+          isAppended: true,
+        });
+        for (const set of exercise.sets) set.totalWorkSets = exercise.workSetsCount;
+        if (state === SESSION_STATES.FINISHED) {
+          state = SESSION_STATES.ACTIVE_SET;
+          workoutEndTime = null;
+          restInfo = null;
+          selectedPendingExerciseIndex = null;
+          currentExerciseIndex = exerciseIndex;
+          loadSetTargets(exerciseIndex, prog.completedSets.length);
+        } else if (prog.completedSets.length === before) {
+          loadSetTargets(exerciseIndex, before);
         }
         break;
       }
@@ -1017,6 +1052,28 @@ export function createWorkoutSession({
     return progress
       .flatMap((prog) => prog.completedSets)
       .sort((a, b) => a.completedAt - b.completedAt);
+  }
+
+  function canAddSet(exerciseIndex) {
+    if (!Number.isInteger(exerciseIndex) || !exercises[exerciseIndex]) return false;
+    if (workoutStartTime === null) return false;
+    if (journal.some((event) => event.type === EVENT_TYPES.FINISH_WORKOUT)) return false;
+    return state === SESSION_STATES.ACTIVE_SET || state === SESSION_STATES.REST || state === SESSION_STATES.FINISHED;
+  }
+
+  function usedSetIds() {
+    return new Set(exercises.flatMap((exercise) => exercise.sets.map((set) => set.setId)).filter(Boolean));
+  }
+
+  // Liftosaur's own ids are six lowercase letters; the account only needs this one not to repeat.
+  function newSetId() {
+    const used = usedSetIds();
+    for (let attempt = 0; attempt < 20; attempt++) {
+      let id = '';
+      for (let i = 0; i < 6; i++) id += String.fromCharCode(97 + Math.floor(Math.random() * 26));
+      if (!used.has(id)) return id;
+    }
+    return null;
   }
 
   function getLatestCompletedSet() {
@@ -1529,6 +1586,27 @@ export function createWorkoutSession({
       applyEvent({ type: EVENT_TYPES.FINISH_WORKOUT, timestamp });
     },
 
+    /**
+     * Whether a set can be added to an exercise: the workout has begun and the lifter has not ended it.
+     * Ending it by hand is final, but a day whose last set was just logged is still open.
+     */
+    canAddSet(exerciseIndex) {
+      return canAddSet(exerciseIndex);
+    },
+
+    /**
+     * Adds a set after the last one of an exercise, with that exercise's last work set as its target.
+     * Its first write is an append: the account has no such set until the watch says so.
+     * Returns the new set's id, or null when no set can be added.
+     */
+    addSet({ exerciseIndex, setId = null, timestamp = Date.now() } = {}) {
+      if (!canAddSet(exerciseIndex)) return null;
+      const id = setId || newSetId();
+      if (!id || usedSetIds().has(id)) return null;
+      applyEvent({ type: EVENT_TYPES.ADD_SET, payload: { exerciseIndex, setId: id }, timestamp });
+      return id;
+    },
+
     cancelWorkout({ timestamp = Date.now() } = {}) {
       applyEvent({ type: EVENT_TYPES.CANCEL_WORKOUT, timestamp });
     },
@@ -1614,6 +1692,7 @@ function formatSetWrite(set) {
   return {
     ...(set.entryId ? { entryId: set.entryId } : {}),
     setId: set.setId,
+    ...(set.isAppended ? { append: true } : {}),
     completed,
   };
 }
