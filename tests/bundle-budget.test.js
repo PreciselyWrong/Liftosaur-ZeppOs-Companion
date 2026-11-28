@@ -10,8 +10,8 @@ const root = path.resolve(import.meta.dirname, '..');
 // compiled page in its 3 MiB of system memory, so raising a ceiling is a decision, not a side effect:
 // measure on the watch, then raise it in the same change. Ceilings leave about 3% over the measured size.
 const BUDGETS = [
-  { product: 'companion', entry: 'page/common/index.js', measured: 188_909, ceiling: 194_500 },
-  { product: 'workout', entry: 'data-widget/common/index.js', measured: 190_666, ceiling: 196_400 },
+  { product: 'companion', entry: 'page/common/index.js', measured: 196_490, ceiling: 202_400 },
+  { product: 'workout', entry: 'data-widget/common/index.js', measured: 198_261, ceiling: 204_200 },
   { product: 'both', entry: 'app-side/index.js', measured: 101_516, ceiling: 105_000 },
   { product: 'both', entry: 'setting/index.js', measured: 20_626, ceiling: 21_300 },
   { product: 'both', entry: 'app.js', measured: 20_410, ceiling: 21_100 },

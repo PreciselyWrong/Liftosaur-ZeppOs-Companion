@@ -153,7 +153,7 @@ function memoryStorage() {
  * Boots `product` against `link` (a phone link from `createPhoneLink`). The page is built and its
  * launch requests are answered by the time this resolves when the link answers automatically.
  */
-export async function loadWatchPage(product, { link, start = 1_700_000_000_000, width = 466, height = 466, rebuildAlways = false } = {}) {
+export async function loadWatchPage(product, { link, start = 1_700_000_000_000, width = 466, height = 466, rebuildAlways = false, fs = null } = {}) {
   const code = await bundle(product);
   const clock = createClock(start);
   // Full rebuilds and phone requests in the order they happened.
@@ -188,7 +188,7 @@ export async function loadWatchPage(product, { link, start = 1_700_000_000_000, 
     '@zos/interaction': {
       onGesture() {}, offGesture() {}, GESTURE_LEFT: 1, GESTURE_RIGHT: 2, GESTURE_UP: 3, GESTURE_DOWN: 4,
     },
-    '@zos/fs': {
+    '@zos/fs': fs || {
       openSync: failing, writeSync: failing, closeSync: failing, readFileSync: failing, writeFileSync: failing,
       rmSync: failing, statSync: failing, O_WRONLY: 1, O_CREAT: 2, O_APPEND: 4, O_TRUNC: 8, O_RDONLY: 0,
     },

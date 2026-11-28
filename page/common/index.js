@@ -1,4 +1,5 @@
 import { recordingLabel, recordingDetails } from '../../shared/recording-status.js';
+import { syncConflictMessage } from '../../shared/sync-conflict-text.js';
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { ACTIVE_SET_ACTION_LAYOUT, ACTIVE_SET_IMAGE_TILE, activeSetHeaderLayout, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
@@ -1090,9 +1091,7 @@ function updateControllerStatus() {
   } else if (status.code === 'remote-missing') {
     syncWarning = 'No active workout on phone';
   } else if (status.code === 'conflict') {
-    syncWarning = status.detail === 'workout_already_active' || status.detail === 'workout_start_time_taken'
-      ? 'Another workout is active in Liftosaur'
-      : 'Sync needs attention';
+    syncWarning = syncConflictMessage(status.detail) || 'Sync needs attention';
   } else if (status.code === 'error') {
     syncWarning = status.error?.message || 'Sync needs attention';
   } else {
@@ -3846,6 +3845,7 @@ function renderSyncDetailsModal() {
   const details = recordingDetails(sync, {
     completedCount: writes.length,
     pendingCount,
+    conflictCode: workoutController?.status?.().detail,
   });
 
   const statusColor = (details.statusLabel === 'Conflict' || details.statusLabel === 'Recovery')

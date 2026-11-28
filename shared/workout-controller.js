@@ -1272,6 +1272,15 @@ export function createWorkoutController({
         });
       }
     },
+    canAddSet: (exerciseIndex) => !disposed && session.canAddSet(exerciseIndex),
+    // Returns the new set's id, or null when the workout cannot take another set.
+    addSet: (exerciseIndex, options = {}) => {
+      let setId = null;
+      mutateSession(() => {
+        setId = session.addSet({ exerciseIndex, setId: options.setId, timestamp: options.timestamp ?? now() });
+      });
+      return setId;
+    },
     skipWarmup: (options = {}) => {
       if (disposed) return false;
       let skipped = false;
