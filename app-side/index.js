@@ -9,7 +9,6 @@ import { getOrCreateClientIdentity } from './client-identity.js';
 import { createWorkoutService } from './workout-service.js';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
-import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { createExerciseImageService } from './exercise-image-service.js';
 
@@ -66,7 +65,6 @@ function getEffectiveSettings() {
   let screenOnDuration = 120;
   let getReadySeconds = 5;
   let exerciseImages = false;
-  let autoPrepare = false;
   let displaySettings = normalizeWorkoutDisplaySettings();
 
   try {
@@ -78,7 +76,6 @@ function getEffectiveSettings() {
     if (storage) {
       getReadySeconds = normalizeGetReadySeconds(storage.getItem('getReadySeconds'));
       exerciseImages = normalizeExerciseImages(storage.getItem('exerciseImages'));
-      autoPrepare = normalizeAutoPrepare(storage.getItem('autoPrepare'));
       displaySettings = normalizeWorkoutDisplaySettings({
         showWorkoutProgress: storage.getItem('showWorkoutProgress'),
         showPlateBreakdown: storage.getItem('showPlateBreakdown'),
@@ -112,7 +109,6 @@ function getEffectiveSettings() {
     screenOnDuration,
     getReadySeconds,
     exerciseImages,
-    autoPrepare,
     ...displaySettings,
   };
 }

@@ -1,6 +1,5 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
-import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTICS_EMPTY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
@@ -169,7 +168,6 @@ AppSettingsPage({
     screenOnDuration: 120,
     getReadySeconds: 5,
     exerciseImages: false,
-    autoPrepare: false,
     showWorkoutProgress: false,
     showPlateBreakdown: true,
     showRestInfo: true,
@@ -325,12 +323,6 @@ AppSettingsPage({
         ]),
 
         section('Sets and rest', 'Rest timers follow your Liftosaur settings.', [
-          ...toggleSetting({
-            label: 'Auto prepare',
-            key: 'autoPrepare',
-            normalize: normalizeAutoPrepare,
-            helper: 'Open the next set while rest runs.',
-          }),
           ...selectSetting({
             label: 'Ready countdown',
             key: 'getReadySeconds',
@@ -399,7 +391,6 @@ AppSettingsPage({
       showRestInfo: props.settingsStorage.getItem('showRestInfo'),
     }));
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
-    this.state.autoPrepare = normalizeAutoPrepare(props.settingsStorage.getItem('autoPrepare'));
     this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(
       props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY)
     );
