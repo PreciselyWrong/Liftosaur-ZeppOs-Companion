@@ -36,7 +36,6 @@ In the selected Lifto app's phone Settings, open **Workout display**:
 
 - **Workout progress** adds a bar showing completed sets across the workout. It starts off.
 - **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible. When you change the weight on the watch, the line under it is recalculated at once from your gym's equipment, which the phone reads from Liftosaur once when the workout starts: the plates for a plate-loaded exercise, or `USE 12 KG` when a fixed weight such as a dumbbell exists. A weight your equipment cannot make exactly shows the nearest loadable weights instead, for example `NEAR 60/62.5 KG`. If the phone could not read the equipment, the breakdown falls back to the bar and plates Liftosaur already proposed in this workout, and a weight those plates cannot make, or a fixed weight, shows only the unit.
-- **Rest Info button** starts on. Turn it off to hide Info on the detailed rest screen; Info elsewhere is retained.
 
 Preferences are configured separately for Companion and Workout. Reopen the watch app while connected to receive the latest settings. These options do not change the workout prescription or rest deadline.
 

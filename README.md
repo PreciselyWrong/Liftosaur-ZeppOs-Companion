@@ -40,7 +40,7 @@ Lifto for Zepp OS is built together with [u/silent_jacob](https://www.reddit.com
 - Timed and unilateral holds with Get Ready, side transitions, pause, overtime, and durable duration recording.
 - Separate Info pages for recent sessions, exercise notes, and program instructions.
 - Optional exercise images in workout lists, Info, Prepare and the set screen, with the day's images saved on the watch in the background between sets.
-- Configurable workout progress bar, plate breakdown and rest Info button in phone settings.
+- Configurable workout progress bar and plate breakdown in phone settings.
 - Live heart rate from Companion or native activity BPM in Lifto Workout.
 - Phone-only API key storage; credentials are never sent to or stored on the watch.
 

@@ -79,7 +79,6 @@ function getEffectiveSettings() {
       displaySettings = normalizeWorkoutDisplaySettings({
         showWorkoutProgress: storage.getItem('showWorkoutProgress'),
         showPlateBreakdown: storage.getItem('showPlateBreakdown'),
-        showRestInfo: storage.getItem('showRestInfo'),
       });
       const rawScreenDuration = storage.getItem('screenOnDuration');
       let parsedScreenDuration = rawScreenDuration;
