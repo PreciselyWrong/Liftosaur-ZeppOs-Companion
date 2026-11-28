@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT } from '../../shared/exercise-info-layout.js
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesDuringSaves, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -225,7 +225,7 @@ const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefine
 });
 let controllerUiDirty = false;
 const workoutController = createWorkoutController({
-  store: sessionStore,
+  store: holdExerciseImagesDuringSaves(sessionStore, () => exerciseImages),
   request: (type, payload) => holdExerciseImagesDuring(exerciseImages, type, () => send(type, payload)),
   onChange: markControllerUiDirty,
   onStatus: markControllerUiDirty,

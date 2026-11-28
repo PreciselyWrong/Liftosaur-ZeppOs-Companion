@@ -61,6 +61,14 @@ export function holdExerciseImagesWhile(images, work, quietMs = UI_WORK_QUIET_MS
   }
 }
 
+// The same store with every save holding image work: a controller save runs inside a tap, long before
+// the UI could wrap it. The images are read at save time because a page creates them after its store.
+export function holdExerciseImagesDuringSaves(store, getImages) {
+  return Object.create(store, {
+    save: { value: (snapshot) => holdExerciseImagesWhile(getImages(), () => store.save(snapshot)) },
+  });
+}
+
 export function createExerciseImageClient({
   inbox,
   request,

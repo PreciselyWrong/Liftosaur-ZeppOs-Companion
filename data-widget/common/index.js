@@ -8,7 +8,7 @@ import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exe
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
 import { normalizeWorkoutDisplaySettings, workoutProgress, weightStepperDisplay } from '../../shared/workout-display-settings.js';
 import { createWatchExerciseImages } from '../../shared/watch-exercise-images.js';
-import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
+import { exerciseImagePreloadFor, holdExerciseImagesDuring, holdExerciseImagesDuringSaves, holdExerciseImagesWhile, PRELOAD_TAP_QUIET_MS, UI_WORK_QUIET_MS } from '../../shared/exercise-image-client.js';
 import { exerciseDisplayImageUrl } from '../../shared/exercise-notes.js';
 import {
   createRestHaloLayers,
@@ -4122,7 +4122,7 @@ DataWidget(
       console.log('[lifto-ext] data-widget onInit');
 
       workoutController = createWorkoutController({
-        store: sessionStore,
+        store: holdExerciseImagesDuringSaves(sessionStore, () => exerciseImages),
         request: (type, payload) => holdExerciseImagesDuring(exerciseImages, type, () => send(type, payload)),
         onChange: markControllerUiDirty,
         onStatus: markControllerUiDirty,
