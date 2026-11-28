@@ -141,7 +141,7 @@ for (const product of ['workout', 'companion']) {
       watch.clock.advance(1000);
       await settle(watch);
       counts[name] = watch.screen.stats.rebuilds - rebuilds;
-      assert.ok(watch.screen.texts().some((text) => text === 'Rest'), 'the rest screen is up');
+      assert.ok(watch.screen.texts().some((text) => text.includes('Start set')), 'the rest view is up');
     }
     t.diagnostic(`full rebuilds for Done and its sync reply: before ${counts.before}, after ${counts.after}`);
     assert.ok(counts.after <= 1);

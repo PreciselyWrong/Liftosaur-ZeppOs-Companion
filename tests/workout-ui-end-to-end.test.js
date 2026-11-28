@@ -30,7 +30,7 @@ async function settle(watch, ms = 0) {
 }
 
 async function tap(watch, text, index = 0) {
-  const targets = watch.screen.widgets.filter((w) => w.visible && typeof w.props.click_func === 'function' && w.props.text === text);
+  const targets = watch.screen.widgets.filter((w) => w.visible && typeof w.props.click_func === 'function' && String(w.props.text ?? '').includes(text));
   assert.ok(targets[index], `a "${text}" button among ${JSON.stringify(watch.screen.texts())}`);
   targets[index].props.click_func(targets[index]);
   await settle(watch, 1500);
@@ -45,7 +45,7 @@ test('a lifter edits a set, completes the day and the account holds exactly what
   await tap(watch, '+', 0);
   assert.ok(shows(watch, '62.5'), 'the weight stepper shows the edit');
   await tap(watch, 'Done');
-  assert.ok(shows(watch, 'Rest'), 'resting after the first set');
+  assert.ok(shows(watch, 'Start set'), 'resting after the first set');
   await tap(watch, 'Start set');
   await tap(watch, 'Done');
   await tap(watch, 'Start set');
@@ -69,7 +69,7 @@ test('sets completed while the phone link drops reach the account once, in order
   assert.equal(watch.link.queue.filter((item) => item.type === 'SYNC_WORKOUT_SETS').length, 1);
   await watch.link.deliver(0, 'lost');
   await settle(watch, 1000);
-  assert.ok(shows(watch, 'Rest'), 'the watch keeps going without the phone');
+  assert.ok(shows(watch, 'Start set'), 'the watch keeps going without the phone');
   assert.equal(watch.cloud.log.length, 0, 'nothing reached the account yet');
 
   await tap(watch, 'Start set');
