@@ -304,7 +304,6 @@ test('a resumed page does not upload the same diagnostics report again', async (
   diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.BOOT);
   diagnostics.record(WORKOUT_DIAGNOSTIC_CODES.ACTION_TAP, { action: 'COMPLETE_SET' });
   env.normalizeWorkoutDisplaySettings = () => ({});
-  env.saveAutoPreparePreference = () => {};
   env.deviceStorage = null;
   const payloads = [];
   env.send = async (type, payload) => {

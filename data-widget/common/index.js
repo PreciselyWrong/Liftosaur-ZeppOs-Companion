@@ -2,7 +2,6 @@ import { recordingLabel, recordingDetails } from '../../shared/recording-status.
 import { timedSetPresentation, timedSetIdentity } from '../../shared/timed-set-ui.js';
 import { ACTIVE_SET_ACTION_LAYOUT, ACTIVE_SET_IMAGE_TILE, activeSetHeaderLayout, PREPARED_TOP_BAR_LAYOUT, WORKOUT_PROGRESS_LAYOUT, TIMED_SET_LAYOUT, WORKOUT_TIMER_MODAL_LAYOUT, SET_CORRECTION_LAYOUT, stepperRowLayout } from '../../shared/watch-layout.js';
 import { normalizeGetReadySeconds } from '../../shared/timed-settings.js';
-import { createRestPresentationState, updateRestPresentation, readAutoPreparePreference, saveAutoPreparePreference } from '../../shared/auto-prepare.js';
 import { exerciseInfoPages } from '../../shared/exercise-info-pages.js';
 import { INFO_NAV, INFO_TEXT_LAYOUT, WORKOUT_INFO_PANEL } from '../../shared/exercise-info-layout.js';
 import { normalizeExerciseImages } from '../../shared/exercise-images.js';
@@ -67,7 +66,6 @@ import {
   OVERVIEW_PAGE_SIZE,
   EXTENSION_CLOCK_LAYOUT,
   extensionActiveSetLayout,
-  extensionRestActionsLayout,
   readyExercisePage,
   formatWorkoutPosition,
   formatMarqueeText,
@@ -86,10 +84,8 @@ import {
   formatSeconds,
   formatEditableSetValue,
   formatWeightValue,
-  formatNextTargetSummary,
   formatActiveSetProgress,
   formatOverviewExerciseLines,
-  formatSupersetProgress,
   supersetColor,
   truncate,
 } from '../../shared/workout-extension-nav.js';
@@ -190,7 +186,7 @@ const workoutDiagnostics = createWorkoutDiagnostics(diagnosticsStorage, undefine
     return {
       screen, state, widgets: activeWidgets.length,
       modal: Boolean(isNotesModalOpen || isSyncDetailsOpen || isWorkoutTimerControlsOpen || isEditLastSetOpen),
-      overview: Boolean(isOverviewOpen), preparation: Boolean(restPresentation?.isPrepared),
+      overview: Boolean(isOverviewOpen),
       imagesEnabled: normalizeExerciseImages(accountSettings?.exerciseImages),
     };
   },
@@ -321,7 +317,7 @@ let selectedWeek = null;
 let defaultWorkoutPlan = null;
 let defaultWorkoutFetchedAt = null;
 let dayPlan = null;
-let accountSettings = { autoPrepare: readAutoPreparePreference(deviceStorage) };
+let accountSettings = {};
 let displaySettingsLoad = null;
 
 let listPage = 0;
@@ -338,8 +334,6 @@ let isOverviewOpen = false;
 let isNotesModalOpen = false;
 let activeNotesTitle = '';
 let activeNotesContent = '';
-let isRestMinimized = false;
-let restPresentation = createRestPresentationState();
 let isWorkoutTimerControlsOpen = false;
 let isSyncDetailsOpen = false;
 let isEditLastSetOpen = false;
@@ -354,17 +348,6 @@ let controllerUiDirty = false;
 
 let lastPendingSyncRetryAt = 0;
 const nativePauseReconciler = createNativePauseReconciler();
-
-function setRestPrepared(isPrepared) {
-  isRestMinimized = Boolean(isPrepared);
-  restPresentation = { ...restPresentation, isPrepared: isRestMinimized };
-}
-
-function syncRestPresentation(rest) {
-  const next = updateRestPresentation(restPresentation, rest, accountSettings?.autoPrepare);
-  if (next !== restPresentation) isRestMinimized = next.isPrepared;
-  restPresentation = next;
-}
 
 let clockTimer = null;
 // Rest countdowns and alerts need a tighter cadence; network requests and
@@ -1046,17 +1029,17 @@ function updatePreparedRestVisuals(view) {
   }
 }
 
-function renderPreparedTopBar(view, onRest) {
+function renderPreparedTopBar(view) {
   renderWorkoutProgress(view);
   const topBar = PREPARED_TOP_BAR_LAYOUT;
   const metricIconWidth = 32;
-  addWidget(widget.BUTTON, {
-    x: px(topBar.menu.x), y: px(topBar.y), w: px(topBar.menu.width), h: px(topBar.height),
-    radius: px(topBar.height / 2), normal_color: THEME.card, press_color: THEME.cardActive,
-    text: syncWarning ? 'Sync!' : '<',
-    color: syncWarning ? THEME.orange : THEME.textPrimary,
-    text_size: font('button'), click_func: onRest,
-  });
+  if (syncWarning) {
+    addWidget(widget.TEXT, {
+      x: px(topBar.menu.x), y: px(topBar.y), w: px(topBar.menu.width), h: px(topBar.height),
+      color: THEME.orange, text_size: font('button'), align_h: align.CENTER_H, align_v: align.CENTER_V,
+      text_style: text_style.NONE, text: 'Sync!',
+    });
+  }
   addLiveButton('elapsed', {
     x: px(topBar.elapsed.x), y: px(topBar.y), w: px(topBar.elapsed.width), h: px(topBar.height),
     radius: px(12), normal_color: THEME.bg, press_color: THEME.primaryDark,
@@ -1953,10 +1936,7 @@ function renderActiveSetScreen(view) {
 
   if (isResting) {
     renderRestBezel(view.rest);
-    renderPreparedTopBar(view, () => {
-      setRestPrepared(false);
-      scheduleRenderUI();
-    });
+    renderPreparedTopBar(view);
   } else {
     renderTopBar(view, () => {
       isOverviewOpen = true;
@@ -2129,7 +2109,6 @@ function renderActiveSetScreen(view) {
         if (reason) { phoneRequiredReason = reason; controllerUiDirty = true; return; }
         restAlertTracker.reset();
         stopVibration();
-        setRestPrepared(false);
         if (view.timedSet) workoutController.startTimedSet();
         else workoutController.nextSet();
         controllerUiDirty = true;
@@ -2153,231 +2132,6 @@ function renderActiveSetScreen(view) {
       if (workoutController.view().state === SESSION_STATES.FINISHED) {
         submitWorkout();
       }
-    },
-  });
-}
-
-function renderRestScreen(view) {
-  const rest = view.rest;
-  const display = normalizeWorkoutDisplaySettings(accountSettings);
-  renderTopBar(view, () => {
-    isOverviewOpen = true;
-    scheduleRenderUI();
-  });
-
-  const restColor = rest.isOvertime
-    ? THEME.error
-    : (rest.isPaused ? THEME.yellow : THEME.primaryPale);
-  const labelColor = rest.isOvertime
-    ? THEME.error
-    : (rest.isPaused ? THEME.yellow : THEME.textSecondary);
-  const labelText = rest.isPaused
-    ? 'Paused'
-    : (rest.isOvertime ? 'Overtime' : 'Rest');
-
-  addLiveLabel('restLabel', {
-    x: px(62),
-    y: px(90),
-    w: px(356),
-    h: px(28),
-    color: labelColor,
-    text_size: font('body'),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: labelText,
-  });
-
-  addLiveButton('restValue', {
-    x: px(62),
-    y: px(118),
-    w: px(356),
-    h: px(64),
-    radius: px(12),
-    normal_color: THEME.bg,
-    press_color: THEME.primaryDark,
-    color: restColor,
-    text_size: font('timer'),
-    align_h: align.CENTER_H,
-    align_v: align.CENTER_V,
-    text_style: text_style.NONE,
-    text: formatSeconds(rest.remaining),
-    click_func: openWorkoutTimerControls,
-  });
-
-  // Quick timer controls: -10s, Pause/Resume, +10s
-  addWidget(widget.BUTTON, {
-    x: px(52),
-    y: px(190),
-    w: px(104),
-    h: px(44),
-    radius: px(22),
-    normal_color: THEME.card,
-    press_color: THEME.cardActive,
-    text: '-10s',
-    text_size: font('caption'),
-    click_func: () => {
-      workoutController.adjustRest(-10);
-      scheduleRenderUI();
-    },
-  });
-
-  addLiveButton('restPause', {
-    x: px(164),
-    y: px(190),
-    w: px(152),
-    h: px(44),
-    radius: px(22),
-    normal_color: rest.isPaused ? THEME.yellow : THEME.card,
-    press_color: THEME.cardActive,
-    color: rest.isPaused ? 0x000000 : THEME.textPrimary,
-    diagnosticAction: rest.isPaused ? 'RESUME' : 'PAUSE',
-    text: rest.isWorkoutPaused ? 'Zepp paused' : (rest.isPaused ? 'Resume' : 'Pause'),
-    text_size: font('caption'),
-    click_func: () => {
-      if (workoutController.view().rest?.isWorkoutPaused) return;
-      workoutController.toggleRestPause();
-    },
-  });
-
-  addWidget(widget.BUTTON, {
-    x: px(324),
-    y: px(190),
-    w: px(104),
-    h: px(44),
-    radius: px(22),
-    normal_color: THEME.card,
-    press_color: THEME.cardActive,
-    text: '+10s',
-    text_size: font('caption'),
-    click_func: () => {
-      workoutController.adjustRest(10);
-      scheduleRenderUI();
-    },
-  });
-
-  // Next Set Preview Card
-  if (rest.nextExerciseName) {
-    const ssColor = supersetColor(rest.nextSupersetGroup);
-    const ssText = rest.nextSupersetGroup ? ` (SS ${rest.nextSupersetGroup})` : '';
-    const nextLoadoutLabel = formatLoadoutLabel(
-      rest.nextTargetWeight,
-      view.pending?.loadingEquipment,
-      rest.nextUnit,
-      view.pending?.set?.plates || rest.nextPlates,
-      rest.nextTargetWeight
-    );
-    const setProg = rest.nextIsWarmup
-      ? `WARMUP ${(rest.nextWarmupIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWarmups || rest.nextTotalSets}${ssText}`
-      : `SET ${(rest.nextWorkSetIndex ?? (rest.nextSetIndex ?? 0) + 1)}/${rest.nextTotalWorkSets || rest.nextTotalSets}${ssText}`;
-
-    addWidget(widget.FILL_RECT, {
-      x: px(52),
-      y: px(244),
-      w: px(376),
-      h: px(116),
-      radius: px(18),
-      color: THEME.card,
-    });
-
-    addWidget(widget.TEXT, {
-      x: px(60),
-      y: px(250),
-      w: px(300),
-      h: px(26),
-      color: THEME.textPrimary,
-      text_size: font('body'),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: `Next: ${truncate(rest.nextExerciseName, 20)}`,
-    });
-
-    if (display.showRestInfo) {
-      renderExerciseInfo(rest.nextExerciseName, rest.nextExerciseDetails, 246, 32, rest.nextExerciseImageUrl);
-    }
-
-    addWidget(widget.TEXT, {
-      x: px(60),
-      y: px(276),
-      w: px(360),
-      h: px(22),
-      color: rest.nextIsWarmup ? 0xffb544 : (rest.nextSupersetGroup ? ssColor : THEME.primaryLight),
-      text_size: font('micro'),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: formatSupersetProgress(rest.nextSupersetContext) || setProg,
-    });
-
-    addWidget(widget.TEXT, {
-      x: px(60),
-      y: px(300),
-      w: px(360),
-      h: px(display.showPlateBreakdown ? 32 : 50),
-      color: THEME.yellow,
-      text_size: font(display.showPlateBreakdown ? 'title' : 'value'),
-      align_h: align.CENTER_H,
-      align_v: align.CENTER_V,
-      text_style: text_style.NONE,
-      text: formatNextTargetSummary(rest),
-    });
-
-    if (display.showPlateBreakdown && nextLoadoutLabel) {
-      addWidget(widget.TEXT, {
-        x: px(60),
-        y: px(332),
-        w: px(360),
-        h: px(22),
-        color: THEME.textSecondary,
-        text_size: font('micro'),
-        align_h: align.CENTER_H,
-        align_v: align.CENTER_V,
-        text_style: text_style.NONE,
-        text: nextLoadoutLabel,
-      });
-    }
-  }
-
-  const actions = extensionRestActionsLayout(rest.remaining);
-  if (actions.prepare) {
-    addWidget(widget.BUTTON, {
-      x: px(actions.prepare.x),
-      y: px(actions.y),
-      w: px(actions.prepare.width),
-      h: px(actions.height),
-      radius: px(actions.height / 2),
-      normal_color: THEME.cardActive,
-      press_color: THEME.card,
-      text: 'Prepare',
-      text_size: font('button'),
-      click_func: () => {
-        setRestPrepared(true);
-        scheduleRenderUI();
-      },
-    });
-  }
-
-  addWidget(widget.BUTTON, {
-    x: px(actions.start.x),
-    y: px(actions.y),
-    w: px(actions.start.width),
-    h: px(actions.height),
-    radius: px(actions.height / 2),
-    normal_color: THEME.primary,
-    press_color: THEME.primaryDeep,
-    text: view.timedSet?.phase === 'REST' ? 'Armed' : 'Start set',
-    text_size: font('button'),
-    diagnosticAction: 'START_SET',
-    click_func: () => {
-      const reason = view.timedSet && checkRequiredPhoneInput(view.pending?.set || view.currentSet);
-      if (reason) { phoneRequiredReason = reason; controllerUiDirty = true; return; }
-      restAlertTracker.reset();
-      stopVibration();
-      setRestPrepared(false);
-      if (view.timedSet) workoutController.startTimedSet();
-      else workoutController.nextSet();
-      scheduleRenderUI();
     },
   });
 }
@@ -3500,7 +3254,6 @@ function renderScreen() {
   }
 
   const view = workoutController.view();
-  syncRestPresentation(view.rest);
   const sync = workoutController.sync();
 
   if (sync.conflict) {
@@ -3522,10 +3275,7 @@ function renderScreen() {
   if (isOverviewOpen && view.state !== SESSION_STATES.FINISHED) return renderOverviewScreen(view);
   if (view.timedSet && view.timedSet.phase !== 'READY' && view.timedSet.phase !== 'REST') return renderTimedSetScreen(view);
   if (view.state === SESSION_STATES.ACTIVE_SET) return renderActiveSetScreen(view);
-  if (view.state === SESSION_STATES.REST) {
-    if (isRestMinimized) return renderActiveSetScreen(view);
-    return renderRestScreen(view);
-  }
+  if (view.state === SESSION_STATES.REST) return renderActiveSetScreen(view);
   return renderFinishedScreen(view);
 }
 
@@ -3692,14 +3442,10 @@ function loadDisplaySettings() {
       workoutDiagnostics.record(WORKOUT_DIAGNOSTIC_CODES.DIAGNOSTICS_ON);
     }
     const imagesWereEnabled = normalizeExerciseImages(accountSettings?.exerciseImages);
-    const autoPrepareWasEnabled = accountSettings?.autoPrepare === true;
     const previousDisplay = normalizeWorkoutDisplaySettings(accountSettings);
     accountSettings = settingsRes.payload || {};
     const currentDisplay = normalizeWorkoutDisplaySettings(accountSettings);
     const displayChanged = Object.keys(previousDisplay).some((key) => previousDisplay[key] !== currentDisplay[key]);
-    saveAutoPreparePreference(deviceStorage, accountSettings.autoPrepare);
-    const autoPrepareChanged = autoPrepareWasEnabled !== (accountSettings.autoPrepare === true);
-    if (autoPrepareChanged) restPresentation = createRestPresentationState();
     exerciseImages?.setEnabled(normalizeExerciseImages(accountSettings.exerciseImages));
     if (isNotesModalOpen && imagesWereEnabled !== normalizeExerciseImages(accountSettings.exerciseImages)) {
       notesPage = 0;
@@ -3708,7 +3454,7 @@ function loadDisplaySettings() {
     }
     workoutController.configureTimedSets({ getReadySeconds: normalizeGetReadySeconds(accountSettings.getReadySeconds) });
     applyDisplayHold();
-    if ((autoPrepareChanged || displayChanged) && screen === EXTENSION_SCREENS.SESSION && !isNotesModalOpen) {
+    if (displayChanged && screen === EXTENSION_SCREENS.SESSION && !isNotesModalOpen) {
       controllerUiDirty = true;
     }
     return accountSettings;
@@ -3914,29 +3660,12 @@ function tick() {
     }
   }
 
-  if (liveWidgets.restValue && lastRenderedSecond > 0 && view.rest?.remaining <= 0) {
-    renderUI();
-    return;
-  }
-
   updatePreparedRestVisuals(view);
 
   const currentSecond = view.rest ? view.rest.remaining : view.elapsedSeconds;
   if (currentSecond !== lastRenderedSecond) {
     lastRenderedSecond = currentSecond;
     if (view.rest) {
-      const restColor = view.rest.isOvertime
-        ? THEME.error
-        : (view.rest.isPaused ? THEME.yellow : THEME.primaryPale);
-      const labelColor = view.rest.isOvertime
-        ? THEME.error
-        : (view.rest.isPaused ? THEME.yellow : THEME.textSecondary);
-      const labelText = view.rest.isPaused
-        ? 'Paused'
-        : (view.rest.isOvertime ? 'Overtime' : 'Rest');
-
-      updateLiveWidget('restLabel', { text: labelText, color: labelColor });
-      updateLiveWidget('restValue', { text: formatSeconds(view.rest.remaining), color: restColor });
       updateLiveWidget('actionButton', {
         text: view.timedSet?.phase === 'REST' ? 'Armed' : `> Start set ${formatSeconds(view.rest.remaining)}`,
       });

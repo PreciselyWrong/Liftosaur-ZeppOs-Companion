@@ -73,7 +73,6 @@ test('data-widget/common/index.js fulfills all platform and product contracts', 
     'renderDaysScreen',
     'renderReadyScreen',
     'renderActiveSetScreen',
-    'renderRestScreen',
     'renderOverviewScreen',
     'renderNotesScreen',
     'renderFinishedScreen',
@@ -187,10 +186,7 @@ test('active steppers do not destroy their native button during click callbacks'
     source.indexOf('function renderStepper('),
     source.indexOf('function refreshActiveSetControls('),
   );
-  const activeSet = source.slice(
-    source.indexOf('function renderActiveSetScreen('),
-    source.indexOf('function renderRestScreen('),
-  );
+  const activeSet = extractFunction(source, 'renderActiveSetScreen');
 
   assert.match(stepper, /addLiveLabel\(`\$\{key\}-value`/);
   assert.match(stepper, /addLiveLabel\(`\$\{key\}-label`/);
@@ -285,22 +281,6 @@ test('top bar renders native BPM with a fixed heart even during sync warnings', 
   }
 });
 
-test('rest pause keeps its native button alive until the click callback returns', () => {
-  const source = readWidgetSource();
-  const restScreen = extractFunction(source, 'renderRestScreen');
-  const pauseStart = restScreen.indexOf("addLiveButton('restPause'");
-  const pauseEnd = restScreen.indexOf('addWidget(widget.BUTTON', pauseStart);
-  const pauseControl = restScreen.slice(pauseStart, pauseEnd);
-
-  assert.ok(pauseStart >= 0, 'Pause must use a persistent native button');
-  assert.match(pauseControl, /workoutController\.toggleRestPause\(\)/);
-  assert.doesNotMatch(
-    pauseControl,
-    /renderUI\(\)/,
-    'Pause must not delete its active native button synchronously',
-  );
-});
-
 test('native workout destruction performs no device work and blocks late redraws', () => {
   const source = readWidgetSource();
   const renderUI = extractFunction(source, 'renderUI');
@@ -337,78 +317,11 @@ test('exercise Info stays available with missing details and explains the empty 
     assert.doesNotMatch(opened, /Bench Press/);
     assert.ok(opened.includes(details || 'No exercise notes or description available.'));
   }
-  for (const name of ['renderActiveSetScreen', 'renderRestScreen']) {
+  for (const name of ['renderActiveSetScreen']) {
     const body = extractFunction(source, name);
     assert.match(body, /renderExerciseInfo\(/);
     assert.doesNotMatch(body, /if \(exerciseDetails\)|if \(rest.nextExerciseDetails\)/);
   }
-});
-
-test('expired rest replaces Prepare and Start set with one full-width Start set action', () => {
-  const source = readWidgetSource();
-  for (const remaining of [1, 0, -10]) {
-    const buttons = [];
-    let started = 0;
-    const env = {
-      ...watchLayout, renderTopBar() {}, addLiveLabel() {},
-      normalizeWorkoutDisplaySettings, accountSettings: {},
-      addLiveButton: (key, props) => buttons.push({ key, ...props }),
-      addWidget: (type, props) => buttons.push(props), widget: { BUTTON: 1 },
-      px: x => x, font: () => 20, THEME: {}, align: {}, text_style: {}, formatSeconds: String,
-      restAlertTracker: { reset() {} }, stopVibration() {}, isRestMinimized: false,
-      workoutDiagnostics: { record() {} }, WORKOUT_DIAGNOSTIC_CODES: { ACTION_TAP: 'ACTION_TAP' },
-      setRestPrepared(value) { env.isRestMinimized = value; },
-      workoutController: { nextSet: () => { started++; } }, renderUI() {}, scheduleRenderUI() {}, openWorkoutTimerControls() {},
-    };
-    const render = new Function('env', `with (env) { ${extractFunction(source, 'renderRestScreen')}; return renderRestScreen; }`)(env);
-    render({ rest: { remaining, isPaused: false } });
-    const prepare = buttons.find(button => button.text === 'Prepare');
-    const start = buttons.find(button => button.text === 'Start set');
-    if (remaining > 0) {
-      assert.ok(prepare);
-      assert.equal(start.x, 226);
-      assert.equal(start.w, 190);
-    } else {
-      assert.equal(prepare, undefined);
-      assert.equal(start.x, 64);
-      assert.equal(start.w, 352);
-    }
-    assert.equal(start.y, 370);
-    assert.equal(start.h, 58);
-    start.click_func();
-    assert.equal(started, 1);
-    buttons.length = 0;
-    render({ rest: { remaining, isPaused: false }, timedSet: { phase: 'REST' } });
-    assert.ok(buttons.some(button => button.text === 'Armed'));
-  }
-});
-
-test('timer expiry redraws the rest actions once without starting an unprepared set', () => {
-  let renders = 0;
-  let starts = 0;
-  const view = { state: 'REST', rest: { remaining: 0, isPaused: false }, elapsedSeconds: 60 };
-  const env = {
-    updatePreparedRestVisuals() {},
-    updateClock() {}, screen: 'SESSION', EXTENSION_SCREENS: { SESSION: 'SESSION' },
-    isTearingDown: false, isPaused: false, hasBuilt: true,
-    workoutDiagnostics: { heartbeat() {} },
-    SESSION_STATES: { REST: 'REST' }, controllerUiDirty: false,
-    refreshSportMetrics() {}, retryPendingWrites() {},
-    workoutController: { view: () => view, advanceTimedSet() {}, pollCurrent: async () => false, nextSet: () => { starts++; } },
-    updateTimedSetScreen() {},
-    syncWarning: null, updateSyncWarning() {}, handlePollFailure() {},
-    lastRenderedState: 'REST', lastRenderedSecond: 1, isRestMinimized: false, liveWidgets: { restValue: {} },
-    restAlertTracker: { checkTick: () => ({ shouldAlert: false }) },
-    restStatusColor: () => 0, THEME: {}, formatSeconds: String, updateLiveWidget() {},
-    renderUI: () => { renders++; env.lastRenderedSecond = view.rest.remaining; },
-  };
-  const tick = new Function('env', `with (env) { ${extractFunction(readWidgetSource(), 'tick')}; return tick; }`)(env);
-  tick();
-  assert.equal(renders, 1);
-  view.rest.remaining = -1;
-  tick();
-  assert.equal(renders, 1);
-  assert.equal(starts, 0);
 });
 
 test('saved extension finish shows a rightward hint instead of a misleading Done action', () => {
@@ -547,7 +460,7 @@ test('prepared active set UI matches contracts: no purple pill, > Start set coun
     openWorkoutTimerControls: () => {},
     checkRequiredPhoneInput: () => null,
     stopVibration: () => {},
-    setRestPrepared: () => {},
+   
     workoutController: {
       skipWarmup: () => false,
       adjustWeight: () => {},

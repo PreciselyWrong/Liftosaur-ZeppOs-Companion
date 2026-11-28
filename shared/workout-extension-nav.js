@@ -90,39 +90,6 @@ export function formatActiveSetProgress(set = {}, setIndex = 0, totalSets = 0) {
   return `SET ${set?.workSetIndex || setIndex + 1}/${set?.totalWorkSets || totalSets}`;
 }
 
-export function formatTargetRepsSummary(set) {
-  if (!set) return '-';
-  if (set.setTimer > 0) return `${formatSeconds(set.setTimer)} hold`;
-  const suffix = set.isAmrap ? '+' : '';
-  if (set.targetRepsMax !== null && set.targetRepsMax !== undefined && set.targetReps !== null) {
-    return `${set.targetReps}-${set.targetRepsMax}${suffix}`;
-  }
-  if (set.targetReps !== null && set.targetReps !== undefined) {
-    return `${set.targetReps}${suffix}`;
-  }
-  return '-';
-}
-
-export function formatTargetRpeSummary(set) {
-  if (set?.targetRpe === null || set?.targetRpe === undefined) return '';
-  return ` @${set.targetRpe}${set.logRpe ? '+' : ''}`;
-}
-
-export function formatNextTargetSummary(rest) {
-  if (!rest) return '';
-  const reps = formatTargetRepsSummary({
-    targetReps: rest.nextTargetReps,
-    targetRepsMax: rest.nextTargetRepsMax,
-    isAmrap: rest.nextIsAmrap,
-  });
-  const weight = formatWeightValue(rest.nextTargetWeight, rest.nextUnit);
-  const rpe = formatTargetRpeSummary({
-    targetRpe: rest.nextTargetRpe,
-    logRpe: rest.nextLogRpe,
-  });
-  return `${reps} x ${weight}${rpe}`;
-}
-
 export function formatDots(dots = []) {
   if (!Array.isArray(dots) || dots.length === 0) return '';
   return dots

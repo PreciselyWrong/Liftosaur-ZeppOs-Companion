@@ -107,10 +107,10 @@ test('the launch and the onResume that follows it share one settings request', a
     lifecycleGeneration: 3, displaySettingsLoad: null, isTearingDown: false, accountSettings: null,
     isNotesModalOpen: false, screen: 'LOADING', EXTENSION_SCREENS, MESSAGE_TYPES,
     workoutDiagnostics: { isEnabled: () => false, setEnabled() {}, record() {}, prepareUpload: () => ({ payload: {}, commit() {} }) },
-    WORKOUT_DIAGNOSTIC_CODES: {}, deviceStorage: null, restPresentation: null,
+    WORKOUT_DIAGNOSTIC_CODES: {}, deviceStorage: null,
     exerciseImages: null, workoutController: { configureTimedSets() {} },
     normalizeWorkoutDiagnosticsEnabled: Boolean, normalizeExerciseImages: Boolean, normalizeGetReadySeconds: Number,
-    normalizeWorkoutDisplaySettings: () => ({}), saveAutoPreparePreference() {}, createRestPresentationState: () => ({}),
+    normalizeWorkoutDisplaySettings: () => ({}),
     applyDisplayHold() {}, renderUI() {},
     send(type) { sent.push(type); return reply.promise; },
   };
