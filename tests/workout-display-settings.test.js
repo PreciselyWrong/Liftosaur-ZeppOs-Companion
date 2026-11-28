@@ -6,7 +6,6 @@ test('display defaults preserve existing watch controls and plate labels', () =>
   assert.deepEqual(normalizeWorkoutDisplaySettings(), {
     showWorkoutProgress: false,
     showPlateBreakdown: true,
-    showRestInfo: true,
   });
 });
 
@@ -14,16 +13,13 @@ test('display preferences accept stored select values and reject malformed value
   assert.deepEqual(normalizeWorkoutDisplaySettings({
     showWorkoutProgress: '{"value":"true"}',
     showPlateBreakdown: 'false',
-    showRestInfo: { value: false },
   }), {
     showWorkoutProgress: true,
     showPlateBreakdown: false,
-    showRestInfo: false,
   });
   assert.deepEqual(normalizeWorkoutDisplaySettings({
     showWorkoutProgress: 'bad',
     showPlateBreakdown: 'bad',
-    showRestInfo: null,
   }), normalizeWorkoutDisplaySettings());
 });
 

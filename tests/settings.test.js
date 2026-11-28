@@ -102,7 +102,6 @@ const YES_NO_SETTINGS = [
   ['Exercise images', 'exerciseImages', 'exerciseImages'],
   ['Workout progress', 'showWorkoutProgress', 'showWorkoutProgress'],
   ['Plate breakdown', 'showPlateBreakdown', 'showPlateBreakdown'],
-  ['Rest Info button', 'showRestInfo', 'showRestInfo'],
   ['Record watch diagnostics', 'workoutDiagnosticsEnabled', WORKOUT_DIAGNOSTICS_ENABLED_KEY],
 ];
 
@@ -110,7 +109,7 @@ test('loads Liftosaur API key and screen-on duration default 120 without writing
   const { state, writes } = loadSettings();
 
   assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, workoutDiagnosticsEnabled: false,
-    showWorkoutProgress: false, showPlateBreakdown: true, showRestInfo: true });
+    showWorkoutProgress: false, showPlateBreakdown: true });
   assert.deepEqual(writes, []);
 });
 
@@ -160,7 +159,6 @@ test('Workout display switches preserve defaults and save each independent choic
   for (const [label, key, initialValue, nextValue] of [
     ['Workout progress', 'showWorkoutProgress', false, true],
     ['Plate breakdown', 'showPlateBreakdown', true, false],
-    ['Rest Info button', 'showRestInfo', true, false],
   ]) {
     const control = toggle(initial.tree, label);
     assert.ok(control, label);
@@ -199,7 +197,7 @@ test('settings are grouped in topic sections, most used first', () => {
   assert.deepEqual(layout(renderSettings().tree), [
     ['Connection', 'Liftosaur API key, Save key'],
     ['Sets and rest', 'Ready countdown: 5 sec'],
-    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown'],
     ['Diagnostics', 'Record watch diagnostics'],
     ['Help', ''],
   ]);
@@ -210,7 +208,7 @@ test('settings are grouped in topic sections, most used first', () => {
   }).tree), [
     ['Connection', 'Liftosaur API key, Save key, Disconnect'],
     ['Sets and rest', 'Ready countdown: 5 sec'],
-    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown'],
     ['Diagnostics', 'Record watch diagnostics, Select and copy logs'],
     ['Help', ''],
   ]);
@@ -229,7 +227,6 @@ test('each explained control has one identically styled helper right below it', 
     ['Exercise images', 'Show pictures in the list, Info and Prepare.'],
     ['Workout progress', 'Show completed sets at the top of the watch.'],
     ['Plate breakdown', 'Show plates during rest and while editing a set.'],
-    ['Rest Info button', 'Keep exercise details available from the rest preview.'],
     ['Record watch diagnostics', 'Open this Lifto app on the watch to apply the change.'],
     ['Select and copy logs', 'Open the field, then long-press, Select all and Copy.'],
   ]);

@@ -1,7 +1,6 @@
 export const WORKOUT_DISPLAY_DEFAULTS = Object.freeze({
   showWorkoutProgress: false,
   showPlateBreakdown: true,
-  showRestInfo: true,
 });
 
 function normalizeBoolean(value, fallback) {
@@ -19,7 +18,6 @@ export function normalizeWorkoutDisplaySettings(settings = {}) {
   return {
     showWorkoutProgress: normalizeBoolean(settings?.showWorkoutProgress, WORKOUT_DISPLAY_DEFAULTS.showWorkoutProgress),
     showPlateBreakdown: normalizeBoolean(settings?.showPlateBreakdown, WORKOUT_DISPLAY_DEFAULTS.showPlateBreakdown),
-    showRestInfo: normalizeBoolean(settings?.showRestInfo, WORKOUT_DISPLAY_DEFAULTS.showRestInfo),
   };
 }
 

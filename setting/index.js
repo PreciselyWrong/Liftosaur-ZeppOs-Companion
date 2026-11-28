@@ -170,7 +170,6 @@ AppSettingsPage({
     exerciseImages: false,
     showWorkoutProgress: false,
     showPlateBreakdown: true,
-    showRestInfo: true,
     workoutDiagnosticsEnabled: false,
   },
 
@@ -357,12 +356,6 @@ AppSettingsPage({
             normalize: normalizeDisplaySetting('showPlateBreakdown'),
             helper: 'Show plates during rest and while editing a set.',
           }),
-          ...toggleSetting({
-            label: 'Rest Info button',
-            key: 'showRestInfo',
-            normalize: normalizeDisplaySetting('showRestInfo'),
-            helper: 'Keep exercise details available from the rest preview.',
-          }),
         ]),
 
         section('Diagnostics', null, [
@@ -388,7 +381,6 @@ AppSettingsPage({
     Object.assign(this.state, normalizeWorkoutDisplaySettings({
       showWorkoutProgress: props.settingsStorage.getItem('showWorkoutProgress'),
       showPlateBreakdown: props.settingsStorage.getItem('showPlateBreakdown'),
-      showRestInfo: props.settingsStorage.getItem('showRestInfo'),
     }));
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
     this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(
