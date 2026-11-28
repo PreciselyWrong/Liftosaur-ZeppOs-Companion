@@ -25,7 +25,7 @@ The [installation guide](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Comp
 1. Choose the intended program, week and day. Confirm the preview before starting. If a workout is already active in Liftosaur, continue that workout instead of starting another.
 2. On Prepare, check the exercise, weight, repetitions and RPE where requested. Open Info for notes. Start the set when ready.
 3. Complete the set with the values you actually performed. Lifto records it on the watch first, then synchronizes through the phone.
-4. Let rest run, adjust it when needed, or prepare the next exercise. With Auto prepare enabled, preparation opens during rest. Starting a repetition-based set remains an explicit action; reaching zero does not complete a set for you.
+4. Let rest run: the next set is already prepared on screen, so check or adjust it while the countdown ring runs. Starting a repetition-based set remains an explicit action; reaching zero does not complete a set for you.
 5. Repeat for the remaining sets. Finish in Lifto and wait for Cloud saving to complete. In Workout, also open the native Zepp workout controls and finish that activity so both histories are saved.
 
 For timed exercises, **Stop** records the held duration; expiry alerts but does not complete the set. Unilateral exercises record left and right durations together after both sides. See [timed sets and recovery](https://github.com/PreciselyWrong/Liftosaur-ZeppOs-Companion/blob/main/docs/timed-sets.md).
@@ -36,7 +36,6 @@ In the selected Lifto app's phone Settings, open **Workout display**:
 
 - **Workout progress** adds a bar showing completed sets across the workout. It starts off.
 - **Plate breakdown** starts on. Turn it off to give the weight/target more space while keeping its unit visible. When you change the weight on the watch, the line under it is recalculated at once from your gym's equipment, which the phone reads from Liftosaur once when the workout starts: the plates for a plate-loaded exercise, or `USE 12 KG` when a fixed weight such as a dumbbell exists. A weight your equipment cannot make exactly shows the nearest loadable weights instead, for example `NEAR 60/62.5 KG`. If the phone could not read the equipment, the breakdown falls back to the bar and plates Liftosaur already proposed in this workout, and a weight those plates cannot make, or a fixed weight, shows only the unit.
-- **Rest Info button** starts on. Turn it off to hide Info on the detailed rest screen; Info elsewhere is retained.
 
 Preferences are configured separately for Companion and Workout. Reopen the watch app while connected to receive the latest settings. These options do not change the workout prescription or rest deadline.
 

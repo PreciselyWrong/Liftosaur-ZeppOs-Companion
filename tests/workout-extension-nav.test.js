@@ -11,10 +11,7 @@ import {
   formatSeconds,
   formatSupersetProgress,
   formatEditableSetValue,
-  formatNextTargetSummary,
-  formatTargetRpeSummary,
   formatWeightValue,
-  formatTargetRepsSummary,
   supersetColor,
 } from '../shared/workout-extension-nav.js';
 
@@ -123,26 +120,6 @@ test('formatting helpers format seconds and weight cleanly', () => {
   assert.equal(formatEditableSetValue(8, false), '8');
   assert.equal(formatEditableSetValue(8, true), '8+');
   assert.equal(formatEditableSetValue(null, true), '-');
-
-  assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: null }), '8');
-  assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: 12 }), '8-12');
-  assert.equal(formatTargetRepsSummary({ targetReps: 12, targetRepsMax: null, isAmrap: true }), '12+');
-  assert.equal(formatTargetRepsSummary({ targetReps: 8, targetRepsMax: 12, isAmrap: true }), '8-12+');
-  assert.equal(formatTargetRepsSummary({ targetReps: null, targetRepsMax: null }), '-');
-
-  assert.equal(formatTargetRpeSummary({ targetRpe: 9, logRpe: true }), ' @9+');
-  assert.equal(formatTargetRpeSummary({ targetRpe: 8, logRpe: false }), ' @8');
-  assert.equal(formatTargetRpeSummary({ targetRpe: null, logRpe: true }), '');
-
-  assert.equal(formatNextTargetSummary({
-    nextTargetReps: 12,
-    nextTargetRepsMax: null,
-    nextIsAmrap: true,
-    nextTargetWeight: 80,
-    nextUnit: 'kg',
-    nextTargetRpe: 9,
-    nextLogRpe: true,
-  }), '12+ x 80kg @9+');
 });
 
 test('supersetColor maps group identifiers to distinct high-contrast colors', () => {

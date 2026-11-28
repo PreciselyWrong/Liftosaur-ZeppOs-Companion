@@ -1,6 +1,5 @@
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
-import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTICS_EMPTY, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
@@ -169,10 +168,8 @@ AppSettingsPage({
     screenOnDuration: 120,
     getReadySeconds: 5,
     exerciseImages: false,
-    autoPrepare: false,
     showWorkoutProgress: false,
     showPlateBreakdown: true,
-    showRestInfo: true,
     workoutDiagnosticsEnabled: false,
   },
 
@@ -325,12 +322,6 @@ AppSettingsPage({
         ]),
 
         section('Sets and rest', 'Rest timers follow your Liftosaur settings.', [
-          ...toggleSetting({
-            label: 'Auto prepare',
-            key: 'autoPrepare',
-            normalize: normalizeAutoPrepare,
-            helper: 'Open the next set while rest runs.',
-          }),
           ...selectSetting({
             label: 'Ready countdown',
             key: 'getReadySeconds',
@@ -365,12 +356,6 @@ AppSettingsPage({
             normalize: normalizeDisplaySetting('showPlateBreakdown'),
             helper: 'Show plates during rest and while editing a set.',
           }),
-          ...toggleSetting({
-            label: 'Rest Info button',
-            key: 'showRestInfo',
-            normalize: normalizeDisplaySetting('showRestInfo'),
-            helper: 'Keep exercise details available from the rest preview.',
-          }),
         ]),
 
         section('Diagnostics', null, [
@@ -396,10 +381,8 @@ AppSettingsPage({
     Object.assign(this.state, normalizeWorkoutDisplaySettings({
       showWorkoutProgress: props.settingsStorage.getItem('showWorkoutProgress'),
       showPlateBreakdown: props.settingsStorage.getItem('showPlateBreakdown'),
-      showRestInfo: props.settingsStorage.getItem('showRestInfo'),
     }));
     this.state.exerciseImages = normalizeExerciseImages(props.settingsStorage.getItem('exerciseImages'));
-    this.state.autoPrepare = normalizeAutoPrepare(props.settingsStorage.getItem('autoPrepare'));
     this.state.workoutDiagnosticsEnabled = normalizeWorkoutDiagnosticsEnabled(
       props.settingsStorage.getItem(WORKOUT_DIAGNOSTICS_ENABLED_KEY)
     );

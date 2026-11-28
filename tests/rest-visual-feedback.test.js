@@ -211,7 +211,7 @@ function createMockEnv({ source, isCompanion = false, viewOverride = {} }) {
     openWorkoutTimerControls: () => {},
     openTextModal: () => {},
     stopVibration: () => {},
-    setRestPrepared: () => {},
+   
     submitWorkout: () => {},
     scheduleRenderUI: () => {},
     renderUI: () => {},

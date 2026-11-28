@@ -66,7 +66,7 @@ function renderSetScreen(product, { resting, warmup, imageStatus }) {
       prefetch: (url) => imageCalls.push(['prefetch', url]),
       get: () => ({ status: imageStatus, src: imageStatus === 'ready' ? 'data://download/squat.png' : null }),
     },
-    openNotes() {}, openTextModal() {}, checkRequiredPhoneInput: () => null, stopVibration() {}, setRestPrepared() {},
+    openNotes() {}, openTextModal() {}, checkRequiredPhoneInput: () => null, stopVibration() {},
     restAlertTracker: { reset() {} }, restStatusColor: () => 7,
     workoutController: controller, session: controller,
     submitWorkout() {}, scheduleRenderUI() {}, renderUI() {}, persistAndRender: (fn) => fn(),

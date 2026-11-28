@@ -36,11 +36,11 @@ Lifto for Zepp OS is built together with [u/silent_jacob](https://www.reddit.com
 - Durable local plan, journal, write queue, pause intervals, and finish intent for exact recovery after interruption.
 - Ordered, repeat-safe set recording and finish synchronization without replacing unacknowledged local work.
 - Warmups, supersets, rep ranges, RPE, account rest defaults, and calculated plate combinations.
-- Rest countdown, haptic alert at zero, overtime, adjustment, and pause/resume.
+- Rest countdown ring with the next set prepared on screen, haptic alert at zero, overtime, and workout pause/resume.
 - Timed and unilateral holds with Get Ready, side transitions, pause, overtime, and durable duration recording.
 - Separate Info pages for recent sessions, exercise notes, and program instructions.
 - Optional exercise images in workout lists, Info, Prepare and the set screen, with the day's images saved on the watch in the background between sets.
-- Configurable workout progress bar, plate breakdown and rest Info button in phone settings.
+- Configurable workout progress bar and plate breakdown in phone settings.
 - Live heart rate from Companion or native activity BPM in Lifto Workout.
 - Phone-only API key storage; credentials are never sent to or stored on the watch.
 

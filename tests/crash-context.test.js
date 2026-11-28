@@ -222,7 +222,7 @@ for (const product of ['companion', 'workout']) {
       getSystemInfo: () => { nativeCalls.push('system'); return { firmwareVersion: '7.23.0.1', osVersion: '4.0', minAPI: '4.0' }; },
       screen: 'SESSION', session: { state }, workoutController: { state }, activeWidgets: Array(36).fill({}),
       isNotesModalOpen: true, isSyncDetailsOpen: false, isWorkoutTimerControlsOpen: false, isEditLastSetOpen: false,
-      isOverviewOpen: false, restPresentation: { isPrepared: true }, accountSettings: { exerciseImages: true },
+      isOverviewOpen: false, accountSettings: { exerciseImages: true },
       normalizeExerciseImages: value => value === true,
     };
     vm.runInNewContext(`${source.slice(start, end)}; this.recorder = workoutDiagnostics;`, env);
@@ -236,7 +236,7 @@ for (const product of ['companion', 'workout']) {
     assert.equal(report.details.runtime.appVersion, '0.5.12');
     assert.deepEqual(report.events[0].context, {
       screen: 'SESSION', state: 'REST', widgets: 36, modal: true,
-      overview: false, preparation: true, imagesEnabled: true,
+      overview: false, imagesEnabled: true,
     });
   });
 }

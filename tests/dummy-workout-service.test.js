@@ -21,10 +21,8 @@ test('dummy workout service exposes the direct Workout contract from shared demo
     screenOnDuration: 120,
     getReadySeconds: 5,
     exerciseImages: false,
-    autoPrepare: false,
     showWorkoutProgress: false,
     showPlateBreakdown: true,
-    showRestInfo: true,
   });
   assert.deepEqual(await service.getCurrentWorkout(), { workout: null });
 
@@ -47,7 +45,7 @@ test('dummy workout settings include the local display preference', async () => 
   const service = createDummyWorkoutService({
     catalogService: createDummyProgramService(),
     getLocalSettings: () => ({ screenOnDuration: 240, showWorkoutProgress: true,
-      showPlateBreakdown: false, showRestInfo: false }),
+      showPlateBreakdown: false }),
   });
 
   assert.deepEqual(await service.getSettings(), {
@@ -56,10 +54,8 @@ test('dummy workout settings include the local display preference', async () => 
     screenOnDuration: 240,
     getReadySeconds: 5,
     exerciseImages: false,
-    autoPrepare: false,
     showWorkoutProgress: true,
     showPlateBreakdown: false,
-    showRestInfo: false,
   });
 });
 

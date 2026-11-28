@@ -4,7 +4,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { normalizeGetReadySeconds } from '../shared/timed-settings.js';
 import { normalizeExerciseImages } from '../shared/exercise-images.js';
-import { normalizeAutoPrepare } from '../shared/auto-prepare.js';
 import { normalizeWorkoutDisplaySettings } from '../shared/workout-display-settings.js';
 import { WORKOUT_DIAGNOSTICS_KEY, WORKOUT_DIAGNOSTICS_ENABLED_KEY, WORKOUT_DIAGNOSTICS_EMPTY, WORKOUT_DIAGNOSTIC_CODES, formatWorkoutDiagnostics, normalizeWorkoutDiagnosticsEnabled } from '../shared/workout-diagnostics.js';
 
@@ -16,7 +15,6 @@ new Function(
   'AppSettingsPage',
   'normalizeGetReadySeconds',
   'normalizeExerciseImages',
-  'normalizeAutoPrepare',
   'normalizeWorkoutDisplaySettings',
   'WORKOUT_DIAGNOSTICS_KEY',
   'WORKOUT_DIAGNOSTICS_ENABLED_KEY',
@@ -34,7 +32,6 @@ new Function(
   (definition) => { settingsPage = definition; },
   normalizeGetReadySeconds,
   normalizeExerciseImages,
-  normalizeAutoPrepare,
   normalizeWorkoutDisplaySettings,
   WORKOUT_DIAGNOSTICS_KEY,
   WORKOUT_DIAGNOSTICS_ENABLED_KEY,
@@ -102,19 +99,17 @@ const toggle = (tree, label) => collect(tree, 'Toggle').find(({ props }) => prop
 const sections = (tree) => tree.children[0].map((card) => card.children[0]);
 const CONTROL_TYPES = ['Toggle', 'Select', 'TextInput', 'Button'];
 const YES_NO_SETTINGS = [
-  ['Auto prepare', 'autoPrepare', 'autoPrepare'],
   ['Exercise images', 'exerciseImages', 'exerciseImages'],
   ['Workout progress', 'showWorkoutProgress', 'showWorkoutProgress'],
   ['Plate breakdown', 'showPlateBreakdown', 'showPlateBreakdown'],
-  ['Rest Info button', 'showRestInfo', 'showRestInfo'],
   ['Record watch diagnostics', 'workoutDiagnosticsEnabled', WORKOUT_DIAGNOSTICS_ENABLED_KEY],
 ];
 
 test('loads Liftosaur API key and screen-on duration default 120 without writing to storage', () => {
   const { state, writes } = loadSettings();
 
-  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, autoPrepare: false, workoutDiagnosticsEnabled: false,
-    showWorkoutProgress: false, showPlateBreakdown: true, showRestInfo: true });
+  assert.deepEqual(state, { apiKey: '', screenOnDuration: 120, getReadySeconds: 5, exerciseImages: false, workoutDiagnosticsEnabled: false,
+    showWorkoutProgress: false, showPlateBreakdown: true });
   assert.deepEqual(writes, []);
 });
 
@@ -164,7 +159,6 @@ test('Workout display switches preserve defaults and save each independent choic
   for (const [label, key, initialValue, nextValue] of [
     ['Workout progress', 'showWorkoutProgress', false, true],
     ['Plate breakdown', 'showPlateBreakdown', true, false],
-    ['Rest Info button', 'showRestInfo', true, false],
   ]) {
     const control = toggle(initial.tree, label);
     assert.ok(control, label);
@@ -173,21 +167,6 @@ test('Workout display switches preserve defaults and save each independent choic
     assert.deepEqual(initial.writes.at(-1), [key, String(nextValue)]);
     assert.equal(loadSettings({ [key]: String(nextValue) }).state[key], nextValue);
   }
-});
-
-test('Auto prepare is opt-in, persists On and Off, and explains its behavior', () => {
-  assert.equal(loadSettings().state.autoPrepare, false);
-  assert.equal(loadSettings({ autoPrepare: 'true' }).state.autoPrepare, true);
-
-  const rendered = renderSettings();
-  const autoPrepare = toggle(rendered.tree, 'Auto prepare');
-  assert.ok(autoPrepare);
-  assert.equal(autoPrepare.props.value, false);
-  assert.ok(texts(rendered.tree).includes('Open the next set while rest runs.'));
-
-  autoPrepare.props.onChange(true);
-  autoPrepare.props.onChange(false);
-  assert.deepEqual(rendered.writes.slice(-2), [['autoPrepare', 'true'], ['autoPrepare', 'false']]);
 });
 
 test('every dropdown shows its current choice and persists a string value', () => {
@@ -217,8 +196,8 @@ test('settings are grouped in topic sections, most used first', () => {
 
   assert.deepEqual(layout(renderSettings().tree), [
     ['Connection', 'Liftosaur API key, Save key'],
-    ['Sets and rest', 'Auto prepare, Ready countdown: 5 sec'],
-    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Sets and rest', 'Ready countdown: 5 sec'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown'],
     ['Diagnostics', 'Record watch diagnostics'],
     ['Help', ''],
   ]);
@@ -228,8 +207,8 @@ test('settings are grouped in topic sections, most used first', () => {
     [WORKOUT_DIAGNOSTICS_KEY]: JSON.stringify({ version: 1, events: [{ at: 1_000, code: WORKOUT_DIAGNOSTIC_CODES.SET_TAP }] }),
   }).tree), [
     ['Connection', 'Liftosaur API key, Save key, Disconnect'],
-    ['Sets and rest', 'Auto prepare, Ready countdown: 5 sec'],
-    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown, Rest Info button'],
+    ['Sets and rest', 'Ready countdown: 5 sec'],
+    ['Workout display', 'Screen timeout: 120 sec, Exercise images, Workout progress, Plate breakdown'],
     ['Diagnostics', 'Record watch diagnostics, Select and copy logs'],
     ['Help', ''],
   ]);
@@ -243,13 +222,11 @@ test('each explained control has one identically styled helper right below it', 
   const helpers = new Map([
     ['Liftosaur API key', null],
     ['Save key', null],
-    ['Auto prepare', 'Open the next set while rest runs.'],
     ['Ready countdown: 5 sec', 'Counts down before a timed set starts.'],
     ['Screen timeout: 120 sec', null],
     ['Exercise images', 'Show pictures in the list, Info and Prepare.'],
     ['Workout progress', 'Show completed sets at the top of the watch.'],
     ['Plate breakdown', 'Show plates during rest and while editing a set.'],
-    ['Rest Info button', 'Keep exercise details available from the rest preview.'],
     ['Record watch diagnostics', 'Open this Lifto app on the watch to apply the change.'],
     ['Select and copy logs', 'Open the field, then long-press, Select all and Copy.'],
   ]);
@@ -416,11 +393,6 @@ test('account status uses separate centered lines instead of ignored newline cha
 test('the Side Service defaults exercise images off even in demo mode', () => {
   assert.match(appSideSource, /let exerciseImages = false/);
   assert.match(appSideSource, /normalizeExerciseImages\(storage\.getItem\('exerciseImages'\)\)/);
-});
-
-test('the Side Service defaults Auto prepare off and reads the phone preference', () => {
-  assert.match(appSideSource, /let autoPrepare = false/);
-  assert.match(appSideSource, /normalizeAutoPrepare\(storage\.getItem\('autoPrepare'\)\)/);
 });
 
 test('the settings page explains that Liftosaur owns rest defaults', () => {

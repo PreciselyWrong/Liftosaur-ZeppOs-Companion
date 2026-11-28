@@ -369,16 +369,12 @@ test('modal gestures are registered directly while teardown stays native-free', 
   assert.match(source, /GESTURE_DOWN/);
 });
 
-test('session gestures mirror reversible rest and overview controls', () => {
+test('session gestures drive the overview only; rest always shows the prepared view', () => {
   const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
   const handler = source.slice(source.indexOf('function handleGesture'), source.indexOf('function heartRateColor'));
 
   assert.match(source, /GESTURE_UP/);
-  assert.match(handler, /session\.adjustRest\(-10\)/);
-  assert.match(handler, /session\.adjustRest\(10\)/);
-  assert.match(handler, /session\.toggleRestPause\(\)/);
-  assert.match(handler, /setRestPrepared\(true\)/);
-  assert.match(handler, /setRestPrepared\(false\)/);
+  assert.doesNotMatch(handler, /adjustRest|toggleRestPause|setRestPrepared|SESSION_STATES\.REST/);
   assert.match(handler, /overviewPage = \(overviewPage [+-] 1/);
   assert.match(handler, /isOverviewOpen = false/);
 });
@@ -509,17 +505,6 @@ test('a restored finished workout resumes saving instead of becoming dismissible
   assert.match(source, /submitWorkout\(\)/);
   assert.match(source, /const isSending = status\.status === 'SENDING'/);
   assert.match(source, /if \(!isSending\)[\s\S]*text: canLeave \? 'Done' : 'Discard'/);
-});
-
-test('the rest preview shows the exact loading below the next target', () => {
-  const source = fs.readFileSync(path.join(root, 'page', 'common', 'index.js'), 'utf8');
-  const restScreen = source.match(/function renderRestScreen\(view\) \{([\s\S]*?)\n\}/)?.[1] || '';
-
-  assert.match(
-    restScreen,
-    /formatLoadoutLabel\(\s*rest\.nextTargetWeight,\s*view\.pending\?\.loadingEquipment,\s*rest\.nextUnit/,
-  );
-  assert.match(restScreen, /text:\s*nextLoadoutLabel/);
 });
 
 test('heart rate uses a monochrome heart instead of the HR abbreviation', () => {
